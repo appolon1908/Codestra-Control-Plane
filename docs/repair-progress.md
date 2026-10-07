@@ -68,3 +68,30 @@ atomic certification and schema reconciliation, scoped compatible publishers,
 production-alias protection and baseline reconciliation still require source
 implementation and their own tests. Provider/API/portal closure follows that
 baseline. Production and external effects remain disabled.
+
+## Delivery review and publication update
+
+The user requested certification, review and publication of all completed work.
+The source suite was rerun successfully against `c0249af` in the local checkout.
+GitHub confirmed PR #1 has that head, no merge conflict and zero check runs.
+The development desktop went offline after the earlier successful desktop run;
+its previous result is historical, not a fresh host verification.
+
+The delivery audit identified two unpublished deliverables: the approved BREERO
+design (`bebfb50`) and six-task implementation plan (`96700bc`). They are now
+carried under this source owner's `docs/superpowers/`, with origin hashes in the
+validation record. Their status text is updated for the adopted source owner.
+
+The audit also identified a material trust-boundary omission in the plan:
+`codestra-promotion-evidence` directly stores caller-provided PASS values, and
+environment `codestra-certify-scope` accepts arbitrary evidence JSON. Tasks 2–3
+now explicitly require negative tests proving neither can become trusted CI,
+review evidence or environment certification without independent verification.
+This closes a planning gap; the behavioral repair remains unimplemented.
+
+Source validation passes within its tested scope. Promotion certification remains
+blocked. GitHub again returned HTTP403 for private-repository rulesets. Workflow
+authorization, trusted lane registration and independent GitHub approval remain
+unmet. The next engineering task is the trusted evidence/mapping/decision boundary
+in Task 2 after an authorized source lane is established; broad provider/domain
+closure must not be claimed from this startup fix.

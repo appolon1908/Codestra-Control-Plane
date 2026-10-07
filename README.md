@@ -45,6 +45,10 @@ scope. No GitHub Actions result is claimed.
   ruleset access for this new private repository under the account's current
   plan. The payload is **not applied**; merging and deployment remain blocked.
 - `docs/repair-progress.md` records executed checks and remaining work.
+- `docs/verification/2026-10-07-source-validation.json` records the bounded source
+  verification and missing certification gates. It is not a promotion certificate.
+- The approved design and execution plan are under `docs/superpowers/`; their
+  current status identifies completed source work and the next unimplemented gates.
 
 Branches follow atomic task -> subsection -> section -> development -> testing ->
 staging -> production -> main. Their initialization is not promotion evidence.
