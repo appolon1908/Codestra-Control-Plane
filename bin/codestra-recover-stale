@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+import json,os,subprocess,psycopg2
+from psycopg2.extras import RealDictCursor
+dsn=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
+c=psycopg2.connect(dsn)
+with c:
+  with c.cursor(cursor_factory=RealDictCursor) as cur:
+    cur.execute("SELECT * FROM workstations WHERE lease_state='STALE' FOR UPDATE")
+    rows=cur.fetchall()
+  released=frozen=0
+  for r in rows:
+    p=subprocess.run(["git","-C",r["worktree"],"status","--porcelain"],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    if p.returncode==0 and not p.stdout.strip():
+      with c.cursor() as cur:
+        cur.execute("""UPDATE workstations SET lease_state='FREE',agent=NULL,current_atomic_task=NULL,
+          blocker='STALE_LEASE_RECOVERED',updated_at=now() WHERE workstation_id=%s""",(r["workstation_id"],))
+        cur.execute("INSERT INTO events(workstation_id,event_type,actor,details) VALUES(%s,'STALE_RELEASED','system',%s::jsonb)",
+                    (r["workstation_id"],json.dumps({"reason":"clean_worktree"})))
+      released+=1
+    else:
+      status=p.stdout.strip().splitlines()[:50] if p.returncode==0 else ["status_failed"]
+      with c.cursor() as cur:
+        cur.execute("""UPDATE workstations SET lease_state='FROZEN',status='BLOCKED',
+          blocker='STALE_DIRTY_WORKTREE',evidence=evidence||%s::jsonb,updated_at=now()
+          WHERE workstation_id=%s""",(json.dumps({"stale_recovery":{"worktree_status":status}}),r["workstation_id"]))
+        cur.execute("INSERT INTO events(workstation_id,event_type,actor,details) VALUES(%s,'STALE_FROZEN','system',%s::jsonb)",
+                    (r["workstation_id"],json.dumps({"reason":"dirty_or_unreadable_worktree"})))
+      frozen+=1
+print(f"STALE_RELEASED={released} STALE_FROZEN={frozen}")

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repository="$1"
+source_branch="$2"
+target_branch="$3"
+actor="${4:-codestra-controller}"
+
+case "$source_branch:$target_branch" in
+  subworkstation/*:workstation/*) ;;
+  subsection/*:section/*) ;;
+  subsection/*:workstation/*) ;;
+  section/*:development) ;;
+  workstation/*:development) ;;
+  development:testing) ;;
+  testing:staging) ;;
+  staging:production) ;;
+  *)
+    echo "PROMOTION_ALLOWED=NO"
+    echo "REASON=invalid_hierarchy_path"
+    exit 1
+    ;;
+esac
+
+name="${repository#*/}"
+repo="/srv/codestra/apps/$name"
+[ -d "$repo/.git" ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=repo_missing"; exit 1; }
+
+sudo -u codestra git -C "$repo" fetch --prune origin >/dev/null
+
+src_sha=$(sudo -u codestra git -C "$repo" rev-parse "origin/$source_branch")
+target_sha=$(sudo -u codestra git -C "$repo" rev-parse "origin/$target_branch" 2>/dev/null || true)
+
+if [[ "$source_branch" == subworkstation/* || "$source_branch" == subsection/* || "$source_branch" == section/* || "$source_branch" == workstation/* ]]; then
+  row=$(docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -AtF '|' -c "
+  SELECT status,coalesce(local_sha,''),coalesce(remote_sha,''),coalesce(ci_result,''),coalesce(review_result,''),coalesce(blocker,''),dependencies_satisfied
+  FROM workstation_ledger
+  WHERE repository='$repository' AND branch='$source_branch'
+  ORDER BY id LIMIT 1;")
+  [ -n "$row" ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=ledger_entry_missing"; exit 1; }
+  IFS='|' read -r status local_sha remote_sha ci review blocker deps_ok <<< "$row"
+
+  [ "$status" = CERTIFIED ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=source_not_certified"; exit 1; }
+  [ "$src_sha" = "$remote_sha" ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=remote_sha_not_certified_sha"; exit 1; }
+  [ "$local_sha" = "$remote_sha" ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=local_remote_sha_mismatch"; exit 1; }
+  [ "$ci" = PASS ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=ci_not_pass"; exit 1; }
+  [ "$review" = PASS ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=review_not_pass"; exit 1; }
+  [ -z "$blocker" ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=blocker_present"; exit 1; }
+  [ "$deps_ok" = t ] || { echo "PROMOTION_ALLOWED=NO"; echo "REASON=dependencies_not_certified"; exit 1; }
+fi
+
+if [ -n "$target_sha" ] && ! sudo -u codestra git -C "$repo" merge-base --is-ancestor "$target_sha" "$src_sha"; then
+  echo "PROMOTION_ALLOWED=NO"
+  echo "REASON=target_not_ancestor_of_source"
+  exit 1
+fi
+
+req=$(docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -Atqc "
+INSERT INTO promotion_requests(repository,source_branch,target_branch,source_sha,target_sha_before,requested_by,decision,reason)
+VALUES ('$repository','$source_branch','$target_branch','$src_sha',NULLIF('$target_sha',''),'$actor','APPROVED','all governance gates passed')
+RETURNING id;")
+
+sudo -u codestra git -C "$repo" push origin "$src_sha:refs/heads/$target_branch"
+
+docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -v ON_ERROR_STOP=1 -c "
+UPDATE promotion_requests SET decision='APPLIED', applied_at=now() WHERE id=$req;" >/dev/null
+
+echo "PROMOTION_ALLOWED=YES"
+echo "REQUEST_ID=$req"
+echo "SOURCE_SHA=$src_sha"
+echo "TARGET=$target_branch"

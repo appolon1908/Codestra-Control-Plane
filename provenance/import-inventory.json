@@ -1,0 +1,656 @@
+{
+  "schema_version": "codestra.control-plane.import-inventory.v1",
+  "source_host_id": "host_ab1159561dd42810",
+  "source_host_label": "dev-desktop",
+  "inspected_on": "2026-10-07",
+  "mode": "read_only_audit",
+  "authority": "User approved appolon1908/Codestra-Control-Plane as canonical source; this inventory records deployed source candidates, not deployment certification.",
+  "source_roots": [
+    {
+      "path": "/srv/codestra/dev-platform/control-plane",
+      "git_checkout": false
+    },
+    {
+      "path": "/opt/codestra-dev/control-plane",
+      "git_checkout": false
+    }
+  ],
+  "files": [
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/bootstrap-hierarchy",
+      "source_relative_path": "bin/bootstrap-hierarchy",
+      "source_generation": "modern",
+      "size_bytes": 3891,
+      "modified_at": "2026-10-07T02:12:38+0000",
+      "sha256": "7e33e64dc2adefa78c8b49dc1db72bf031969c051beeb64cae6df119cd045aff",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-apply-required-ruleset",
+      "source_relative_path": "bin/codestra-apply-required-ruleset",
+      "source_generation": "modern",
+      "size_bytes": 4388,
+      "modified_at": "2026-10-07T02:51:19+0000",
+      "sha256": "d32e4424e552ed2b0248a3eb6071fd16706d6901fda8c28e8d2a1a39e57b7621",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-certify-scope",
+      "source_relative_path": "bin/codestra-certify-scope",
+      "source_generation": "modern",
+      "size_bytes": 1349,
+      "modified_at": "2026-10-07T12:11:07+0000",
+      "sha256": "9d8df1b56849594e79777f1a486baccfe4d93ea6d17b21240cf05eb441a72a3a",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-completion-report",
+      "source_relative_path": "bin/codestra-completion-report",
+      "source_generation": "modern",
+      "size_bytes": 1865,
+      "modified_at": "2026-10-07T02:10:44+0000",
+      "sha256": "a8730a65d88ff45cd6a2025405a91a6a1ea4114f74cc2f0cae283f36b2b1f90d",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-devctl",
+      "source_relative_path": "bin/codestra-devctl",
+      "source_generation": "modern",
+      "size_bytes": 14335,
+      "modified_at": "2026-10-07T10:41:57+0000",
+      "sha256": "593a84efbfdd46083a21351d834a13dfae7526b86d418509a3ac6b4a88d57d9b",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-family-claim",
+      "source_relative_path": "bin/codestra-family-claim",
+      "source_generation": "modern",
+      "size_bytes": 1458,
+      "modified_at": "2026-10-07T11:22:28+0000",
+      "sha256": "850e7c37450cc70e3ab13d0c107ed4f62b6b0b7c5612bbf3d052c0cbc61eee55",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-family-next",
+      "source_relative_path": "bin/codestra-family-next",
+      "source_generation": "modern",
+      "size_bytes": 1290,
+      "modified_at": "2026-10-07T11:31:16+0000",
+      "sha256": "1420336590fd00117f391b53c7ec6f570f15d0b5d260a32303c4f2feca9838c8",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-family-release-check",
+      "source_relative_path": "bin/codestra-family-release-check",
+      "source_generation": "modern",
+      "size_bytes": 3009,
+      "modified_at": "2026-10-07T11:25:32+0000",
+      "sha256": "3dc0605dfbb3ca2eceb690213a027a0c8ad45e3a56960164751418b8c495b030",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-family-status",
+      "source_relative_path": "bin/codestra-family-status",
+      "source_generation": "modern",
+      "size_bytes": 1336,
+      "modified_at": "2026-10-07T11:22:28+0000",
+      "sha256": "4809582fb8f841d484ee52f556142bf7c862a070f09b4ae6da96f1330e99c8b4",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-github-check",
+      "source_relative_path": "bin/codestra-github-check",
+      "source_generation": "modern",
+      "size_bytes": 4142,
+      "modified_at": "2026-10-07T12:11:07+0000",
+      "sha256": "3a33080f88dd8032e236a463da851579bc5a104c09b0987563394e6ad2d502dd",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-github-statusd",
+      "source_relative_path": "bin/codestra-github-statusd",
+      "source_generation": "modern",
+      "size_bytes": 6118,
+      "modified_at": "2026-10-07T12:11:07+0000",
+      "sha256": "ccc3267e823a64403361148709cd9af82d935ce95185e665a49e15d383fb78b8",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-install-family-governance",
+      "source_relative_path": "bin/codestra-install-family-governance",
+      "source_generation": "modern",
+      "size_bytes": 6131,
+      "modified_at": "2026-10-07T11:21:44+0000",
+      "sha256": "1e7c0d2423bb75048cde66ef9feed616463f0b4a6d1cb66ab49d4d9d8c58fa9f",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-promote",
+      "source_relative_path": "bin/codestra-promote",
+      "source_generation": "modern",
+      "size_bytes": 2024,
+      "modified_at": "2026-10-07T02:10:44+0000",
+      "sha256": "408df3556c16d4c579ca9b401aae1f95b258a4399d877267d1d5370fcd16a1b3",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-promotion-check",
+      "source_relative_path": "bin/codestra-promotion-check",
+      "source_generation": "modern",
+      "size_bytes": 6225,
+      "modified_at": "2026-10-07T02:46:54+0000",
+      "sha256": "e9b7c63a44c1ed789b2db4e36574958cb4f83185d1bbdbbc477234ad55dd1422",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-promotion-evidence",
+      "source_relative_path": "bin/codestra-promotion-evidence",
+      "source_generation": "modern",
+      "size_bytes": 2295,
+      "modified_at": "2026-10-07T02:13:30+0000",
+      "sha256": "28ec659b34a86da047f77a392f92320af92ce0420bfeb7ae205353e7bc8efc09",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-recover-stale",
+      "source_relative_path": "bin/codestra-recover-stale",
+      "source_generation": "modern",
+      "size_bytes": 1815,
+      "modified_at": "2026-10-07T02:20:00+0000",
+      "sha256": "ca3b33007493cc9d3dab637723a02385a8922fe580ad57330afed0e024da0bf1",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-rollout-standalone-governance",
+      "source_relative_path": "bin/codestra-rollout-standalone-governance",
+      "source_generation": "modern",
+      "size_bytes": 2198,
+      "modified_at": "2026-10-07T11:30:54+0000",
+      "sha256": "68990466d2939d5184df213c0fc9f32435cefabc71b70a631dac06613a12d808",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-rollout-v3-clean-prs",
+      "source_relative_path": "bin/codestra-rollout-v3-clean-prs",
+      "source_generation": "modern",
+      "size_bytes": 6632,
+      "modified_at": "2026-10-07T11:35:14+0000",
+      "sha256": "33355a5437f060930b704b23cdff24f22b5495514a4006af255fa129e904085d",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-section-certify",
+      "source_relative_path": "bin/codestra-section-certify",
+      "source_generation": "modern",
+      "size_bytes": 1296,
+      "modified_at": "2026-10-07T02:14:29+0000",
+      "sha256": "58d26babfe295a766a106528858a26e9bd8dba91b45f6fa6b0bc363b9e0c5806",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-stale-cycle",
+      "source_relative_path": "bin/codestra-stale-cycle",
+      "source_generation": "modern",
+      "size_bytes": 181,
+      "modified_at": "2026-10-07T02:20:00+0000",
+      "sha256": "f2e4011e0fda5f4bb6f394099f641fcae0fc65222dcade767d40dc4d602fad2a",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-validate-v3-bootstrap-prs",
+      "source_relative_path": "bin/codestra-validate-v3-bootstrap-prs",
+      "source_generation": "modern",
+      "size_bytes": 2401,
+      "modified_at": "2026-10-07T11:39:51+0000",
+      "sha256": "5badee73c797b025a9ef662ddf3327532b8dae6a686d51dab28309fd801a3107",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/codestra-workstation-materialize",
+      "source_relative_path": "bin/codestra-workstation-materialize",
+      "source_generation": "modern",
+      "size_bytes": 2343,
+      "modified_at": "2026-10-07T11:19:27+0000",
+      "sha256": "318b93e9e190428e83eb13cf52e81612dda29014f199f309a79e2b1175550e73",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/bin/materialize-product",
+      "source_relative_path": "bin/materialize-product",
+      "source_generation": "modern",
+      "size_bytes": 3380,
+      "modified_at": "2026-10-07T02:16:17+0000",
+      "sha256": "9efd5134b4efab13f5c32c6781b9f395346fcbaac4e94ec331799663c977c049",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/002-hierarchy-promotion.sql",
+      "source_relative_path": "002-hierarchy-promotion.sql",
+      "source_generation": "modern",
+      "size_bytes": 4632,
+      "modified_at": "2026-10-07T02:12:36+0000",
+      "sha256": "9409f5672fe7b24feb89a74b6b5ae0d21d42a46d0baa48036867256c47a8eff7",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 420
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/003-readiness-views.sql",
+      "source_relative_path": "003-readiness-views.sql",
+      "source_generation": "modern",
+      "size_bytes": 1142,
+      "modified_at": "2026-10-07T02:13:30+0000",
+      "sha256": "388fedce28d379445aea6e0a4928e6a6fb05dc8f3c8a0cb3cb2526695508f8c4",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 420
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/004-family-programs.sql",
+      "source_relative_path": "004-family-programs.sql",
+      "source_generation": "modern",
+      "size_bytes": 2537,
+      "modified_at": "2026-10-07T11:24:48+0000",
+      "sha256": "275a3381760f908260599b0f883c7800e18b4b0f277ead71c8d91ee323983f3e",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 420
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/CORPORATE-DEFINITION-OF-DONE.json",
+      "source_relative_path": "CORPORATE-DEFINITION-OF-DONE.json",
+      "source_generation": "modern",
+      "size_bytes": 510,
+      "modified_at": "2026-10-07T02:10:44+0000",
+      "sha256": "0a06db862f6af7074c0afcb86d0a21d89a35055da326729f6090bb850e6c3903",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 420
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/REPOSITORY-AUTHORITY.json",
+      "source_relative_path": "REPOSITORY-AUTHORITY.json",
+      "source_generation": "modern",
+      "size_bytes": 615,
+      "modified_at": "2026-10-07T13:05:25+0000",
+      "sha256": "b273368502f4c1a1d38d3318a259050ef8720f12767c24660d0d8d806002ed2d",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 420
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/schema.sql",
+      "source_relative_path": "schema.sql",
+      "source_generation": "modern",
+      "size_bytes": 1651,
+      "modified_at": "2026-10-07T01:59:13+0000",
+      "sha256": "6d1ce22635383020fcb4acd7fdaee093ce3712502beb9f571b1a84e5d5a1707b",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 420
+    },
+    {
+      "source_path": "/srv/codestra/dev-platform/control-plane/verification-levels.json",
+      "source_relative_path": "verification-levels.json",
+      "source_generation": "modern",
+      "size_bytes": 569,
+      "modified_at": "2026-10-07T02:10:44+0000",
+      "sha256": "2ecc961bac5e5216ccb359f22ca5fb9c4b799dc69023c4eca81b1b8dbf0427c9",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 420
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/certify",
+      "source_relative_path": "bin/certify",
+      "source_generation": "legacy",
+      "size_bytes": 1457,
+      "modified_at": "2026-10-07T02:01:51+0000",
+      "sha256": "1eb819033d419c555e810efe02fdc1579784d1edf940f1875d212ed880e8000a",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/claim",
+      "source_relative_path": "bin/claim",
+      "source_generation": "legacy",
+      "size_bytes": 613,
+      "modified_at": "2026-10-07T01:58:45+0000",
+      "sha256": "d785dcffd4937a52659618a7a97db5174935640871b9e5aff10ad09afbe02be9",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/completion-validator",
+      "source_relative_path": "bin/completion-validator",
+      "source_generation": "legacy",
+      "size_bytes": 967,
+      "modified_at": "2026-10-07T01:58:45+0000",
+      "sha256": "d87545edb563a6cd18b271ba6e98f6f715832b32a1a54c2e077a38dace2bcfc0",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/github-status-sync",
+      "source_relative_path": "bin/github-status-sync",
+      "source_generation": "legacy",
+      "size_bytes": 6198,
+      "modified_at": "2026-10-07T11:56:17+0000",
+      "sha256": "75b56a458e5d20e896f5e1b8316f65dfb6c30b5b08f17ccc82dba2ccb3c2d921",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 493
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/heartbeat",
+      "source_relative_path": "bin/heartbeat",
+      "source_generation": "legacy",
+      "size_bytes": 370,
+      "modified_at": "2026-10-07T01:58:45+0000",
+      "sha256": "675093a5695cb1c81b5226df52fb3055d82b8a1ff018e3be6b0a578f0e56d6f1",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/preflight",
+      "source_relative_path": "bin/preflight",
+      "source_generation": "legacy",
+      "size_bytes": 1878,
+      "modified_at": "2026-10-07T01:58:45+0000",
+      "sha256": "d9464794918d743e5f7933230dc6a0c51f84c8a86f391730065e6463531ac56e",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/preflight-lane",
+      "source_relative_path": "bin/preflight-lane",
+      "source_generation": "legacy",
+      "size_bytes": 1596,
+      "modified_at": "2026-10-07T02:06:47+0000",
+      "sha256": "bd1f4d30606067595f5f14d7cca31e30a8a134b578febac92dbeefbde93f21a5",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/promote",
+      "source_relative_path": "bin/promote",
+      "source_generation": "legacy",
+      "size_bytes": 3314,
+      "modified_at": "2026-10-07T02:16:47+0000",
+      "sha256": "6a28ac797dcc32a9cbc7f954d21a16543bc8a3d10a2760e99d855ba99bae6af5",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/promotion-check",
+      "source_relative_path": "bin/promotion-check",
+      "source_generation": "legacy",
+      "size_bytes": 582,
+      "modified_at": "2026-10-07T02:16:47+0000",
+      "sha256": "9c7d40fb543249d7012e656668f8b9ae14cfb3a61d96159f4448b547639060ac",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/reconcile-manifests",
+      "source_relative_path": "bin/reconcile-manifests",
+      "source_generation": "legacy",
+      "size_bytes": 6190,
+      "modified_at": "2026-10-07T02:13:03+0000",
+      "sha256": "4d8f1a4e265d848636009e00fda353136cd806ad81c5e907895644d9209393e0",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/stale-recovery",
+      "source_relative_path": "bin/stale-recovery",
+      "source_generation": "legacy",
+      "size_bytes": 720,
+      "modified_at": "2026-10-07T02:06:33+0000",
+      "sha256": "fb52391264fc6c245282bbd29e3a480692b680155feabdf2f05171accdf5f5a8",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/status",
+      "source_relative_path": "bin/status",
+      "source_generation": "legacy",
+      "size_bytes": 254,
+      "modified_at": "2026-10-07T02:01:51+0000",
+      "sha256": "9751783e1445b90ed56ea713dbad1a2c30166c318833ae20374b02f60ea4f037",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/bin/summary",
+      "source_relative_path": "bin/summary",
+      "source_generation": "legacy",
+      "size_bytes": 496,
+      "modified_at": "2026-10-07T02:03:22+0000",
+      "sha256": "8dfea7385d5e6c157202386a37343a139bdd6f6c9649411f836025bb566426a3",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/sql/promotion_guard.sql",
+      "source_relative_path": "sql/promotion_guard.sql",
+      "source_generation": "legacy",
+      "size_bytes": 2049,
+      "modified_at": "2026-10-07T02:14:33+0000",
+      "sha256": "f9a6b20ac3f39ce5a94c5e2b368b599f5ef086d72b8768d1c98d2bcdb64c2c37",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/sql/schema.sql",
+      "source_relative_path": "sql/schema.sql",
+      "source_generation": "legacy",
+      "size_bytes": 1508,
+      "modified_at": "2026-10-07T01:58:15+0000",
+      "sha256": "5c6a6a9bfd328cf17d5a3a36d8c80af29d716fa205644b790dd319c173600395",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/claim.sh",
+      "source_relative_path": "claim.sh",
+      "source_generation": "legacy",
+      "size_bytes": 460,
+      "modified_at": "2026-10-07T02:07:01+0000",
+      "sha256": "0322388a6af15d64e3eb56d8d3254541aaf48c0f4506135cf59c3a0d7db60785",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/complete-check.sh",
+      "source_relative_path": "complete-check.sh",
+      "source_generation": "legacy",
+      "size_bytes": 570,
+      "modified_at": "2026-10-07T02:07:01+0000",
+      "sha256": "3186cc56131a887d138b4e158b7093f3d951b35e2d8ccf19a07f70ae99c40bcd",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/heartbeat.sh",
+      "source_relative_path": "heartbeat.sh",
+      "source_generation": "legacy",
+      "size_bytes": 385,
+      "modified_at": "2026-10-07T02:07:01+0000",
+      "sha256": "42584d2675518b548e946aea18a1e376284969720c7b088232a6b7d9c85a8ea2",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/policy.yaml",
+      "source_relative_path": "policy.yaml",
+      "source_generation": "legacy",
+      "size_bytes": 753,
+      "modified_at": "2026-10-07T01:58:15+0000",
+      "sha256": "5a78b2850ac47ea5cccfb71a33b7a86f82e05febf04ffac8dab7f80a6280eced",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/preflight.sh",
+      "source_relative_path": "preflight.sh",
+      "source_generation": "legacy",
+      "size_bytes": 702,
+      "modified_at": "2026-10-07T02:07:01+0000",
+      "sha256": "5c8aaa0bb9e9c6677c7c1a79a3ae6064c865b904049f009376af7357a8eee33b",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    },
+    {
+      "source_path": "/opt/codestra-dev/control-plane/release-lease.sh",
+      "source_relative_path": "release-lease.sh",
+      "source_generation": "legacy",
+      "size_bytes": 244,
+      "modified_at": "2026-10-07T02:07:01+0000",
+      "sha256": "a29973d575c57bd2da5431cda3368642cdea1ac9e45109522c396fe503b91ea5",
+      "import_candidate": true,
+      "content_truncated": false,
+      "source_mode": 436
+    }
+  ],
+  "scan": {
+    "scope": "51 complete UTF-8 source files, checked in memory",
+    "credential_literal_findings": [],
+    "patterns": [
+      "GitHub credential tokens",
+      "private-key PEM headers",
+      "AWS access-key IDs",
+      "credential-bearing URLs",
+      "password/token/secret literal assignments",
+      "Stripe/OpenAI-style keys",
+      "JWT-shaped literals",
+      "password-bearing DSNs"
+    ],
+    "manual_review": "Credential-related source lines contain environment references and credential-free local PostgreSQL defaults; no embedded credential value was observed.",
+    "limits": "Heuristic source scan, not a comprehensive secret-scanner certification. Runtime environment, PostgreSQL data, backups and logs were intentionally not read."
+  },
+  "exclusions": [
+    "**/*.bak.*",
+    "backups/**",
+    "evidence/**",
+    "logs/**",
+    "state/**",
+    "status/**",
+    "leases/**",
+    "manifests/**",
+    "products/**",
+    "products-v3/**",
+    "families/**"
+  ],
+  "products_case_collisions": [
+    [
+      "products/caddy.json",
+      "products/Caddy.json"
+    ],
+    [
+      "products/codestra-openbao.json",
+      "products/Codestra-OpenBao.json"
+    ],
+    [
+      "products/Keycloak.json",
+      "products/keycloak.json"
+    ],
+    [
+      "products/kong.json",
+      "products/Kong.json"
+    ],
+    [
+      "products/N8N.json",
+      "products/n8n.json"
+    ]
+  ],
+  "instructions": {
+    "modern_applicable_agents": [],
+    "modern_parent_agents_checked": [
+      "/srv/AGENTS.md",
+      "/srv/codestra/AGENTS.md",
+      "/srv/codestra/dev-platform/AGENTS.md"
+    ],
+    "legacy_applicable_agents": [
+      "/opt/codestra-dev/AGENTS.md"
+    ],
+    "legacy_agent_contract": "Task-scoped Product > Section > Subsection > Atomic Task; PR-based promotion hierarchy; preserve local changes; implement/test/review/commit evidence; no security/check weakening or production effects."
+  },
+  "provenance_limits": [
+    "Both deployed roots are filesystem directories with no Git history/source revision.",
+    "No versioned migration ledger was established by this filesystem audit.",
+    "REPOSITORY-AUTHORITY.json is Codestra frontend/backend ownership policy, not source provenance for shared control-plane.",
+    "Product/family manifests excluded because they mix host-local deployment configuration and case-colliding filenames.",
+    "SQL source should be imported as observed; do not execute or treat as reconciled with live database schema."
+  ],
+  "known_source_issue": {
+    "path": "/srv/codestra/dev-platform/control-plane/bin/codestra-promotion-check",
+    "sha256": "e9b7c63a44c1ed789b2db4e36574958cb4f83185d1bbdbbc477234ad55dd1422",
+    "status": "Original syntax defect unchanged; root has separate independently reviewed patch."
+  }
+}

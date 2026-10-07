@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+import argparse, json, re
+import psycopg2
+from psycopg2.extras import Json
+DSN="host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"
+P={"PENDING","PASS","FAIL"}
+def main():
+  a=argparse.ArgumentParser()
+  a.add_argument("--product",required=True); a.add_argument("--source-level",required=True)
+  a.add_argument("--source-ref",required=True); a.add_argument("--target-level",required=True)
+  a.add_argument("--target-ref",required=True); a.add_argument("--sha",required=True)
+  for g in ("ci-exact-sha","review","regression","security","clean-tree","remote-sha-match","contract","migration","performance"):
+    a.add_argument("--"+g,default="PENDING")
+  a.add_argument("--json",default="{}")
+  x=a.parse_args()
+  if not re.fullmatch(r"[0-9a-f]{40}",x.sha): raise SystemExit("INVALID_SHA")
+  vals=[x.ci_exact_sha,x.review,x.regression,x.security,x.clean_tree,x.remote_sha_match]
+  if any(v not in P for v in vals): raise SystemExit("INVALID_GATE_STATE")
+  optional=[x.contract,x.migration,x.performance]
+  if any(v not in P|{"N/A"} for v in optional): raise SystemExit("INVALID_GATE_STATE")
+  with psycopg2.connect(DSN) as c, c.cursor() as cur:
+    cur.execute("""INSERT INTO promotion_evidence
+      (product,source_level,source_ref,target_level,target_ref,exact_sha,
+       ci_exact_sha,review,regression,security,clean_tree,remote_sha_match,contract,migration,performance,evidence)
+      VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+      ON CONFLICT(product,source_level,source_ref,target_level,target_ref,exact_sha)
+      DO UPDATE SET ci_exact_sha=EXCLUDED.ci_exact_sha,review=EXCLUDED.review,
+        regression=EXCLUDED.regression,security=EXCLUDED.security,
+        clean_tree=EXCLUDED.clean_tree,remote_sha_match=EXCLUDED.remote_sha_match,
+        contract=EXCLUDED.contract,migration=EXCLUDED.migration,performance=EXCLUDED.performance,
+        evidence=EXCLUDED.evidence,recorded_at=now()""",
+      (x.product,x.source_level,x.source_ref,x.target_level,x.target_ref,x.sha,
+       x.ci_exact_sha,x.review,x.regression,x.security,x.clean_tree,x.remote_sha_match,
+       x.contract,x.migration,x.performance,Json(json.loads(x.json))))
+  print("PROMOTION_EVIDENCE_RECORDED=YES")
+  print("EXACT_SHA="+x.sha)
+if __name__=="__main__": main()

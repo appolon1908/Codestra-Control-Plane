@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+product="$1"
+repository="$2"
+section="$3"
+subsection="$4"
+agent="$5"
+task="$6"
+docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -v ON_ERROR_STOP=1 -c "
+UPDATE workstation_ledger
+SET agent='$agent', lease_id=gen_random_uuid()::text, lease_started_at=now(), heartbeat_at=now(),
+    current_atomic_task='$task', status='CLAIMED', updated_at=now()
+WHERE product='$product' AND repository='$repository' AND section='$section' AND subsection='$subsection'
+  AND (agent IS NULL OR heartbeat_at IS NULL OR heartbeat_at < now() - interval '60 minutes');
+"

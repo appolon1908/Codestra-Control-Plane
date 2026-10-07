@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "levels": [
+    {"level":1,"name":"subsection","requirement":"verify exact subsection responsibility on exact branch SHA"},
+    {"level":2,"name":"section","requirement":"integrate all certified subsection branches into section branch and test section as a whole"},
+    {"level":3,"name":"product","requirement":"integrate certified section branches into development and run complete product regression"},
+    {"level":4,"name":"platform","requirement":"certify Caddy -> Kong -> Middleware <-> n8n with Keycloak identity and OpenBao secrets"}
+  ]
+}

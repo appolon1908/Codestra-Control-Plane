@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -P pager=off -c "
+SELECT
+  count(*) AS total,
+  count(*) FILTER (WHERE status='CERTIFIED') AS certified,
+  count(*) FILTER (WHERE status='COMPLETE') AS complete_waiting_cert,
+  count(*) FILTER (WHERE status='IN_PROGRESS') AS in_progress,
+  count(*) FILTER (WHERE status='BLOCKED') AS blocked,
+  count(*) FILTER (WHERE status='NOT_STARTED') AS not_started
+FROM workstation_ledger;"

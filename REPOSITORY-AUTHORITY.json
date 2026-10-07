@@ -1,0 +1,23 @@
+{
+  "schema_version": "codestra.repository-authority.v1",
+  "product": "Codestra",
+  "canonical": {
+    "frontend": "appolon1908/codestra",
+    "backend": "appolon1908/backend2"
+  },
+  "retired": {
+    "appolon1908/codestra-backend": {
+      "state": "DECOMMISSION",
+      "reason": "Recovered legacy Django snapshot superseded by appolon1908/backend2",
+      "new_work": false,
+      "promotion": false,
+      "runtime_authority": false
+    }
+  },
+  "rules": {
+    "single_frontend_authority": true,
+    "single_backend_authority": true,
+    "provider_writes_via_middleware": true,
+    "production_go": "NO"
+  }
+}

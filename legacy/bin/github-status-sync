@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DB=codestra_control_plane
+CTX="codestra/control-plane"
+
+valid_path() {
+  local head="$1" base="$2"
+  case "$head:$base" in
+    subworkstation/*:workstation/*) return 0 ;;
+    subsection/*:section/*) return 0 ;;
+    subsection/*:workstation/*) return 0 ;;
+    section/*:development) return 0 ;;
+    workstation/*:development) return 0 ;;
+    governance/standalone-v3-*:development) return 0 ;;
+    development:testing) return 0 ;;
+    testing:staging) return 0 ;;
+    staging:production) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+post_status() {
+  local repo="$1" sha="$2" state="$3" desc="$4"
+  desc=$(printf '%s' "$desc" | cut -c1-140)
+  sudo -u codestra gh api --method POST "repos/$repo/statuses/$sha"     -f state="$state"     -f context="$CTX"     -f description="$desc" >/dev/null
+}
+
+validate_v3_bootstrap() {
+  local repo="$1" sha="$2"
+  local raw
+  raw=$(sudo -u codestra gh api "repos/$repo/contents/.codestra/governance/policy.json?ref=$sha" --jq .content 2>/dev/null | tr -d '
+' | base64 -d 2>/dev/null) || return 1
+  printf '%s' "$raw" | jq -e '
+    .schema_version=="codestra.governance.v3" and
+    .required_status=="codestra-control-plane" and
+    .promotion_chain==["subsection","section","development","testing","staging","production"] and
+    .production.PRODUCTION_GO=="NO" and
+    .production.LIVE_CAPABILITIES_ENABLED=="NO" and
+    .production.EXTERNAL_EFFECTS=="false" and
+    .force_push==false and
+    .direct_protected_branch_writes==false
+  ' >/dev/null || return 1
+  sudo -u codestra gh api "repos/$repo/contents/.codestra/governance/workstations.json?ref=$sha" --silent >/dev/null 2>&1 || return 1
+  sudo -u codestra gh api "repos/$repo/contents/AGENTS.md?ref=$sha" --silent >/dev/null 2>&1 || return 1
+}
+
+sudo -u codestra gh repo list appolon1908 --limit 200 --json nameWithOwner --jq '.[].nameWithOwner' |
+while read -r repo; do
+  [ -n "$repo" ] || continue
+  prs=$(sudo -u codestra gh api --paginate "repos/$repo/pulls?state=open&per_page=100" 2>/dev/null || echo '[]')
+  printf '%s' "$prs" | jq -c '.[]' 2>/dev/null |
+  while read -r pr; do
+    head=$(printf '%s' "$pr" | jq -r '.head.ref')
+    base=$(printf '%s' "$pr" | jq -r '.base.ref')
+    sha=$(printf '%s' "$pr" | jq -r '.head.sha')
+    number=$(printf '%s' "$pr" | jq -r '.number')
+
+    # Ignore PRs outside the governed hierarchy.
+    case "$base" in
+      development|testing|staging|production|section/*|workstation/*) ;;
+      *) continue ;;
+    esac
+
+    if ! valid_path "$head" "$base"; then
+      post_status "$repo" "$sha" failure "invalid promotion path: $head -> $base"
+      continue
+    fi
+
+    if [[ ( "$head" == workstation/standalone-v3-* || "$head" == governance/standalone-v3-* ) && "$base" == development ]]; then
+      if validate_v3_bootstrap "$repo" "$sha"; then
+        post_status "$repo" "$sha" success "standalone v3 governance bootstrap validated"
+      else
+        post_status "$repo" "$sha" failure "standalone v3 governance bootstrap policy invalid"
+      fi
+      continue
+    fi
+
+    # V3 section/subsection/environment promotions use the new exact-SHA control plane.
+    case "$head:$base" in
+      subsection/*:section/*|section/*:development|development:testing|testing:staging|staging:production)
+        product=$(sudo -u codestra psql -h 127.0.0.1 -U codestra -d codestra_dev_control -Atqc           "SELECT product FROM products WHERE repository='$repo' LIMIT 1;" 2>/dev/null || true)
+        repo_name=$(printf '%s' "$repo" | cut -d/ -f2-)
+        repo_path="/srv/codestra/apps/$repo_name"
+        if [ -n "$product" ] && [ -d "$repo_path/.git" ]; then
+          set +e
+          check_out=$(sudo -u codestra env             CODESTRA_CONTROL_DSN='host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra'             /srv/codestra/dev-platform/control-plane/bin/codestra-github-check               --product "$product" --repo-path "$repo_path"               --head-ref "$head" --base-ref "$base" --head-sha "$sha" 2>&1)
+          check_rc=$?
+          set -e
+          if [ "$check_rc" -eq 0 ]; then
+            post_status "$repo" "$sha" success "v3 exact-SHA control plane certified"
+          else
+            post_status "$repo" "$sha" failure "$check_out"
+          fi
+          continue
+        fi
+        ;;
+    esac
+
+    row=$(docker exec codestra-dev-postgres psql -U codestra -d "$DB" -AtF '|' -c "
+      SELECT status,
+             coalesce(local_sha,''),
+             coalesce(remote_sha,''),
+             coalesce(ci_result,''),
+             coalesce(review_result,''),
+             coalesce(blocker,''),
+             dependencies_satisfied,
+             branch_exists,
+             is_authoritative
+      FROM workstation_ledger
+      WHERE repository='$repo' AND branch='$head'
+      ORDER BY is_authoritative DESC,id DESC
+      LIMIT 1;" 2>/dev/null || true)
+
+    if [ -z "$row" ]; then
+      post_status "$repo" "$sha" failure "control-plane lane missing for $head"
+      continue
+    fi
+
+    IFS='|' read -r status local_sha remote_sha ci review blocker deps_ok branch_exists authoritative <<< "$row"
+
+    # Sync remote SHA from actual PR head into the ledger when the branch is known.
+    docker exec codestra-dev-postgres psql -U codestra -d "$DB" -v ON_ERROR_STOP=1 -c "
+      UPDATE workstation_ledger
+      SET remote_sha='$sha', updated_at=now()
+      WHERE repository='$repo' AND branch='$head';" >/dev/null 2>&1 || true
+    remote_sha="$sha"
+
+    reasons=()
+    [ "$authoritative" = t ] || reasons+=("lane not authoritative")
+    [ "$branch_exists" = t ] || reasons+=("branch not reconciled")
+    [ "$deps_ok" = t ] || reasons+=("dependencies not certified")
+    [ "$status" = CERTIFIED ] || reasons+=("status=$status")
+    [ -n "$local_sha" ] && [ "$local_sha" = "$sha" ] || reasons+=("local/remote SHA mismatch")
+    [ "$ci" = PASS ] || reasons+=("CI=$ci")
+    [ "$review" = PASS ] || reasons+=("review=$review")
+    [ -z "$blocker" ] || reasons+=("blocker present")
+
+    if [ "${#reasons[@]}" -eq 0 ]; then
+      post_status "$repo" "$sha" success "control plane certified PR #$number"
+    else
+      post_status "$repo" "$sha" failure "$(IFS='; '; echo "${reasons[*]}")"
+    fi
+  done
+done
