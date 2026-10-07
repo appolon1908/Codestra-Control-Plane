@@ -37,7 +37,7 @@ def main():
   a.add_argument("--target-ref",required=True); a.add_argument("--sha",required=True)
   a.add_argument("--actor",default="unknown")
   x=a.parse_args()
-x.product=canonical_product(x.product)
+  x.product=canonical_product(x.product)
   reasons=[]
   if not re.fullmatch(r"[0-9a-f]{40}",x.sha): reasons.append("INVALID_EXACT_SHA")
 
