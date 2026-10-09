@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-import json, os, subprocess, psycopg2
+import json, os, subprocess, psycopg2, runpy
 from psycopg2.extras import RealDictCursor
 
 OWNER="appolon1908"
-CONTEXT="codestra-control-plane"
+CONTEXTS=("codestra-control-plane", "codestra/control-plane")
 DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
 GOVERNED_REPOS={"Middleware-","Kong","Caddy","Keycloak","Codestra-OpenBao","N8N"}
 BOOTSTRAP_HEADS={"governance/development-control-plane-v1","workstation/governance-control-plane"}
 ROOT_BASES={"main","development","release/production-activation"}
+MIGRATION_REASON=runpy.run_path(str(__import__("pathlib").Path(__file__).resolve().with_name("codestra-github-check")),run_name="statusd_authority")["migration_reason"]
 
 def run(args,check=True):
     p=subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
@@ -24,13 +25,16 @@ def remote_sha(repo_path,ref):
     return p.stdout.split()[0] if p.returncode==0 and p.stdout.strip() else ""
 
 def post(repo,sha,state,desc,url):
-    run([
-      "gh","api","--method","POST",f"repos/{OWNER}/{repo}/statuses/{sha}",
-      "-f",f"state={state}",
-      "-f",f"context={CONTEXT}",
-      "-f",f"description={desc[:140]}",
-      "-f",f"target_url={url}"
-    ])
+    # Publish the same independently validated outcome to the historic and
+    # repository-required contexts. Never synthesize a success condition.
+    for context in CONTEXTS:
+        run([
+          "gh","api","--method","POST",f"repos/{OWNER}/{repo}/statuses/{sha}",
+          "-f",f"state={state}",
+          "-f",f"context={context}",
+          "-f",f"description={desc[:140]}",
+          "-f",f"target_url={url}"
+        ])
 
 def aliases(c):
     with c.cursor(cursor_factory=RealDictCursor) as cur:
@@ -62,6 +66,12 @@ def validate(c,product,test_branch,repo_path,head,base,sha):
     if observed!=sha:
         return False,"remote head SHA mismatch"
 
+    if product == "Middleware-":
+        # Reuse the control plane's existing exact-pair, expiring migration
+        # authority. A SHA mismatch above is always rejected first.
+        reason = MIGRATION_REASON(product, head, base)
+        if reason is not None:
+            return True, f"exact-SHA {reason} authority"
     if head in BOOTSTRAP_HEADS and base in ROOT_BASES:
         return True,"bootstrap governance installation"
     if (head.startswith("workstation/standalone-v3-") or head.startswith("governance/standalone-v3-")) and base=="development":
