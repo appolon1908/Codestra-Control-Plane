@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source_branch="$1"
+target_branch="$2"
+valid=0
+case "$source_branch:$target_branch" in
+  subworkstation/*:workstation/*) valid=1 ;;
+  subsection/*:section/*) valid=1 ;;
+  subsection/*:workstation/*) valid=1 ;;
+  section/*:development) valid=1 ;;
+  workstation/*:development) valid=1 ;;
+  development:testing) valid=1 ;;
+  testing:staging) valid=1 ;;
+  staging:production) valid=1 ;;
+esac
+if [ "$valid" -ne 1 ]; then
+  echo PROMOTION_ALLOWED=NO
+  echo "SOURCE=$source_branch"
+  echo "TARGET=$target_branch"
+  exit 1
+fi
+echo PROMOTION_ALLOWED=YES

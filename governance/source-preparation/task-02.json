@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "prepare-pure-promotion-policy-and-evidence-contract",
+  "owner": "BREERO repair session root",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions",
+  "intended_target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "48d1154e2853d90dda28524a2242bbba50972043",
+  "authorization": "User accepted the described Task 2 mission with 'continue to all is done' on 2026-10-07.",
+  "scope": "Isolated source preparation, offline tests, code review, and draft publication. Existing commands remain unwired until trusted adapters exist.",
+  "depends_on": "https://github.com/appolon1908/Codestra-Control-Plane/pull/1",
+  "dependency_acceptance": "pending",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "runtime_candidate_registration": null,
+  "governed_acceptance": "blocked",
+  "deployment": "not_performed",
+  "live_effects_authorized": false
+}

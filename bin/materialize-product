@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+import json, os, pathlib, subprocess, sys
+ROOT=pathlib.Path("/srv/codestra")
+repo_name=sys.argv[1]
+spec=json.loads((ROOT/"dev-platform/control-plane/products"/(repo_name+".json")).read_text())
+repo=ROOT/"apps"/repo_name
+ws=ROOT/"workstations"/repo_name
+def run(cmd,check=True):
+    p=subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    if check and p.returncode: raise SystemExit(p.stderr or p.stdout)
+    return p
+def git(*a,check=True): return run(["sudo","-u","codestra","-H","git","-C",str(repo),*a],check)
+def remote(name): return git("ls-remote","--exit-code","--heads","origin",name,check=False).returncode==0
+def local(name): return git("show-ref","--verify","--quiet","refs/heads/"+name,check=False).returncode==0
+def ensure_branch(name,base):
+    if remote(name): return
+    if not local(name): git("branch",name,base)
+    p=git("push","origin",name+":"+name,check=False)
+    if p.returncode and not remote(name):
+        raise SystemExit(p.stderr or p.stdout)
+def worktree(branch,path):
+    path=pathlib.Path(path)
+    if (path/".git").exists(): return
+    if path.exists() and any(path.iterdir()): raise SystemExit("NONEMPTY "+str(path))
+    if path.exists(): path.rmdir()
+    path.parent.mkdir(parents=True,exist_ok=True)
+    os.chown(path.parent,1000,1000)
+    git("worktree","add",str(path),branch)
+git("fetch","origin","--prune")
+ensure_branch("development","origin/main")
+git("fetch","origin","--prune")
+ensure_branch("testing","origin/development")
+git("fetch","origin","--prune")
+if not remote("production"):
+    try: ensure_branch("production","origin/staging")
+    except SystemExit:
+        if local("production"): git("branch","-D","production")
+        ensure_branch("production","origin/main")
+git("fetch","origin","--prune")
+manifest_root=ws/"governance/manifests"; manifest_root.mkdir(parents=True,exist_ok=True)
+os.chown(manifest_root,1000,1000)
+final={}
+for sec in spec["sections"]:
+    ensure_branch("section/"+sec["id"],"origin/development")
+    root=ws/"sections"/sec["id"]; root.mkdir(parents=True,exist_ok=True); os.chown(root,1000,1000)
+    worktree("section/"+sec["id"],root/"repo")
+    final[sec["id"]]=spec["product"]+"::"+sec["id"]+"::"+sec["subsections"][-1]
+for sec in spec["sections"]:
+    prev=None
+    for idx,sub in enumerate(sec["subsections"],1):
+        b="subsection/"+sec["id"]+"--"+sub
+        ensure_branch(b,"section/"+sec["id"])
+        root=ws/"sections"/sec["id"]/"subsections"/sub
+        root.mkdir(parents=True,exist_ok=True); os.chown(root,1000,1000)
+        worktree(b,root/"repo")
+        deps=[final[x] for x in sec.get("depends_on",[])]
+        if prev: deps.append(spec["product"]+"::"+sec["id"]+"::"+prev)
+        m={"workstation":spec["product"]+"::"+sec["id"]+"::"+sub,"product":spec["product"],"section":sec["id"],"subsection":sub,
+           "branch":b,"parent_branch":"section/"+sec["id"],"order":idx,"worktree":str(root/"repo"),"depends_on":deps,
+           "status":"NOT_STARTED","required_gates":["lint","unit","integration","contract","security","clean_tree","remote_sha_match"]}
+        p=manifest_root/(sec["id"]+"--"+sub+".json"); p.write_text(json.dumps(m,indent=2)+"\n"); os.chown(p,1000,1000)
+        prev=sub
+print(json.dumps({"repo":repo_name,"sections":len(spec["sections"]),"subsections":sum(len(x["subsections"]) for x in spec["sections"])}))

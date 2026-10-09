@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+import json, pathlib, subprocess, yaml, os, shlex
+
+ROOT=pathlib.Path('/opt/codestra-dev/control-plane')
+APPS=pathlib.Path('/srv/codestra/apps')
+
+def run(*args, check=True):
+    p=subprocess.run(args,text=True,capture_output=True)
+    if check and p.returncode:
+        raise SystemExit(p.stderr or p.stdout)
+    return p.stdout.strip()
+
+def sql_quote(v):
+    if v is None: return "NULL"
+    return "'" + str(v).replace("'","''") + "'"
+
+def branch_exists(repo_path, branch):
+    p=subprocess.run(['sudo','-u','codestra','git','-C',str(repo_path),'show-ref','--verify','--quiet',f'refs/heads/{branch}'])
+    if p.returncode==0: return True
+    p=subprocess.run(['sudo','-u','codestra','git','-C',str(repo_path),'ls-remote','--exit-code','--heads','origin',branch],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    return p.returncode==0
+
+rows=[]
+# Rich product manifests.
+for path in sorted((ROOT/'products').glob('*.yaml')):
+    data=yaml.safe_load(path.read_text())
+    product=data['product']; repository=data['repository']
+    repo_name=repository.split('/')[-1]; repo_path=APPS/repo_name
+    sections=data.get('sections',{})
+    for sec_branch,secdata in sections.items():
+        section=sec_branch.split('/',1)[1] if '/' in sec_branch else sec_branch
+        subs=secdata.get('subsections',[])
+        for idx,item in enumerate(subs,start=1):
+            if isinstance(item,str):
+                sub=item; deps=[]
+            else:
+                sub=item['name']; deps=item.get('depends_on',[])
+            if repository=='appolon1908/Odoo':
+                branch=f"subworkstation/odoo20/{section}/{sub}"
+            else:
+                branch=f"subworkstation/{section}/{sub}"
+            dep_keys=[f"{section}/{d}" for d in deps]
+            rows.append(dict(product=product,repository=repository,section=section,subsection=sub,
+                             branch=branch,parent_branch=sec_branch,order_index=idx,
+                             depends_on=dep_keys,manifest_path=str(path),
+                             branch_exists=branch_exists(repo_path,branch),
+                             workstation=f"/srv/codestra/workstations/{repo_name}",
+                             worktree=str(repo_path)))
+
+# Every actual section/subsection branch not already represented.
+seen={(r['repository'],r['section'],r['subsection']) for r in rows}
+for repo_path in APPS.iterdir():
+    if not (repo_path/'.git').exists(): continue
+    remote=run('sudo','-u','codestra','git','-C',str(repo_path),'remote','get-url','origin',check=False)
+    if not remote: continue
+    repository=remote.replace('https://github.com/','').replace('git@github.com:','').removesuffix('.git')
+    refs=run('sudo','-u','codestra','git','-C',str(repo_path),'for-each-ref','--format=%(refname:short)','refs/heads/workstation/','refs/heads/subworkstation/',check=False).splitlines()
+    for branch in refs:
+        if branch.startswith('workstation/'):
+            section=branch.split('/',1)[1]; subsection='__section__'; parent='development'
+        else:
+            rest=branch.split('/',1)[1]
+            parts=rest.split('/')
+            if parts and parts[0]=='odoo20' and len(parts)>=3:
+                section=parts[1]; subsection='/'.join(parts[2:]); parent=f"workstation/odoo20-{section}"
+            elif len(parts)>=2:
+                section=parts[0]; subsection='/'.join(parts[1:]); parent=f"workstation/{section}"
+            else:
+                section=rest; subsection='__subsection__'; parent='development'
+        key=(repository,section,subsection)
+        if key in seen: continue
+        rows.append(dict(product='portfolio',repository=repository,section=section,subsection=subsection,
+                         branch=branch,parent_branch=parent,order_index=None,depends_on=[],
+                         manifest_path=str(ROOT/'manifests'/f"{repo_path.name}.generated.yaml"),
+                         branch_exists=True,workstation=f"/srv/codestra/workstations/{repo_path.name}",
+                         worktree=str(repo_path)))
+        seen.add(key)
+
+sql=[]
+for r in rows:
+    deps=json.dumps(r['depends_on'])
+    vals=[
+      sql_quote(r['product']),sql_quote(r['repository']),sql_quote(r['section']),sql_quote(r['subsection']),
+      sql_quote(r['branch']),sql_quote(r['parent_branch']),sql_quote(r['workstation']),sql_quote(r['worktree']),
+      "'NOT_STARTED'", "NULL" if r['order_index'] is None else str(r['order_index']),
+      sql_quote(deps)+"::jsonb", "true" if r['branch_exists'] else "false", sql_quote(r['manifest_path'])
+    ]
+    sql.append("INSERT INTO workstation_ledger(product,repository,section,subsection,branch,parent_branch,workstation,worktree,status,order_index,depends_on,branch_exists,manifest_path,last_reconciled_at) VALUES ("+
+               ",".join(vals)+",now()) ON CONFLICT (repository,section,subsection) DO UPDATE SET "+
+               "product=EXCLUDED.product,branch=EXCLUDED.branch,parent_branch=EXCLUDED.parent_branch,workstation=EXCLUDED.workstation,worktree=EXCLUDED.worktree,order_index=EXCLUDED.order_index,depends_on=EXCLUDED.depends_on,branch_exists=EXCLUDED.branch_exists,manifest_path=EXCLUDED.manifest_path,last_reconciled_at=now();")
+path=pathlib.Path('/tmp/codestra-reconcile.sql'); path.write_text('\n'.join(sql)+'\n')
+subprocess.run(['docker','exec','-i','codestra-dev-postgres','psql','-U','codestra','-d','codestra_control_plane','-v','ON_ERROR_STOP=1'],input=path.read_text(),text=True,check=True,stdout=subprocess.DEVNULL)
+
+# Recompute dependency satisfaction from manifest keys.
+run('docker','exec','codestra-dev-postgres','psql','-U','codestra','-d','codestra_control_plane','-v','ON_ERROR_STOP=1','-c',"""
+UPDATE workstation_ledger w
+SET dependencies_satisfied =
+  CASE
+    WHEN jsonb_array_length(w.depends_on)=0 THEN true
+    ELSE NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(w.depends_on) d(dep)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM workstation_ledger p
+        WHERE p.repository=w.repository
+          AND (p.section || '/' || p.subsection)=d.dep
+          AND p.status='CERTIFIED'
+      )
+    )
+  END,
+  last_reconciled_at=now();
+""")
+print(f"RECONCILED={len(rows)}")

@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+import argparse, os, subprocess, psycopg2
+from psycopg2.extras import RealDictCursor
+
+PRODUCT_ALIASES={
+  "middleware":"Middleware-",
+  "kong":"Kong",
+  "caddy":"Caddy",
+  "keycloak":"Keycloak",
+  "openbao":"Codestra-OpenBao",
+  "n8n":"N8N",
+}
+def canonical_product(name):
+  return PRODUCT_ALIASES.get(name,name)
+
+p=argparse.ArgumentParser()
+p.add_argument("--product",required=True)
+p.add_argument("--repo-path",required=True)
+p.add_argument("--head-ref",required=True)
+p.add_argument("--base-ref",required=True)
+p.add_argument("--head-sha",required=True)
+a=p.parse_args()
+a.product=canonical_product(a.product)
+
+# Narrow bootstrap authority used only to install/update governance itself.
+if a.head_ref=="governance/development-control-plane-v1" and a.base_ref=="main":
+    print("CONTROL_PLANE_CERTIFICATION=PASS bootstrap")
+    raise SystemExit(0)
+
+dsn=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
+c=psycopg2.connect(dsn)
+
+def remote_sha(ref):
+    q=subprocess.run(
+      ["git","-c",f"safe.directory={a.repo_path}","-C",a.repo_path,"ls-remote","origin",f"refs/heads/{ref}"],
+      text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE
+    )
+    if q.returncode or not q.stdout.strip():
+        return ""
+    return q.stdout.split()[0]
+
+if remote_sha(a.head_ref)!=a.head_sha:
+    print("CONTROL_PLANE_CERTIFICATION=FAIL remote_head_sha_mismatch")
+    raise SystemExit(1)
+
+with c.cursor(cursor_factory=RealDictCursor) as cur:
+    cur.execute("SELECT test_branch FROM products WHERE product=%s",(a.product,))
+    product=cur.fetchone()
+    if not product:
+        print("CONTROL_PLANE_CERTIFICATION=FAIL unknown_product")
+        raise SystemExit(1)
+    test_branch=product["test_branch"]
+
+    # Subsection authority comes directly from the reconciled workstation ledger.
+    if a.head_ref.startswith("subsection/"):
+        cur.execute(
+          "SELECT status,remote_sha,parent_branch FROM workstations WHERE product=%s AND branch=%s",
+          (a.product,a.head_ref)
+        )
+        row=cur.fetchone()
+        if not row or row["parent_branch"]!=a.base_ref:
+            print("CONTROL_PLANE_CERTIFICATION=FAIL subsection_parent_mismatch")
+            raise SystemExit(1)
+        ok=bool(row["status"]=="CERTIFIED" and row["remote_sha"]==a.head_sha)
+        scope=f"subsection:{a.head_ref}"
+
+    # Section branch authority is also DB-derived; do not infer old section/* naming.
+    elif a.base_ref=="development":
+        cur.execute(
+          "SELECT section_key FROM sections WHERE product=%s AND branch=%s",
+          (a.product,a.head_ref)
+        )
+        sec=cur.fetchone()
+        if not sec:
+            print(f"CONTROL_PLANE_CERTIFICATION=FAIL invalid_section {a.head_ref}")
+            raise SystemExit(1)
+        cur.execute("""SELECT status,sha FROM scope_certifications
+          WHERE product=%s AND scope_type='SECTION' AND scope_name=%s""",
+          (a.product,sec["section_key"]))
+        row=cur.fetchone()
+        ok=bool(row and row["status"]=="CERTIFIED" and row["sha"]==a.head_sha)
+        scope=f"section:{sec['section_key']}"
+
+    else:
+        mapping={
+          ("development",test_branch):("DEVELOPMENT","development"),
+          (test_branch,"staging"):("TESTING",test_branch),
+          ("staging","production"):("STAGING","staging"),
+          ("production","main"):("PRODUCTION","production"),
+        }
+        key=(a.head_ref,a.base_ref)
+        if key not in mapping:
+            print(f"CONTROL_PLANE_CERTIFICATION=FAIL invalid_promotion {a.head_ref}->{a.base_ref}")
+            raise SystemExit(1)
+        typ,name=mapping[key]
+        cur.execute("""SELECT status,sha FROM scope_certifications
+          WHERE product=%s AND scope_type=%s AND scope_name=%s""",
+          (a.product,typ,name))
+        row=cur.fetchone()
+        ok=bool(row and row["status"]=="CERTIFIED" and row["sha"]==a.head_sha)
+        scope=name
+
+if not ok:
+    print(f"CONTROL_PLANE_CERTIFICATION=FAIL scope={scope} sha={a.head_sha}")
+    raise SystemExit(1)
+print(f"CONTROL_PLANE_CERTIFICATION=PASS scope={scope} sha={a.head_sha}")

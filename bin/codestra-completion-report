@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+import json,os,subprocess,sys,psycopg2
+from psycopg2.extras import RealDictCursor
+if len(sys.argv)!=2: raise SystemExit("usage: codestra-completion-report <workstation-id>")
+wid=sys.argv[1]
+c=psycopg2.connect(os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"))
+with c.cursor(cursor_factory=RealDictCursor) as cur:
+    cur.execute("SELECT * FROM workstations WHERE workstation_id=%s",(wid,)); r=cur.fetchone()
+if not r: raise SystemExit("UNKNOWN_WORKSTATION")
+ev=r["evidence"] or {}; g=ev.get("gates",{})
+def git(*args):
+    p=subprocess.run(["git","-C",r["worktree"],*args],text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+    return p.returncode,p.stdout.strip()
+_,local=git("rev-parse","HEAD")
+rc,out=git("ls-remote","origin",f"refs/heads/{r['branch']}")
+remote=out.split()[0] if rc==0 and out else ""
+_,dirty=git("status","--porcelain")
+pairs={
+"WORKSTATION":wid,
+"SOURCE_COMPLETE":"YES" if g.get("unit")=="PASS" else "NO",
+"TESTS_COMPLETE":"YES" if g.get("unit")=="PASS" and g.get("integration")=="PASS" else "NO",
+"CONTRACT_COMPLETE":"YES" if g.get("contract")=="PASS" else "NO",
+"SECURITY_COMPLETE":"YES" if g.get("security")=="PASS" else "NO",
+"DOCUMENTATION_COMPLETE":"YES" if g.get("documentation")=="PASS" else "NO",
+"TREE_CLEAN":"YES" if not dirty else "NO",
+"LOCAL_REMOTE_SHA_MATCH":"YES" if local and local==remote else "NO",
+"PARENT_SYNCED":"YES" if g.get("parent_synced")=="PASS" else "NO",
+"CI_EXACT_SHA":"PASS" if g.get("ci_exact_sha")=="PASS" else "FAIL",
+"CODEOWNER_REVIEW":"PASS" if g.get("review")=="PASS" else "FAIL",
+"UNRESOLVED_TODOS":str(ev.get("unresolved_todos",0)),
+"UNRESOLVED_CONFLICTS":str(ev.get("unresolved_conflicts",0)),
+"KNOWN_BLOCKERS":"0" if not r["blocker"] else "1",
+"STATUS":r["status"]
+}
+for k,v in pairs.items(): print(f"{k}={v}")
