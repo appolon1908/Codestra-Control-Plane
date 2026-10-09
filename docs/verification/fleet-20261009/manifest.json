@@ -1,0 +1,41 @@
+{
+  "date_utc": "2026-10-09",
+  "evidence": [
+    {
+      "file_sha256": "85836437b76936cdf40cc8c07a0961fafc78550af5338168fcb0f5fe840c5eac",
+      "path": "docs/verification/fleet-20261009/Kong-main.json",
+      "repository": "appolon1908/Kong",
+      "sha": "8a0d522fa20e72af1bc466e45a4b336e5be2c5fe",
+      "tests_passed": 17,
+      "tests_skipped": 0
+    },
+    {
+      "file_sha256": "7abcc18d414bff61343009243fa72118e5d748d4b1b5330187a6c1630e8d6adc",
+      "path": "docs/verification/fleet-20261009/Caddy-main.json",
+      "repository": "appolon1908/Caddy",
+      "sha": "be131c15993e1abf23a63d1e5e9d6fa7183e6dfd",
+      "tests_passed": 28,
+      "tests_skipped": 2
+    },
+    {
+      "file_sha256": "01019e9980b25dbc8ac28b668119f2046ff3faf1b2a94be0c400c7290122413a",
+      "path": "docs/verification/fleet-20261009/Keycloak-main.json",
+      "repository": "appolon1908/Keycloak",
+      "sha": "d9db059c23f20255134828bb924137eaa0b9adb4",
+      "tests_passed": 44,
+      "tests_skipped": 0
+    },
+    {
+      "file_sha256": "967f0ffb91d36b85c0e5884dd06589a965d8e3adc8c1b1c2bec890041d59c40b",
+      "path": "docs/verification/fleet-20261009/Codestra-OpenBao-main.json",
+      "repository": "appolon1908/Codestra-OpenBao",
+      "sha": "eafd0b9f47fee7e0d5276c1c4416764025d6767d",
+      "tests_passed": 14,
+      "tests_skipped": 0
+    }
+  ],
+  "github_ci_certified": false,
+  "production_certified": false,
+  "schema": "codestra.source-evidence-manifest.v1",
+  "scope": "exact main SHA, selected source security tests only"
+}

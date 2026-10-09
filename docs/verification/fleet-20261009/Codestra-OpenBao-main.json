@@ -1,0 +1,29 @@
+{
+  "collected_at_utc": "2026-10-09T05:09:14.228983+00:00",
+  "container_image_id": "sha256:da5804b4d68ca099affa16ab8e47b142d040ef33e99587558ab30dd765d3474e",
+  "external_effects": "false",
+  "github_ci_certified": false,
+  "head_sha": "eafd0b9f47fee7e0d5276c1c4416764025d6767d",
+  "independent_codeowner_approved": false,
+  "level": "LOCAL_EXACT_SHA_SCOPED_SOURCE_TESTS_PASSED",
+  "live_capabilities_enabled": "NO",
+  "merge_or_promotion_authorized": false,
+  "network": "none",
+  "production_go": "NO",
+  "ref": "refs/heads/main",
+  "remote_sha": "eafd0b9f47fee7e0d5276c1c4416764025d6767d",
+  "repository": "appolon1908/Codestra-OpenBao",
+  "runtime_deployment_certified": false,
+  "schema": "codestra.self-certification.scoped-source.v1",
+  "scope": "selected source tests only; no live/runtime certification",
+  "source_clean_before_after": true,
+  "source_mount": "read_only",
+  "source_verifier_sha256": "75c7751c9be546c2ac5354014d73d61b0fc8da11c397863731c99e6b631cd665",
+  "test_files": [
+    "tests/test_mcr_contract.py"
+  ],
+  "test_output_sha256": "975b3fa33880e09267150660cd72cc08f9f9eaf2b2b5a1c88ac740978b60f8ea",
+  "tests_passed": 14,
+  "tests_skipped": 0,
+  "tree_sha": "9c1cd1fe437f42747c3bb82adaf0aa4371c7cbd8"
+}
