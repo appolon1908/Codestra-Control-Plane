@@ -7,6 +7,8 @@ publishing GitHub statuses, changing PostgreSQL, or changing a server.
 from __future__ import annotations
 
 import runpy
+import sys
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -20,8 +22,25 @@ MIGRATION_BASE = "section/mw-03-connectors"
 
 class GitHubStatusContinuityTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.check = runpy.run_path(str(CHECK), run_name="test_authority")
-        self.status = runpy.run_path(str(STATUS), run_name="test_status_publisher")
+        # Source regression tests run on plain GitHub-hosted Python without
+        # PostgreSQL drivers. Stub database imports only while importing the
+        # actual checked-in policy and publisher code; all live effects fail.
+        driver = types.ModuleType("psycopg2")
+        extras = types.ModuleType("psycopg2.extras")
+
+        def forbidden_connect(*_args, **_kwargs):
+            raise AssertionError("database access is prohibited in offline CI")
+
+        driver.connect = forbidden_connect
+        extras.RealDictCursor = object
+        driver.extras = extras
+        with mock.patch.dict(
+            sys.modules, {"psycopg2": driver, "psycopg2.extras": extras}
+        ):
+            self.check = runpy.run_path(str(CHECK), run_name="test_authority")
+            self.status = runpy.run_path(
+                str(STATUS), run_name="test_status_publisher"
+            )
 
     def test_publisher_aliases_same_certification_verdict(self) -> None:
         self.assertEqual(
