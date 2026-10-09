@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "visibility": "private",
+  "authority_designated_on": "2026-10-07",
+  "authority_basis": "User explicitly approved creating this repository as the canonical source for shared control-plane tooling.",
+  "initial_repository_commit": "29524563f423fc257569cb8969d60ffda96996b2",
+  "source_roots": {
+    "modern": "/srv/codestra/dev-platform/control-plane",
+    "legacy": "/opt/codestra-dev/control-plane"
+  },
+  "historical_source_revision": null,
+  "historical_provenance": "Unversioned deployed directories; adoption does not reconstruct prior Git or deployment history.",
+  "assignment": {
+    "product": "Codestra-Control-Plane",
+    "section": "cp-01-foundation",
+    "subsection": "01-source-provenance",
+    "atomic_task": "source-import-and-checker-syntax-repair",
+    "branch": "atomic/cp-01-foundation--01-source-import",
+    "target": "subsection/cp-01-foundation--01-source-provenance",
+    "owner": "BREERO repair session root",
+    "scope": "Initial source adoption and offline entry-point regression repair",
+    "database_lease": null,
+    "certification": null
+  },
+  "deployment": "not_performed",
+  "protection_enforcement": "blocked_by_private_repository_plan",
+  "workflow_installation": "blocked_by_missing_workflow_scope",
+  "live_effects_authorized": false
+}

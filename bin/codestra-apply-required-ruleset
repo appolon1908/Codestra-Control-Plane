@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+import argparse, json, os, pathlib, subprocess, sys, time
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+OWNER="appolon1908"
+NAME="codestra-control-plane-required"
+CONTEXT="codestra-control-plane"
+DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
+EVIDENCE=pathlib.Path("/srv/codestra/dev-platform/control-plane/evidence")
+
+PAYLOAD={
+  "name":NAME,
+  "target":"branch",
+  "enforcement":"active",
+  "bypass_actors":[],
+  "conditions":{
+    "ref_name":{
+      "include":[
+        "~DEFAULT_BRANCH",
+        "refs/heads/development",
+        "refs/heads/testing",
+        "refs/heads/staging",
+        "refs/heads/production",
+        "refs/heads/section/*",
+        "refs/heads/subsection/*"
+      ],
+      "exclude":[]
+    }
+  },
+  "rules":[{
+    "type":"required_status_checks",
+    "parameters":{
+      "strict_required_status_checks_policy":True,
+      "do_not_enforce_on_create":False,
+      "required_status_checks":[{"context":CONTEXT}]
+    }
+  }]
+}
+
+def gh(args,input_obj=None,check=True):
+    cmd=["gh","api",*args]
+    p=subprocess.run(cmd,input=(json.dumps(input_obj) if input_obj is not None else None),
+                     text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    if check and p.returncode:
+        raise RuntimeError(p.stderr.strip() or p.stdout.strip())
+    if not p.stdout.strip():
+        return None
+    try: return json.loads(p.stdout)
+    except json.JSONDecodeError: return p.stdout
+
+def repos():
+    with psycopg2.connect(DSN) as c, c.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT repository FROM products ORDER BY repository")
+        return [r["repository"] for r in cur.fetchall() if r["repository"].startswith(OWNER+"/")]
+
+def matches(repo):
+    sets=gh([f"repos/{repo}/rulesets?includes_parents=false&per_page=100"])
+    return [s for s in (sets or []) if s.get("name")==NAME and s.get("source_type","Repository")=="Repository"]
+
+def verify(repo,ruleset_id):
+    detail=gh([f"repos/{repo}/rulesets/{ruleset_id}?includes_parents=false"])
+    if detail.get("name")!=NAME or detail.get("enforcement")!="active" or detail.get("bypass_actors",[])!=[]:
+        raise RuntimeError("ruleset identity/enforcement drift")
+    found=[]
+    for rule in detail.get("rules",[]):
+        if rule.get("type")=="required_status_checks":
+            found=rule.get("parameters",{}).get("required_status_checks",[])
+    contexts=sorted(x.get("context") for x in found if isinstance(x,dict))
+    if contexts!=[CONTEXT]:
+        raise RuntimeError(f"required status drift: {contexts}")
+    return detail
+
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--apply",action="store_true")
+    args=ap.parse_args()
+    results=[]
+    failures=0
+    for full in repos():
+        repo=full.split("/",1)[1]
+        try:
+            m=matches(full)
+            if len(m)>1:
+                raise RuntimeError(f"ambiguous ruleset count={len(m)}")
+            action="UPDATE" if m else "CREATE"
+            rid=m[0]["id"] if m else None
+            if args.apply:
+                if rid:
+                    gh(["--method","PUT",f"repos/{full}/rulesets/{rid}","--input","-"],PAYLOAD)
+                else:
+                    created=gh(["--method","POST",f"repos/{full}/rulesets","--input","-"],PAYLOAD)
+                    rid=created["id"]
+                verify(full,rid)
+            print(f"{repo}|{action}|{'APPLIED' if args.apply else 'DRY_RUN'}")
+            results.append({"repository":full,"action":action,"status":"APPLIED" if args.apply else "READY","ruleset_id":rid})
+        except Exception as exc:
+            failures+=1
+            msg=str(exc).replace("\n"," ")[:300]
+            print(f"{repo}|ERROR|{msg}")
+            results.append({"repository":full,"status":"ERROR","error":msg})
+    EVIDENCE.mkdir(parents=True,exist_ok=True)
+    stamp=time.strftime("%Y%m%dT%H%M%SZ",time.gmtime())
+    out=EVIDENCE/f"codestra-control-plane-ruleset-{stamp}.json"
+    out.write_text(json.dumps({
+      "ruleset":NAME,"context":CONTEXT,"apply":args.apply,
+      "repository_count":len(results),"failures":failures,"results":results
+    },indent=2)+"\n")
+    print(f"EVIDENCE={out}")
+    print(f"TOTAL={len(results)} FAILURES={failures}")
+    return 1 if failures else 0
+
+if __name__=="__main__":
+    raise SystemExit(main())

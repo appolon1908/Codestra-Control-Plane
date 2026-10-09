@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "required_domains": [
+    "SOURCE","API","DATABASE","MIGRATIONS","IDENTITY","AUTHORIZATION","TENANCY",
+    "SECRETS","INTEGRATIONS","OBSERVABILITY","SECURITY","HA","BACKUP","RESTORE",
+    "DR","PERFORMANCE","LOAD","SOAK","CHAOS","CI_CD","ROLLBACK","DOCUMENTATION",
+    "RUNBOOKS","CODEOWNERS","DEPENDENCY_SECURITY","SBOM","IMAGE_SIGNATURE",
+    "STAGING_CERTIFICATION"
+  ],
+  "rule": "A product may claim 100 percent only when every required domain is CERTIFIED with exact-SHA evidence."
+}

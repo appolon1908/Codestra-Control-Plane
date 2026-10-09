@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+import argparse,hashlib,json,os,pathlib,subprocess,psycopg2
+from psycopg2.extras import RealDictCursor
+
+ROOT=pathlib.Path("/srv/codestra")
+CP=ROOT/"dev-platform/control-plane"
+DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
+ap=argparse.ArgumentParser(); ap.add_argument("family"); ap.add_argument("--write-candidate",action="store_true"); args=ap.parse_args()
+
+with psycopg2.connect(DSN) as c,c.cursor(cursor_factory=RealDictCursor) as cur:
+    cur.execute("SELECT * FROM family_readiness WHERE family_id=%s",(args.family,))
+    r=cur.fetchone()
+    if not r: raise SystemExit("UNKNOWN_FAMILY")
+    if not (r["production_go_closed"] and r["live_capabilities_closed"] and r["external_effects_closed"]):
+        raise SystemExit("BLOCKED production_effect_policy_open")
+    if not r["all_sections_certified"] or r["certified_components"] != r["required_components"]:
+        print(json.dumps({
+          "family":args.family,"status":"BLOCKED",
+          "required_components":r["required_components"],"certified_components":r["certified_components"],
+          "required_sections":r["required_sections"],"certified_sections":r["certified_sections"],
+          "required_subsections":r["required_subsections"],"certified_subsections":r["certified_subsections"]
+        },default=str))
+        raise SystemExit(1)
+    cur.execute("""SELECT fc.product,p.repository FROM family_components fc
+                   JOIN products p USING(product)
+                   WHERE fc.family_id=%s AND fc.required ORDER BY fc.order_index""",(args.family,))
+    comps=cur.fetchall()
+
+def remote_sha(repo_path,branch):
+    p=subprocess.run(["git","-c",f"safe.directory={repo_path}","-C",repo_path,"ls-remote","origin","refs/heads/"+branch],
+                     text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    return p.stdout.split()[0] if p.returncode==0 and p.stdout.strip() else None
+
+manifest={"schema_version":"codestra.family-release.v1","family":args.family,
+          "production_effects":{"PRODUCTION_GO":"NO","LIVE_CAPABILITIES_ENABLED":"NO","EXTERNAL_EFFECTS":"false"},
+          "components":[]}
+for c in comps:
+    name=c["repository"].split("/",1)[1]
+    path=str(ROOT/"apps"/name)
+    staging=remote_sha(path,"staging")
+    production=remote_sha(path,"production")
+    if not staging: raise SystemExit(f"BLOCKED {name}:staging_missing")
+    manifest["components"].append({"product":c["product"],"repository":c["repository"],
+                                   "staging_sha":staging,"production_sha":production})
+raw=json.dumps(manifest,sort_keys=True,separators=(",",":")).encode()
+digest=hashlib.sha256(raw).hexdigest()
+manifest["manifest_sha256"]=digest
+print(json.dumps(manifest,indent=2))
+if args.write_candidate:
+    out=CP/"evidence"/"family-release"/args.family
+    out.mkdir(parents=True,exist_ok=True)
+    p=out/(digest+".json"); p.write_text(json.dumps(manifest,indent=2)+"\n")
+    print(f"CANDIDATE={p}")

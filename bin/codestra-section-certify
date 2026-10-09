@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+import argparse,re,psycopg2
+from psycopg2.extras import RealDictCursor
+DSN="host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"
+a=argparse.ArgumentParser()
+a.add_argument("--product",required=True); a.add_argument("--section",required=True)
+a.add_argument("--sha",required=True); a.add_argument("--actor",default="unknown")
+x=a.parse_args()
+if not re.fullmatch(r"[0-9a-f]{40}",x.sha): raise SystemExit("INVALID_SHA")
+with psycopg2.connect(DSN) as c, c.cursor(cursor_factory=RealDictCursor) as cur:
+  cur.execute("""SELECT s.section_id,s.status,sr.all_subsections_certified,sr.all_exact_sha_certified
+                 FROM sections s JOIN section_readiness sr USING(section_id)
+                 WHERE s.product=%s AND s.section_key=%s""",(x.product,x.section))
+  s=cur.fetchone()
+  if not s: raise SystemExit("UNKNOWN_SECTION")
+  bad=[]
+  if not s["all_subsections_certified"]: bad.append("SUBSECTIONS_NOT_CERTIFIED")
+  if not s["all_exact_sha_certified"]: bad.append("SUBSECTION_EXACT_SHA_MISSING")
+  if bad: raise SystemExit("SECTION_CERTIFY_REFUSED "+",".join(bad))
+  cur.execute("UPDATE sections SET status='CERTIFIED',exact_sha=%s,certified_at=now() WHERE section_id=%s",(x.sha,s["section_id"]))
+print("SECTION_CERTIFIED=YES")
+print("EXACT_SHA="+x.sha)

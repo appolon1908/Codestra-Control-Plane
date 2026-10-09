@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+import argparse,json,pathlib,psycopg2,os
+from psycopg2.extras import RealDictCursor
+
+ROOT=pathlib.Path("/srv/codestra/dev-platform/control-plane")
+DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
+ap=argparse.ArgumentParser(); ap.add_argument("family"); args=ap.parse_args()
+
+f=json.loads((ROOT/"families"/(args.family+".json")).read_text())
+with psycopg2.connect(DSN) as c,c.cursor(cursor_factory=RealDictCursor) as cur:
+  cur.execute("""
+    SELECT w.*,fc.order_index AS component_order,s.order_index AS section_order
+    FROM family_components fc
+    JOIN sections s ON s.product=fc.product
+    JOIN workstations w ON w.product=s.product AND w.section=s.section_key
+    WHERE fc.family_id=%s AND fc.required
+      AND w.status='NOT_STARTED' AND w.lease_state='FREE'
+    ORDER BY fc.order_index,s.order_index,w.order_index
+  """,(args.family,))
+  rows=cur.fetchall()
+  for r in rows:
+    deps=r["depends_on"] or []
+    if deps:
+      cur.execute("SELECT count(*) AS n FROM workstations WHERE workstation_id=ANY(%s) AND status='CERTIFIED'",(deps,))
+      if cur.fetchone()["n"]!=len(deps):
+        continue
+    print(json.dumps(dict(r),default=str))
+    raise SystemExit(0)
+print("NO_READY_WORKSTATION")

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -P pager=off -c "
+SELECT product,status,count(*) AS workstations
+FROM workstation_ledger
+GROUP BY product,status
+ORDER BY product,status;"

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -v ON_ERROR_STOP=1 -P pager=off -c "
+WITH stale AS (
+  SELECT id
+  FROM workstation_ledger
+  WHERE status IN ('CLAIMED','IN_PROGRESS','REVIEW')
+    AND heartbeat_at IS NOT NULL
+    AND heartbeat_at < now() - interval '60 minutes'
+)
+UPDATE workstation_ledger w
+SET status='BLOCKED',
+    blocker=CASE
+      WHEN blocker IS NULL OR blocker='' THEN 'STALE_LEASE_REQUIRES_WORKTREE_INSPECTION'
+      ELSE blocker || '; STALE_LEASE_REQUIRES_WORKTREE_INSPECTION'
+    END,
+    updated_at=now()
+FROM stale
+WHERE w.id=stale.id
+RETURNING w.repository,w.section,w.subsection,w.branch,w.agent,w.heartbeat_at,w.status;"

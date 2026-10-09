@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+/srv/codestra/dev-platform/control-plane/bin/codestra-devctl reclaim-stale
+/srv/codestra/dev-platform/control-plane/bin/codestra-recover-stale

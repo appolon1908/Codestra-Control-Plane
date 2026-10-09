@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo="$1"
+cd "$repo"
+fail=0
+line(){ printf '%s=%s\n' "$1" "$2"; [ "$2" = YES ] || fail=1; }
+
+[ -z "$(git status --porcelain)" ] && line TREE_CLEAN YES || line TREE_CLEAN NO
+git diff --check >/dev/null && line DIFF_CHECK YES || line DIFF_CHECK NO
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
+if [ -n "$upstream" ]; then
+  local_sha=$(git rev-parse HEAD)
+  remote_sha=$(git rev-parse "$upstream")
+  [ "$local_sha" = "$remote_sha" ] && line LOCAL_REMOTE_SHA_MATCH YES || line LOCAL_REMOTE_SHA_MATCH NO
+else
+  line LOCAL_REMOTE_SHA_MATCH NO
+fi
+[ "$(git ls-files -u | wc -l)" -eq 0 ] && line UNRESOLVED_CONFLICTS_ZERO YES || line UNRESOLVED_CONFLICTS_ZERO NO
+todos=$(git grep -nE 'TODO|FIXME' -- ':!vendor' ':!node_modules' 2>/dev/null | wc -l || true)
+echo "UNRESOLVED_TODOS=$todos"
+if [ "$fail" -eq 0 ]; then
+  echo STATUS=COMPLETE_CANDIDATE
+else
+  echo STATUS=NOT_COMPLETE
+fi
+exit "$fail"

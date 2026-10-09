@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repository="$1"
+section="$2"
+subsection="$3"
+row=$(docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -AtF '|' -c "
+SELECT id,coalesce(local_sha,''),coalesce(remote_sha,''),coalesce(ci_result,''),coalesce(review_result,''),status
+FROM workstation_ledger
+WHERE repository='$repository' AND section='$section' AND subsection='$subsection';")
+[ -n "$row" ] || { echo NOT_FOUND; exit 2; }
+IFS='|' read -r id local_sha remote_sha ci review status <<< "$row"
+fail=0
+[ -n "$local_sha" ] && [ "$local_sha" = "$remote_sha" ] || fail=1
+[ "$ci" = PASS ] || fail=1
+[ "$review" = PASS ] || fail=1
+[ "$status" = COMPLETE ] || fail=1
+high=$(docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -Atqc "
+SELECT count(*) FROM workstation_evidence
+WHERE ledger_id=$id
+  AND evidence_type IN ('critical_defect','high_defect')
+  AND result NOT IN ('RESOLVED','PASS');")
+[ "$high" -eq 0 ] || fail=1
+if [ "$fail" -eq 0 ]; then
+  docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -v ON_ERROR_STOP=1 -c "
+  UPDATE workstation_ledger
+  SET status='CERTIFIED', certified_at=now(), updated_at=now()
+  WHERE id=$id;" >/dev/null
+  echo STATUS=CERTIFIED
+else
+  echo STATUS=NOT_CERTIFIED
+  echo "LOCAL_SHA=$local_sha"
+  echo "REMOTE_SHA=$remote_sha"
+  echo "CI=$ci"
+  echo "REVIEW=$review"
+  echo "CURRENT_STATUS=$status"
+  echo "UNRESOLVED_HIGH_CRITICAL=$high"
+  exit 1
+fi
