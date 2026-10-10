@@ -1,0 +1,35 @@
+name: Prepublication no-effect source checks
+
+on:
+  pull_request:
+    branches:
+      - 'subsection/cp-01-foundation--02-trusted-decisions'
+  push:
+    branches:
+      - 'atomic/cp-01-foundation--02-prepublication-admission-456'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codestra-control-plane-offline-tests
+  cancel-in-progress: false
+
+jobs:
+  offline-source-validation:
+    name: prepublication-offline-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Run complete no-effect source suite
+        env:
+          PRODUCTION_GO: 'NO'
+          LIVE_CAPABILITIES_ENABLED: 'NO'
+          EXTERNAL_EFFECTS: 'false'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -S -m unittest discover -s tests -v
