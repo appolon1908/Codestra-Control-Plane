@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+import argparse, os, pathlib, subprocess, psycopg2
+from psycopg2.extras import RealDictCursor
+
+DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
+ROOT=pathlib.Path("/srv/codestra")
+
+def run(cmd,check=True):
+    p=subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    if check and p.returncode:
+        raise SystemExit(p.stderr or p.stdout)
+    return p
+
+ap=argparse.ArgumentParser()
+ap.add_argument("workstation_id")
+ap.add_argument("--section",action="store_true",help="materialize parent section worktree too")
+args=ap.parse_args()
+
+with psycopg2.connect(DSN) as c, c.cursor(cursor_factory=RealDictCursor) as cur:
+    cur.execute("""SELECT w.*,p.repository FROM workstations w JOIN products p USING(product)
+                   WHERE workstation_id=%s""",(args.workstation_id,))
+    row=cur.fetchone()
+if not row:
+    raise SystemExit("UNKNOWN_WORKSTATION")
+
+repo_name=row["repository"].split("/",1)[1]
+repo=ROOT/"apps"/repo_name
+if not (repo/".git").exists():
+    raise SystemExit("REPO_MISSING")
+branch=row["branch"]
+parent=row["parent_branch"]
+wt=pathlib.Path(row["worktree"])
+
+def git(*a,check=True):
+    return run(["sudo","-u","codestra","git","-c",f"safe.directory={repo}","-C",str(repo),*a],check)
+
+git("fetch","origin","--prune")
+if git("show-ref","--verify","--quiet","refs/remotes/origin/"+branch,check=False).returncode:
+    raise SystemExit("REMOTE_BRANCH_MISSING "+branch)
+
+if args.section:
+    section_path=ROOT/"workstations"/repo_name/"sections"/row["section"]/"repo"
+    if not (section_path/".git").exists():
+        section_path.parent.mkdir(parents=True,exist_ok=True)
+        os.chown(section_path.parent,1000,1000)
+        if section_path.exists() and any(section_path.iterdir()):
+            raise SystemExit("SECTION_PATH_NONEMPTY")
+        if section_path.exists(): section_path.rmdir()
+        git("worktree","add",str(section_path),parent)
+
+if (wt/".git").exists():
+    print(f"WORKTREE_READY={wt}")
+    raise SystemExit(0)
+wt.parent.mkdir(parents=True,exist_ok=True)
+os.chown(wt.parent,1000,1000)
+if wt.exists() and any(wt.iterdir()):
+    raise SystemExit("WORKTREE_PATH_NONEMPTY")
+if wt.exists(): wt.rmdir()
+git("worktree","add",str(wt),branch)
+print(f"WORKTREE_READY={wt}")
+print(f"BRANCH={branch}")

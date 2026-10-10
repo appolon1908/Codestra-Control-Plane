@@ -1,0 +1,31 @@
+{
+  "collected_at_utc": "2026-10-09T05:08:33.271401+00:00",
+  "container_image_id": "sha256:da5804b4d68ca099affa16ab8e47b142d040ef33e99587558ab30dd765d3474e",
+  "external_effects": "false",
+  "github_ci_certified": false,
+  "head_sha": "be131c15993e1abf23a63d1e5e9d6fa7183e6dfd",
+  "independent_codeowner_approved": false,
+  "level": "LOCAL_EXACT_SHA_SCOPED_SOURCE_TESTS_PASSED",
+  "live_capabilities_enabled": "NO",
+  "merge_or_promotion_authorized": false,
+  "network": "none",
+  "production_go": "NO",
+  "ref": "refs/heads/main",
+  "remote_sha": "be131c15993e1abf23a63d1e5e9d6fa7183e6dfd",
+  "repository": "appolon1908/Caddy",
+  "runtime_deployment_certified": false,
+  "schema": "codestra.self-certification.scoped-source.v1",
+  "scope": "selected source tests only; no live/runtime certification",
+  "source_clean_before_after": true,
+  "source_mount": "read_only",
+  "source_verifier_sha256": "75c7751c9be546c2ac5354014d73d61b0fc8da11c397863731c99e6b631cd665",
+  "test_files": [
+    "tests/test_pas141_private_boundaries.py",
+    "tests/test_caddy_readonly_validator.py",
+    "tests/test_caddy_staging_candidate.py"
+  ],
+  "test_output_sha256": "97fab95fbbf1fd1e537f0784ef6bd000e6100876731515e17e6da78052652e43",
+  "tests_passed": 28,
+  "tests_skipped": 2,
+  "tree_sha": "2a9e8b6bf829a9b4ef913e9ee19e795ab8739eee"
+}

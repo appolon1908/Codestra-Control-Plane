@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repository="$1"
+branch="$2"
+agent="$3"
+docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -v ON_ERROR_STOP=1 -c "
+UPDATE workstation_ledger
+SET heartbeat_at=now(), updated_at=now()
+WHERE repository='$repository' AND branch='$branch' AND agent='$agent'
+  AND status IN ('CLAIMED','IN_PROGRESS','REVIEW');
+"

@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+import argparse, json, re, sys, subprocess
+import psycopg2
+from psycopg2.extras import RealDictCursor, Json
+
+PRODUCT_ALIASES={
+  "middleware":"Middleware-",
+  "kong":"Kong",
+  "caddy":"Caddy",
+  "keycloak":"Keycloak",
+  "openbao":"Codestra-OpenBao",
+  "n8n":"N8N",
+}
+def canonical_product(name):
+  return PRODUCT_ALIASES.get(name,name)
+
+DSN="host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"
+MANDATORY=("ci_exact_sha","review","regression","security","clean_tree","remote_sha_match")
+
+def post_github_status(repository, sha, decision, reasons):
+  state="success" if decision=="PASS" else "failure"
+  desc="Codestra promotion certified" if decision=="PASS" else ("Blocked: "+(",".join(reasons[:3]) if reasons else "policy failure"))
+  if len(desc)>140: desc=desc[:137]+"..."
+  cmd=["sudo","-u","codestra","-H","gh","api","--method","POST",f"repos/{repository}/statuses/{sha}",
+       "-f",f"state={state}","-f","context=promotion-gate","-f",f"description={desc}"]
+  r=subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+  if r.returncode:
+    print("STATUS_PUBLICATION_ERROR="+(r.stderr.strip() or r.stdout.strip()))
+    return False
+  print("GITHUB_STATUS=promotion-gate:"+state)
+  return True
+
+def main():
+  a=argparse.ArgumentParser()
+  a.add_argument("--product",required=True); a.add_argument("--source-level",required=True)
+  a.add_argument("--source-ref",required=True); a.add_argument("--target-level",required=True)
+  a.add_argument("--target-ref",required=True); a.add_argument("--sha",required=True)
+  a.add_argument("--actor",default="unknown")
+  x=a.parse_args()
+  x.product=canonical_product(x.product)
+  reasons=[]
+  if not re.fullmatch(r"[0-9a-f]{40}",x.sha): reasons.append("INVALID_EXACT_SHA")
+
+  with psycopg2.connect(DSN) as c:
+    with c.cursor(cursor_factory=RealDictCursor) as cur:
+      cur.execute("SELECT * FROM products WHERE product=%s",(x.product,)); product=cur.fetchone()
+      if not product: reasons.append("UNKNOWN_PRODUCT")
+      cur.execute("SELECT 1 FROM promotion_edges WHERE source_level=%s AND target_level=%s",(x.source_level,x.target_level))
+      if not cur.fetchone(): reasons.append("ILLEGAL_PROMOTION_EDGE")
+
+      if product:
+        test_branch=product["test_branch"]
+        expected={
+          ("development","testing"):("development",test_branch),
+          ("testing","staging"):(test_branch,"staging"),
+          ("staging","production"):("staging","production"),
+        }
+        pair=(x.source_level,x.target_level)
+        if pair in expected and (x.source_ref,x.target_ref)!=expected[pair]:
+          reasons.append("BRANCH_CHAIN_MISMATCH")
+        if x.target_level=="production":
+          if product["production_go"] or product["live_capabilities_enabled"] or product["external_effects_enabled"]:
+            reasons.append("PRODUCTION_EFFECT_POLICY_DRIFT")
+
+      if x.source_level=="subsection":
+        cur.execute("""SELECT status,branch,parent_branch,exact_sha_certified
+                       FROM workstations WHERE product=%s AND branch=%s""",(x.product,x.source_ref))
+        w=cur.fetchone()
+        if not w: reasons.append("UNKNOWN_SUBSECTION")
+        else:
+          if w["status"]!="CERTIFIED": reasons.append("SUBSECTION_NOT_CERTIFIED")
+          if w["parent_branch"]!=x.target_ref: reasons.append("SUBSECTION_PARENT_MISMATCH")
+          if w["exact_sha_certified"]!=x.sha: reasons.append("SUBSECTION_SHA_NOT_CERTIFIED")
+
+      if x.source_level=="section":
+        cur.execute("""SELECT s.status,s.branch,s.exact_sha,
+          sr.all_subsections_certified,sr.all_exact_sha_certified
+          FROM sections s JOIN section_readiness sr USING(section_id)
+          WHERE s.product=%s AND s.branch=%s""",(x.product,x.source_ref))
+        s=cur.fetchone()
+        if not s: reasons.append("UNKNOWN_SECTION")
+        else:
+          if x.target_ref!="development": reasons.append("SECTION_TARGET_NOT_DEVELOPMENT")
+          if not s["all_subsections_certified"]: reasons.append("SECTION_SUBSECTIONS_NOT_CERTIFIED")
+          if not s["all_exact_sha_certified"]: reasons.append("SECTION_SUBSECTION_SHA_EVIDENCE_MISSING")
+          if s["status"]!="CERTIFIED": reasons.append("SECTION_NOT_CERTIFIED")
+          if s["exact_sha"]!=x.sha: reasons.append("SECTION_SHA_NOT_CERTIFIED")
+
+      if x.source_level=="development":
+        cur.execute("SELECT all_sections_ready FROM product_readiness WHERE product=%s",(x.product,))
+        pr=cur.fetchone()
+        if not pr or not pr["all_sections_ready"]: reasons.append("PRODUCT_SECTIONS_NOT_CERTIFIED")
+
+      cur.execute("""SELECT * FROM promotion_evidence
+        WHERE product=%s AND source_level=%s AND source_ref=%s
+          AND target_level=%s AND target_ref=%s AND exact_sha=%s""",
+        (x.product,x.source_level,x.source_ref,x.target_level,x.target_ref,x.sha))
+      ev=cur.fetchone()
+      if not ev: reasons.append("EXACT_SHA_PROMOTION_EVIDENCE_MISSING")
+      else:
+        for g in MANDATORY:
+          if ev[g]!="PASS": reasons.append(g.upper()+"_NOT_PASS")
+        for g in ("contract","migration","performance"):
+          if ev[g] not in ("PASS","N/A"): reasons.append(g.upper()+"_NOT_PASS")
+
+      decision="PASS" if not reasons else "BLOCK"
+      cur.execute("""INSERT INTO promotion_attempts
+        (product,source_level,source_ref,target_level,target_ref,exact_sha,decision,reasons,actor)
+        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+        (x.product,x.source_level,x.source_ref,x.target_level,x.target_ref,x.sha,decision,Json(reasons),x.actor))
+
+  status_ok=post_github_status(product["repository"] if product else "",x.sha,decision,reasons) if product and re.fullmatch(r"[0-9a-f]{40}",x.sha) else False
+  print("PROMOTION_DECISION="+decision)
+  print("PRODUCT="+x.product)
+  print("SOURCE="+x.source_level+":"+x.source_ref)
+  print("TARGET="+x.target_level+":"+x.target_ref)
+  print("EXACT_SHA="+x.sha)
+  if reasons:
+    for r in reasons: print("BLOCKER="+r)
+    raise SystemExit(1)
+  if not status_ok:
+    print("BLOCKER=GITHUB_STATUS_NOT_PUBLISHED")
+    raise SystemExit(2)
+  print("PRODUCTION_GO=NO")
+  print("LIVE_CAPABILITIES_ENABLED=NO")
+  print("EXTERNAL_EFFECTS=false")
+
+if __name__=="__main__": main()

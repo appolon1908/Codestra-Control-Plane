@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo="$1"
+expected_branch="$2"
+parent_branch="$3"
+cd "$repo"
+fail=0
+check(){ printf '%-34s %s\n' "$1" "$2"; [ "$2" = PASS ] || fail=1; }
+
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 && check WORKTREE_EXISTS PASS || check WORKTREE_EXISTS FAIL
+current=$(git branch --show-current 2>/dev/null || true)
+[ "$current" = "$expected_branch" ] && check EXPECTED_BRANCH PASS || check EXPECTED_BRANCH FAIL
+if git show-ref --verify --quiet "refs/heads/$parent_branch" || git show-ref --verify --quiet "refs/remotes/origin/$parent_branch"; then
+  check PARENT_EXISTS PASS
+else
+  check PARENT_EXISTS FAIL
+fi
+[ -z "$(git status --porcelain)" ] && check TREE_CLEAN PASS || check TREE_CLEAN FAIL
+git fetch --prune origin >/dev/null 2>&1 && check FETCH_OK PASS || check FETCH_OK FAIL
+head=$(git rev-parse HEAD)
+echo "BASE_SHA=$head"
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
+if [ -n "$upstream" ]; then
+  read behind ahead < <(git rev-list --left-right --count "$upstream...HEAD")
+  echo "BEHIND=$behind AHEAD=$ahead"
+  check AHEAD_BEHIND_KNOWN PASS
+else
+  check AHEAD_BEHIND_KNOWN FAIL
+fi
+git diff --check >/dev/null && check NO_CONFLICTS PASS || check NO_CONFLICTS FAIL
+command -v docker >/dev/null && docker info >/dev/null 2>&1 && check DOCKER_AVAILABLE PASS || check DOCKER_AVAILABLE FAIL
+command -v psql >/dev/null && check DATABASE_CLIENT PASS || check DATABASE_CLIENT FAIL
+[ "$(printenv PRODUCTION_GO 2>/dev/null || echo NO)" != YES ] && check PRODUCTION_GO_OFF PASS || check PRODUCTION_GO_OFF FAIL
+[ "$(printenv LIVE_CAPABILITIES_ENABLED 2>/dev/null || echo NO)" != YES ] && check LIVE_CAPABILITIES_OFF PASS || check LIVE_CAPABILITIES_OFF FAIL
+[ "$(printenv EXTERNAL_EFFECTS 2>/dev/null || echo false)" != true ] && check EXTERNAL_EFFECTS_OFF PASS || check EXTERNAL_EFFECTS_OFF FAIL
+exit "$fail"

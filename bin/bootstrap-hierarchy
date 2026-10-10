@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+import json, pathlib, re
+import psycopg2
+from psycopg2.extras import Json
+
+DSN="host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"
+ROOT=pathlib.Path("/srv/codestra/workstations")
+OUT=pathlib.Path("/srv/codestra/dev-platform/control-plane/products")
+OUT.mkdir(parents=True, exist_ok=True)
+
+SECTION_KEYS=[
+ ("01-core","section/01-core"),
+ ("02-api","section/02-api"),
+ ("03-security","section/03-security"),
+ ("04-deployment","section/04-deployment"),
+ ("05-observability","section/05-observability"),
+ ("06-testing","section/06-testing"),
+ ("07-saas","section/07-saas"),
+ ("08-release","section/08-release"),
+]
+GATES=["lint","unit","integration","contract","security","clean_tree","remote_sha_match","ci_exact_sha","review","regression"]
+
+def slug(name):
+    return re.sub(r"[^a-z0-9]+","-",name.lower()).strip("-")
+
+count_products=count_sections=count_ws=0
+with psycopg2.connect(DSN) as c:
+  for f in sorted(ROOT.glob("*/workstation.json")):
+    src=json.loads(f.read_text())
+    product=f.parent.name
+    repo=src["repository"]
+    pslug=slug(product)
+    manifest={
+      "schema_version":"codestra.hierarchy.v2",
+      "product":product,
+      "repository":repo,
+      "production_effects":{"PRODUCTION_GO":"NO","LIVE_CAPABILITIES_ENABLED":"NO","EXTERNAL_EFFECTS":"false"},
+      "promotion_chain":["subsection","section","development","test","staging","production"],
+      "sections":[]
+    }
+    with c.cursor() as cur:
+      cur.execute("""INSERT INTO products(product,repository) VALUES(%s,%s)
+        ON CONFLICT(product) DO UPDATE SET repository=EXCLUDED.repository,updated_at=now()""",(product,repo))
+    count_products+=1
+    previous=None
+    for idx,(key,branch) in enumerate(SECTION_KEYS,1):
+      sid=f"{pslug}--{key}"
+      deps=[previous] if previous else []
+      manifest["sections"].append({
+        "section_id":sid,"section":key,"branch":branch,"order":idx,
+        "depends_on":deps,
+        "subsections":[{
+          "subsection":"01-baseline",
+          "workstation":f"{sid}--01-baseline",
+          "branch":f"subsection/{key}--01-baseline",
+          "parent_branch":branch,
+          "depends_on":[],
+          "required_gates":GATES
+        }]
+      })
+      with c.cursor() as cur:
+        cur.execute("""INSERT INTO sections(section_id,product,section_key,branch,order_index,depends_on)
+          VALUES(%s,%s,%s,%s,%s,%s)
+          ON CONFLICT(section_id) DO UPDATE SET branch=EXCLUDED.branch,order_index=EXCLUDED.order_index,depends_on=EXCLUDED.depends_on""",
+          (sid,product,key,branch,idx,Json(deps)))
+      count_sections+=1
+      wid=f"{sid}--01-baseline"
+      wt=f"/srv/codestra/workstations/{product}/sections/{key}/01-baseline"
+      mpath=f"/srv/codestra/dev-platform/control-plane/products/{pslug}.json"
+      with c.cursor() as cur:
+        cur.execute("""INSERT INTO workstations
+          (workstation_id,product,section,subsection,branch,parent_branch,worktree,order_index,depends_on,required_gates,status,hierarchy_version,manifest_path,section_branch)
+          VALUES(%s,%s,%s,'01-baseline',%s,%s,%s,1,'[]'::jsonb,%s,'NOT_STARTED',2,%s,%s)
+          ON CONFLICT(workstation_id) DO UPDATE SET
+            product=EXCLUDED.product,section=EXCLUDED.section,subsection=EXCLUDED.subsection,
+            branch=EXCLUDED.branch,parent_branch=EXCLUDED.parent_branch,
+            worktree=EXCLUDED.worktree,required_gates=EXCLUDED.required_gates,
+            hierarchy_version=2,manifest_path=EXCLUDED.manifest_path,section_branch=EXCLUDED.section_branch,
+            updated_at=now()""",
+          (wid,product,key,f"subsection/{key}--01-baseline",branch,wt,Json(GATES),mpath,branch))
+      count_ws+=1
+      previous=sid
+    (OUT/f"{pslug}.json").write_text(json.dumps(manifest,indent=2)+"\n")
+print(f"PRODUCTS={count_products}")
+print(f"SECTIONS={count_sections}")
+print(f"SUBSECTIONS={count_ws}")

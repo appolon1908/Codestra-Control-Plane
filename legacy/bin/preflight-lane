@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repository="$1"
+section="$2"
+subsection="$3"
+worktree="$4"
+
+row=$(docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -AtF '|' -c "
+SELECT branch,parent_branch,depends_on::text
+FROM workstation_ledger
+WHERE repository='$repository' AND section='$section' AND subsection='$subsection';")
+[ -n "$row" ] || { echo "LEDGER_ENTRY=FAIL"; exit 2; }
+IFS='|' read -r branch parent depends <<< "$row"
+
+fail=0
+/opt/codestra-dev/control-plane/bin/preflight "$worktree" "$branch" "$parent" || fail=1
+
+deps_fail=$(docker exec codestra-dev-postgres psql -U codestra -d codestra_control_plane -Atqc "
+WITH lane AS (
+  SELECT depends_on FROM workstation_ledger
+  WHERE repository='$repository' AND section='$section' AND subsection='$subsection'
+),
+deps AS (
+  SELECT jsonb_array_elements_text(depends_on) AS dep FROM lane
+)
+SELECT count(*)
+FROM deps
+WHERE NOT EXISTS (
+  SELECT 1 FROM workstation_ledger w
+  WHERE w.repository='$repository'
+    AND (w.section || '/' || w.subsection)=deps.dep
+    AND w.status='CERTIFIED'
+);")
+if [ "$deps_fail" -eq 0 ]; then
+  echo DEPENDENCIES_CERTIFIED=PASS
+else
+  echo "DEPENDENCIES_CERTIFIED=FAIL count=$deps_fail"
+  fail=1
+fi
+
+docker info >/dev/null 2>&1 && echo DOCKER_AVAILABLE=PASS || { echo DOCKER_AVAILABLE=FAIL; fail=1; }
+docker exec codestra-dev-postgres pg_isready -U codestra >/dev/null 2>&1 && echo DATABASE_REACHABLE=PASS || { echo DATABASE_REACHABLE=FAIL; fail=1; }
+
+if command -v trivy >/dev/null 2>&1; then
+  echo SECURITY_TOOLING=PASS
+else
+  echo SECURITY_TOOLING=FAIL
+  fail=1
+fi
+
+exit "$fail"

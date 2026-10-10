@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+import argparse,fnmatch,os,subprocess,sys,psycopg2
+from psycopg2.extras import RealDictCursor
+p=argparse.ArgumentParser()
+p.add_argument("--repo",required=True)
+p.add_argument("--product",required=True)
+p.add_argument("--head",required=True)
+p.add_argument("--base",required=True)
+p.add_argument("--open-pr",action="store_true")
+a=p.parse_args()
+valid=False
+if a.head.startswith("subsection/") and a.base.startswith("section/"):
+    valid=a.head[len("subsection/"):].split("--",1)[0]==a.base[len("section/"):]
+elif a.head.startswith("section/") and a.base=="development": valid=True
+elif (a.head,a.base) in {("development","testing"),("testing","staging"),("staging","production")}: valid=True
+if not valid: raise SystemExit(f"PROMOTION_BLOCKED invalid_path head={a.head} base={a.base}")
+c=psycopg2.connect(os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"))
+with c.cursor(cursor_factory=RealDictCursor) as cur:
+    if a.head.startswith("subsection/"):
+        cur.execute("SELECT status FROM workstations WHERE product=%s AND branch=%s",(a.product,a.head)); rows=cur.fetchall()
+    elif a.head.startswith("section/"):
+        sec=a.head[len("section/"):]
+        cur.execute("SELECT status FROM workstations WHERE product=%s AND section=%s",(a.product,sec)); rows=cur.fetchall()
+    else:
+        cur.execute("SELECT status FROM workstations WHERE product=%s",(a.product,)); rows=cur.fetchall()
+if not rows or any(r["status"]!="CERTIFIED" for r in rows):
+    raise SystemExit("PROMOTION_BLOCKED uncertified_work")
+cmd=["gh","pr","create","--repo",subprocess.check_output(["git","-C",a.repo,"remote","get-url","origin"],text=True).strip(),"--head",a.head,"--base",a.base,"--title",f"promote: {a.head} -> {a.base}","--body","Automated Codestra hierarchy promotion. Source work is CERTIFIED in the development control plane."]
+if a.open_pr:
+    subprocess.run(cmd,check=True)
+    print("PROMOTION_PR_OPENED")
+else:
+    print("PROMOTION_ALLOWED")

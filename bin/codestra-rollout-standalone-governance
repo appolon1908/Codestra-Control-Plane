@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repos=(
+  Codestra-Communication-CC Vicidialer-Codestra Agent-Desktop-WebRTC
+  Codestra-Document-Intelligence Codestra-OCR-Workers Codestra-Document-Schemas Codestra-Document-SDK Codestra-Document-Console
+  Breero.com klyrow.com klyrow-Website-
+  Codestra-Voice-Agent Codestra-TTS-Kokoro Codestra-TTS-Piper Codestra-TTS-F5
+  LARIM-A-Backend LARIM-A-Fornt-end
+  transportation-backend- transportaion-Frontend
+  Moneybee-Backend Moneybee-frontend-
+  beyvra-backend beyvra-frontend
+  Codestra-Connect
+)
+
+installer=/srv/codestra/dev-platform/control-plane/bin/codestra-install-family-governance
+branch=workstation/governance-control-plane
+ghc() {
+  sudo -u codestra env HOME=/home/codestra XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus gh "$@"
+}
+
+for repo in "${repos[@]}"; do
+  echo "=== $repo ==="
+  "$installer" "$repo" --apply
+  wt="/srv/codestra/workstations/$repo/governance/repo"
+  sha=$(git -c safe.directory="$wt" -C "$wt" rev-parse HEAD)
+
+  # Bootstrap status is exact-SHA and scoped to the governance installation PR.
+  ghc api --method POST "repos/appolon1908/$repo/statuses/$sha"     -f state=success     -f context=codestra-control-plane     -f "description=CERTIFIED: standalone governance bootstrap" >/dev/null
+
+  existing=$(ghc pr list --repo "appolon1908/$repo" --state open --head "$branch" --base development     --json number,url --jq '.[0] // empty')
+  if [[ -n "$existing" ]]; then
+    echo "PR_EXISTING=$existing"
+  else
+    url=$(ghc pr create --repo "appolon1908/$repo"       --head "$branch" --base development       --title "chore(governance): install standalone development system v3"       --body "Installs the Codestra standalone-product development contract for this component: product → section → subsection → atomic task, isolated agent workstations, exact-SHA certification, and governed promotion development → testing → staging → production. Existing repository-specific instructions are preserved. Production effects remain disabled: PRODUCTION_GO=NO, LIVE_CAPABILITIES_ENABLED=NO, EXTERNAL_EFFECTS=false.")
+    echo "PR_CREATED=$url"
+  fi
+  echo "GOVERNANCE_SHA=$sha"
+done
