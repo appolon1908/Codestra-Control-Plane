@@ -41,6 +41,35 @@ SQLite processes, process death on both sides of publication, replay denial,
 stale or mismatched evidence, moved parents, symbolic heads, and protection
 failures using disposable repositories.
 
+## Disposable CLI and real-watchdog integration
+
+`tests/integration/bootstrap_cli.py` is a separate integration suite. It refuses
+to run outside a disposable Linux container with read-only source at `/source`
+and empty tmpfs mounts for all trusted paths. The runner mounts no host trust
+configuration, database, credentials or product remote and disables networking.
+Use a locally reviewed immutable Docker image ID containing Python 3, Git and
+`/usr/bin/openssl`; the runner does not pull an image or install dependencies:
+
+```sh
+bash ci/run-bootstrap-cli-container.sh sha256:<reviewed-local-image-id>
+```
+
+The suite executes the actual fixed-path CLI with ephemeral three-party signing
+keys, private disposable Git objects/reports and SQLite state. It checks
+publication without certification or worker authority, replay denial, moved
+parents, changed report bytes, revoked policy and skipped evidence. A separate
+library-level case forwards a real Git transaction through prepare, then stalls
+its transport. The actual 30-second watchdog must stop it, burn the nonce and
+release prepared ref locks. This test verifies the prepare acknowledgement and
+elapsed timeout; no synthetic timeout exception or clock is used.
+
+These seven tests supplement the 87-test source suite; they do not establish
+live identities, installed-rule attestation, current lease authority, a GitHub
+adapter or end-to-end multi-provider staging certification. Fixture policy
+declarations and signatures authorize only the isolated fixture. Hosted source
+CI still runs the source suite; run this container suite separately against the
+exact reviewed artifact before any independently approved live integration.
+
 ## Admission and certification integration requiring owner review
 
 The proposed creation context is `codestra-review-admission`. Full certification
