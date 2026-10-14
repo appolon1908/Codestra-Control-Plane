@@ -142,7 +142,7 @@ def main() -> int:
 
             if args.head_ref.startswith("subsection/"):
                 cursor.execute(
-                    """SELECT status,remote_sha,parent_branch
+                    """SELECT status,remote_sha,parent_branch,exact_sha_certified
                        FROM workstations
                        WHERE product=%s AND branch=%s""",
                     (args.product, args.head_ref),
@@ -154,6 +154,7 @@ def main() -> int:
                 ok = bool(
                     row["status"] == "CERTIFIED"
                     and row["remote_sha"] == args.head_sha
+                    and row.get("exact_sha_certified") == args.head_sha
                 )
                 scope = f"subsection:{args.head_ref}"
 

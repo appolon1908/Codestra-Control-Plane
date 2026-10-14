@@ -33,10 +33,48 @@ alternate different verdicts; publisher ownership must be reconciled before
 deployment. Deduplication cannot make an already exhausted history writable.
 No context rename, substitute success status or protection bypass is proposed.
 
+On an explicit primary/secondary rate limit or HTTP 429, the publisher stops the
+entire scheduled cycle without retrying, rather than continuing across PRs and
+repositories. Ordinary permission errors remain separate. No timer, service or
+credential configuration is changed; a future scheduled invocation re-reads
+remote state and never assumes that the previous invocation completed.
+
 The subsection source already contains the promotion-check indentation repair;
 the installed file still fails syntax parsing. The deployment proposal includes
 that existing corrected file with both installed and candidate digests. It does
 not include the unapproved live review-bootstrap tool or any database migration.
+
+## Lease lifecycle and exact-commit evidence
+
+An unexpired WARNING lease remains owned. Only its existing owner can renew it;
+a successful heartbeat restores ACTIVE. Missing, naive or expired lease
+timestamps fail closed. STALE, FROZEN and expired active/warning leases cannot
+be claimed directly, even by the old owner: the existing recovery workflow must
+first establish whether work is clean or must remain frozen. No automatic thaw
+is added. Preflight, evidence updates and completion require the active,
+unexpired owned lease. Certification requires the recorded completing owner and
+the FREE lease state produced by successful completion.
+
+Gate records now bind each result to its exact commit. `codestra-devctl` reads
+them under `evidence.gates`; `codestra-certify-scope` retains its top-level gate
+names. Each gate has the following shape (illustrative fixture only):
+
+```json
+{"result": "PASS", "exact_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+```
+
+Plain historical PASS strings, missing bindings and a different commit are
+rejected. Certification also requires local/remote SHA identity with the
+recorded completed commit and persists `exact_sha_certified`, an existing schema
+column. Both checker and publisher require that column to match the requested
+subsection head; a CERTIFIED flag and mutable remote SHA alone are insufficient.
+
+These checks prevent reuse of stale/unbound assertions. They do not authenticate
+CI, reviewer identities or caller-supplied evidence. The trusted loader described
+in `trusted-decision-preparation.md` is still required for governed acceptance.
+Do not migrate old PASS strings by merely attaching a SHA; obtain actual current
+evidence. Review the gate-format compatibility change and verify current schema
+in a disposable environment before any approved installation.
 
 ## Verification
 
@@ -53,7 +91,10 @@ publisher/checker disagreement and redundant status writes. They now cover expir
 remote mismatch, both contexts, changed verdicts, newest-first pagination,
 malformed/incomplete history, read failure, and second-context failure followed
 by retry. Database and GitHub effects are stubbed; no deployed command is run as
-a test. An independent source review is not an eligible GitHub release approval.
+a test. Additional regressions reproduced frozen/warning lease inconsistencies,
+expired ownership, unbound/stale completion and certificate records, and missing
+rate-limit cycle termination. An independent source review is not an eligible
+GitHub release approval.
 
 ## Assignment and deployment gates
 
@@ -70,7 +111,7 @@ parent and prerequisite records. Then the installed claim/preflight workflow can
 establish and verify ownership. Do not invent certified dependencies or claim
 that this source-preparation assignment is a database lease.
 
-`governance/publisher-deployment-proposal.json` pins the three proposed files and
+`governance/publisher-deployment-proposal.json` pins the five proposed files and
 records rollback requirements. Installation remains blocked until genuine
 assignment, independent exact-source/result gates, policy review and explicit
 deployment approval exist. No services, installed files, leases, schema,

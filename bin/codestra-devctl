@@ -36,6 +36,23 @@ def deps_certified(c,row):
         got={r["workstation_id"]:r["status"] for r in cur.fetchall()}
     return [d for d in deps if got.get(d)!="CERTIFIED"]
 
+def lease_unexpired(row):
+    expiry=row.get("lease_expires_at")
+    return (isinstance(expiry,datetime) and expiry.tzinfo is not None
+            and expiry.utcoffset() is not None and expiry>datetime.now(timezone.utc))
+
+def require_owned_lease(row,args,allow_warning=False):
+    states={"ACTIVE","WARNING"} if allow_warning else {"ACTIVE"}
+    if row.get("agent")!=args.agent or row.get("lease_state") not in states:
+        raise SystemExit("LEASE_NOT_OWNED")
+    if not lease_unexpired(row): raise SystemExit("LEASE_EXPIRED")
+
+def gate_passes(gate,sha):
+    # A historical PASS string is not evidence for the current commit.
+    return (isinstance(gate,dict) and gate.get("result")=="PASS"
+            and re.fullmatch(r"[0-9a-f]{40}",sha) is not None
+            and gate.get("exact_sha")==sha)
+
 def register(args):
     root=pathlib.Path(args.root)
     files=list(root.glob("*/sections/*/subsections/*/workstation.json"))
@@ -60,11 +77,14 @@ def register(args):
 def claim(args):
     with conn() as c:
         row=get_ws(c,args.workstation,True)
+        state=row["lease_state"]
+        if state!="FREE":
+            if state not in {"ACTIVE","WARNING"} or not lease_unexpired(row):
+                raise SystemExit("LEASE_RECOVERY_REQUIRED")
+            if row["agent"]!=args.agent:
+                raise SystemExit(f"LEASE_HELD agent={row['agent']} until={row['lease_expires_at']}")
         blocked=deps_certified(c,row)
         if blocked: raise SystemExit("BLOCKED_DEPENDENCIES "+",".join(blocked))
-        now=datetime.now(timezone.utc)
-        if row["lease_state"]=="ACTIVE" and row["lease_expires_at"] and row["lease_expires_at"]>now and row["agent"]!=args.agent:
-            raise SystemExit(f"LEASE_HELD agent={row['agent']} until={row['lease_expires_at']}")
         with c.cursor() as cur:
             cur.execute("""UPDATE workstations SET status='CLAIMED',agent=%s,current_atomic_task=%s,
               lease_started_at=now(),heartbeat_at=now(),lease_expires_at=now()+interval '60 minutes',
@@ -76,9 +96,9 @@ def claim(args):
 def heartbeat(args):
     with conn() as c:
         row=get_ws(c,args.workstation,True)
-        if row["agent"]!=args.agent or row["lease_state"]!="ACTIVE": raise SystemExit("LEASE_NOT_OWNED")
+        require_owned_lease(row,args,allow_warning=True)
         with c.cursor() as cur:
-            cur.execute("UPDATE workstations SET heartbeat_at=now(),lease_expires_at=now()+interval '60 minutes',updated_at=now() WHERE workstation_id=%s",(args.workstation,))
+            cur.execute("UPDATE workstations SET lease_state='ACTIVE',heartbeat_at=now(),lease_expires_at=now()+interval '60 minutes',updated_at=now() WHERE workstation_id=%s",(args.workstation,))
         event(c,args.workstation,"HEARTBEAT",args.agent)
     print("HEARTBEAT_OK")
 
@@ -86,7 +106,7 @@ def preflight(args):
     checks={}
     with conn() as c:
         row=get_ws(c,args.workstation,True)
-        if row["agent"]!=args.agent or row["lease_state"]!="ACTIVE": raise SystemExit("LEASE_NOT_OWNED")
+        require_owned_lease(row,args)
         wt=row["worktree"]; branch=row["branch"]; parent=row["parent_branch"]
         checks["WORKTREE_EXISTS"]=os.path.isdir(wt)
         if not checks["WORKTREE_EXISTS"]: return fail_preflight(c,row,args,checks,"WORKTREE_MISSING")
@@ -138,8 +158,10 @@ def fail_preflight(c,row,args,checks,reason):
 
 def set_evidence(args):
     val=json.loads(args.json)
+    if not isinstance(val,dict): raise SystemExit("INVALID_EVIDENCE_OBJECT")
     with conn() as c:
         row=get_ws(c,args.workstation,True)
+        require_owned_lease(row,args)
         with c.cursor() as cur:
             cur.execute("UPDATE workstations SET evidence=evidence||%s::jsonb,last_test_run=CASE WHEN %s THEN now() ELSE last_test_run END,updated_at=now() WHERE workstation_id=%s",
                         (json.dumps(val),bool(val.get("tests")),args.workstation))
@@ -153,19 +175,21 @@ def validate_complete(c,row):
     remote=git(wt,"ls-remote","origin",f"refs/heads/{row['branch']}",check=False)
     remote_sha=remote.stdout.split()[0] if remote.returncode==0 and remote.stdout.strip() else ""
     checks["LOCAL_REMOTE_SHA_MATCH"]=bool(remote_sha and remote_sha==local)
-    ev=row["evidence"] or {}
+    ev=row["evidence"] if isinstance(row.get("evidence"),dict) else {}
     required=row["required_gates"] or []
     if isinstance(required,str): required=json.loads(required)
     gates=ev.get("gates",{})
+    if not isinstance(gates,dict): gates={}
     for g in required:
         if g=="clean_tree": continue
         if g=="remote_sha_match": continue
-        checks[g.upper()]=gates.get(g)=="PASS"
+        checks[g.upper()]=gate_passes(gates.get(g),local)
     return checks,local,remote_sha
 
 def complete(args):
     with conn() as c:
         row=get_ws(c,args.workstation,True)
+        require_owned_lease(row,args)
         checks,local,remote=validate_complete(c,row)
         bad=[k for k,v in checks.items() if not v]
         if bad: raise SystemExit("COMPLETE_REFUSED "+",".join(bad))
@@ -178,15 +202,20 @@ def complete(args):
 def certify(args):
     with conn() as c:
         row=get_ws(c,args.workstation,True)
+        if row.get("agent")!=args.agent: raise SystemExit("LEASE_NOT_OWNED")
         if row["status"]!="COMPLETE": raise SystemExit("CERTIFY_REFUSED status_not_COMPLETE")
-        ev=row["evidence"] or {}; gates=ev.get("gates",{})
-        req={"ci_exact_sha","review","regression","security"}
-        bad=[g for g in sorted(req) if gates.get(g)!="PASS"]
-        if bad: raise SystemExit("CERTIFY_REFUSED "+",".join(bad))
+        if row.get("lease_state")!="FREE": raise SystemExit("CERTIFY_REFUSED lease_not_released")
         checks,local,remote=validate_complete(c,row)
+        ev=row["evidence"] if isinstance(row.get("evidence"),dict) else {}
+        gates=ev.get("gates",{})
+        if not isinstance(gates,dict): gates={}
+        req={"ci_exact_sha","review","regression","security"}
+        bad=[g for g in sorted(req) if not gate_passes(gates.get(g),local)]
+        if bad: raise SystemExit("CERTIFY_REFUSED "+",".join(bad))
+        checks["COMPLETION_SHA_MATCH"]=row.get("local_sha")==local and row.get("remote_sha")==remote
         if not all(checks.values()): raise SystemExit("CERTIFY_REFUSED completion_drift")
         with c.cursor() as cur:
-            cur.execute("UPDATE workstations SET status='CERTIFIED',certified_at=now(),ci_result='PASS',review_result='PASS',updated_at=now() WHERE workstation_id=%s",(args.workstation,))
+            cur.execute("UPDATE workstations SET status='CERTIFIED',exact_sha_certified=%s,certified_at=now(),ci_result='PASS',review_result='PASS',updated_at=now() WHERE workstation_id=%s",(local,args.workstation))
         event(c,args.workstation,"CERTIFIED",args.agent,{"sha":local})
     print("STATUS=CERTIFIED")
 

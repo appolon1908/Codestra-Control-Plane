@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse,json,os,psycopg2
+import argparse,json,os,re,psycopg2
 p=argparse.ArgumentParser()
 p.add_argument("--product",required=True)
 p.add_argument("--scope-type",required=True,choices=["SECTION","DEVELOPMENT","TESTING","STAGING","PRODUCTION"])
@@ -8,9 +8,14 @@ p.add_argument("--sha",required=True)
 p.add_argument("--actor",required=True)
 p.add_argument("--evidence-json",default="{}")
 a=p.parse_args()
+if re.fullmatch(r"[0-9a-f]{40}",a.sha) is None:
+    raise SystemExit("CERTIFY_SCOPE_REFUSED invalid_exact_sha")
 ev=json.loads(a.evidence_json)
+if not isinstance(ev,dict):
+    raise SystemExit("CERTIFY_SCOPE_REFUSED invalid_evidence_object")
 required=["ci_exact_sha","review","regression","security"]
-missing=[x for x in required if ev.get(x)!="PASS"]
+missing=[x for x in required if not (isinstance(ev.get(x),dict)
+         and ev[x].get("result")=="PASS" and ev[x].get("exact_sha")==a.sha)]
 if missing:
     raise SystemExit("CERTIFY_SCOPE_REFUSED "+",".join(missing))
 c=psycopg2.connect(os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"))
