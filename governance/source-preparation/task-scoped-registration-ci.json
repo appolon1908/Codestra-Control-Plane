@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "repair-scoped-registration-ci-prerequisites-and-review-documentation",
+  "branch": "atomic/cp-01-foundation--02-scoped-registration-ci-20261014",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "5548645621cacb2d80c61eb3f387d3bb63504695",
+  "prior_source_pr": "https://github.com/appolon1908/Codestra-Control-Plane/pull/13",
+  "authorization_basis": "Existing source-fix authorization and explicit instruction to repair diagnosed CI failure, retain mandatory SQL tests, complete independent review and publish a successor atomic draft PR. External PR13 merge does not confer certification authority.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}
