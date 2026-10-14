@@ -1,11 +1,27 @@
 #!/usr/bin/env python3
 import json, os, subprocess, psycopg2, runpy
+from collections import Counter
 from psycopg2.extras import RealDictCursor
 
 OWNER="appolon1908"
 CONTEXTS=("codestra-control-plane", "codestra/control-plane")
 DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
-GOVERNED_REPOS={"Middleware-","Kong","Caddy","Keycloak","Codestra-OpenBao","N8N"}
+PRIOR_GOVERNED_REPOS=frozenset({"Middleware-","Kong","Caddy","Keycloak","Codestra-OpenBao","N8N"})
+# Explicit owner-approved active scope, not every repository in the registry.
+# Coverage selects repositories for evaluation; it grants no certification.
+ADDITIONAL_GOVERNED_REPOS=frozenset({
+    "Backstage", "Breero.com", "Codestra-Alertmanager", "Codestra-Alloy",
+    "Codestra-Blackbox-Exporter", "Codestra-Grafana-", "Codestra-Loki",
+    "Codestra-Mission-Control", "Codestra-Node-Exporter", "Codestra-Postgres-Exporter",
+    "Codestra-Prometheus", "Codestra-Redis-Exporter", "Codestra-Telemetry",
+    "Codestra-Tempo", "Codestra-cAdvisor", "Evolution-API", "Frontend-Resturant-",
+    "Infustruction-repo", "LARIM-A-Backend", "LARIM-A-Fornt-end", "Leads-Workstation",
+    "Meltano-Leads-Importer", "Moneybee-Backend", "Moneybee-frontend-", "Odoo",
+    "Sentry", "Superset", "Wazuh", "WhatsApp", "WhatsApp-Frontend", "backend2",
+    "beyvra-backend", "beyvra-frontend", "codestra", "codestra-provisioning-service",
+    "klyrow.com", "kyqra-crawler",
+})
+GOVERNED_REPOS=PRIOR_GOVERNED_REPOS | ADDITIONAL_GOVERNED_REPOS
 BOOTSTRAP_HEADS={"governance/development-control-plane-v1","workstation/governance-control-plane"}
 ROOT_BASES={"main","development","release/production-activation"}
 MIGRATION_REASON=runpy.run_path(str(__import__("pathlib").Path(__file__).resolve().with_name("codestra-github-check")),run_name="statusd_authority")["migration_reason"]
@@ -75,16 +91,23 @@ def post(repo,sha,state,desc,url):
 
 def aliases(c):
     with c.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT product,repository,test_branch FROM products ORDER BY repository")
+        cur.execute("SELECT product,repository,test_branch,promotion_chain FROM products ORDER BY repository")
         rows=cur.fetchall()
+    counts=Counter(row["repository"].casefold() for row in rows if isinstance(row.get("repository"),str))
     out=[]
     for row in rows:
         repo_full=row["repository"]
-        if not repo_full.startswith(OWNER+"/"):
+        if not isinstance(repo_full,str) or not repo_full.startswith(OWNER+"/"):
             continue
         repo=repo_full.split("/",1)[1]
         if repo not in GOVERNED_REPOS:
             continue
+        if repo in ADDITIONAL_GOVERNED_REPOS:
+            if (counts[repo_full.casefold()]!=1 or row.get("product")!=repo
+                    or row.get("test_branch")!="testing"
+                    or row.get("promotion_chain")!=["development","testing","staging","production"]):
+                print(f"COVERAGE_BLOCKED repo={repo_full} reason=registry_mapping_mismatch")
+                continue
         out.append((repo,row["product"],row["test_branch"],f"/srv/codestra/apps/{repo}"))
     return out
 

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "prepare-scoped-registration-and-authenticated-candidate-binding",
+  "branch": "atomic/cp-01-foundation--02-scoped-registration-20261014",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "2482948e513aa7d0c02cf0fae41701813ed4f8f7",
+  "authorization_basis": "User requested a dedicated implementation agent on 2026-10-14 and expressly approved PostgreSQL session identity with operator-managed product grants. Source implementation, isolated tests, review and draft publication only.",
+  "scope": "Reusable metadata registration boundary; no hardcoded product expansion or legacy authority upgrades.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}
