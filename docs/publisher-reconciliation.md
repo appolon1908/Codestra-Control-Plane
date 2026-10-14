@@ -54,6 +54,9 @@ first establish whether work is clean or must remain frozen. No automatic thaw
 is added. Preflight, evidence updates and completion require the active,
 unexpired owned lease. Certification requires the recorded completing owner and
 the FREE lease state produced by successful completion.
+Preflight and completion recheck expiry after remote/environment validation and
+before writing progress or completion; a lease expiring during those checks is
+not renewed implicitly.
 
 Gate records now bind each result to its exact commit. `codestra-devctl` reads
 them under `evidence.gates`; `codestra-certify-scope` retains its top-level gate

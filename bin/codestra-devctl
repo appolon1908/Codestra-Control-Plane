@@ -139,6 +139,7 @@ def preflight(args):
         checks["EXTERNAL_EFFECTS_FALSE"]=os.environ.get("EXTERNAL_EFFECTS","false").lower()=="false"
         bad=[k for k,v in checks.items() if not v]
         if bad: return fail_preflight(c,row,args,checks,",".join(bad))
+        require_owned_lease(row,args)
         with c.cursor() as cur:
             cur.execute("""UPDATE workstations SET status='IN_PROGRESS',base_sha=%s,parent_sha=%s,local_sha=%s,
               evidence=evidence||%s::jsonb,updated_at=now() WHERE workstation_id=%s""",
@@ -193,6 +194,7 @@ def complete(args):
         checks,local,remote=validate_complete(c,row)
         bad=[k for k,v in checks.items() if not v]
         if bad: raise SystemExit("COMPLETE_REFUSED "+",".join(bad))
+        require_owned_lease(row,args)
         with c.cursor() as cur:
             cur.execute("""UPDATE workstations SET status='COMPLETE',local_sha=%s,remote_sha=%s,completed_at=now(),
               lease_state='FREE',updated_at=now() WHERE workstation_id=%s""",(local,remote,args.workstation))

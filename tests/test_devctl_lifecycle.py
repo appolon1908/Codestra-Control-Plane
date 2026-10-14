@@ -123,6 +123,29 @@ class DevctlLifecycleTests(unittest.TestCase):
         self.events.assert_called_once()
         self.assertEqual(self.events.call_args.args[2], "COMPLETE")
 
+    def test_lease_expiring_during_remote_validation_prevents_completion_write(self):
+        with mock.patch.dict(self.module["complete"].__globals__, {
+            "lease_unexpired": mock.Mock(side_effect=[True, False]),
+        }):
+            self.refused("complete", "LEASE_EXPIRED")
+
+    def test_lease_expiring_during_preflight_prevents_progress_write(self):
+        def preflight_git(path, *args, **kwargs):
+            if args[0] == "status":
+                return types.SimpleNamespace(returncode=0, stdout="")
+            if args[0] == "branch":
+                return types.SimpleNamespace(returncode=0, stdout="fixture\n")
+            if args[0] == "rev-list":
+                return types.SimpleNamespace(returncode=0, stdout="0 0\n")
+            if args[0] == "grep":
+                return types.SimpleNamespace(returncode=1, stdout="")
+            return types.SimpleNamespace(returncode=0, stdout=SHA + "\n")
+        with mock.patch.dict(self.module["preflight"].__globals__, {
+            "lease_unexpired": mock.Mock(side_effect=[True, False]), "git": preflight_git,
+        }), mock.patch("os.path.isdir", return_value=True), \
+                mock.patch("subprocess.run", return_value=types.SimpleNamespace(returncode=0)):
+            self.refused("preflight", "LEASE_EXPIRED")
+
     def test_certificate_requires_recorded_owner(self):
         self.row.update(status="COMPLETE", lease_state="FREE", agent="existing-owner")
         self.refused("certify", "LEASE_NOT_OWNED")

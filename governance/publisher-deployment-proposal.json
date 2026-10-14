@@ -22,7 +22,7 @@
     {
       "path": "bin/codestra-devctl",
       "expected_installed_sha256": "593a84efbfdd46083a21351d834a13dfae7526b86d418509a3ac6b4a88d57d9b",
-      "candidate_sha256": "0e6b244622637c024765ab95ec36fceb42da0aae9bcc5a943e864af5aa3c0436"
+      "candidate_sha256": "d973be0afb0e3181068df4d8e3d776bdc5e136e5496894fc5fcc66305a3de8d2"
     },
     {
       "path": "bin/codestra-certify-scope",
