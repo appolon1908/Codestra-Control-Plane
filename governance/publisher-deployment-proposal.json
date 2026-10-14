@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "state": "PROPOSAL_NOT_APPROVED_NOT_DEPLOYED",
+  "source_base": "f660df6ab117e43b07226f0402fa968e0a66bb8d",
+  "installed_root": "/srv/codestra/dev-platform/control-plane",
+  "files": [
+    {
+      "path": "bin/codestra-github-check",
+      "expected_installed_sha256": "d05a63c47f09b02fe8fdb3a95149ac295c232b62d6734d87918b0007faf97107",
+      "candidate_sha256": "d9ff202fdec37519353614a5549b3fa255bb42999f5c40ea6246ca8b4078e94a"
+    },
+    {
+      "path": "bin/codestra-github-statusd",
+      "expected_installed_sha256": "7dc06b9e56293d74474fdf7fbd0fb349103ab4292dce62c78055144952a849d7",
+      "candidate_sha256": "999499c701e299c4006203b8f68ed00cdbcaaf43280215014861811cf17be1b7"
+    },
+    {
+      "path": "bin/codestra-promotion-check",
+      "expected_installed_sha256": "e9b7c63a44c1ed789b2db4e36574958cb4f83185d1bbdbbc477234ad55dd1422",
+      "candidate_sha256": "16d70af73e610312685550923add5bcc6a6869a2f073578a6f0cd23e11f554b7"
+    },
+    {
+      "path": "bin/codestra-devctl",
+      "expected_installed_sha256": "593a84efbfdd46083a21351d834a13dfae7526b86d418509a3ac6b4a88d57d9b",
+      "candidate_sha256": "d973be0afb0e3181068df4d8e3d776bdc5e136e5496894fc5fcc66305a3de8d2"
+    },
+    {
+      "path": "bin/codestra-certify-scope",
+      "expected_installed_sha256": "9d8df1b56849594e79777f1a486baccfe4d93ea6d17b21240cf05eb441a72a3a",
+      "candidate_sha256": "6da86d72a1c4501510b4d9c012b544942111ca596998bf283d2c0faa52da6fca"
+    }
+  ],
+  "prerequisites": [
+    "Authentic controller product/workstation assignment and owned lease via approved registry workflow",
+    "Independent current-source approval, enforced protection and exact-source/result CI",
+    "Explicit approval of reconciled policy and publisher/service ownership",
+    "Exact reviewed artifact SHA plus no-effect staging and backup/rollback verification",
+    "Verify exact_sha_certified schema and per-gate exact-commit evidence format compatibility; obtain genuine current evidence rather than relabeling historical PASS strings"
+  ],
+  "excluded": [
+    "Database/schema changes",
+    "Security, credential, protection or network changes",
+    "Live bootstrap activation",
+    "Automatic merge",
+    "Production/provider effects"
+  ],
+  "rollback": "Before approved installation, preserve the existing five files and metadata. Quiesce the approved publisher service; replace and restore the complete compatible set. Restore the complete prior set if validation fails; never restart an incompatible mixture.",
+  "limitations": [
+    "No deployment command is supplied before assignment and approval.",
+    "Remote status deduplication does not coordinate independent publishers on different hosts.",
+    "Already exhausted SHA/context histories cannot be repaired by appending more statuses."
+  ]
+}

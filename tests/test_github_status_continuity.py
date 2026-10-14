@@ -10,6 +10,7 @@ import runpy
 import sys
 import types
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest import mock
 
@@ -18,6 +19,7 @@ CHECK = ROOT / "bin" / "codestra-github-check"
 STATUS = ROOT / "bin" / "codestra-github-statusd"
 MIGRATION_BRANCH = "sync/agent02-mw03-connectors-20261007-api"
 MIGRATION_BASE = "section/mw-03-connectors"
+SHA = "a" * 40
 
 
 class GitHubStatusContinuityTests(unittest.TestCase):
@@ -41,6 +43,14 @@ class GitHubStatusContinuityTests(unittest.TestCase):
             self.status = runpy.run_path(
                 str(STATUS), run_name="test_status_publisher"
             )
+        class ReviewDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 10, 14)
+        for policy in (self.check["migration_reason"], self.status["MIGRATION_REASON"]):
+            patch = mock.patch.dict(policy.__globals__, {"date": ReviewDate})
+            patch.start()
+            self.addCleanup(patch.stop)
 
     def test_publisher_aliases_same_certification_verdict(self) -> None:
         self.assertEqual(
@@ -53,7 +63,7 @@ class GitHubStatusContinuityTests(unittest.TestCase):
             posted.append(argv)
 
         # Isolate the actual function global environment, not a copy.
-        with mock.patch.dict(self.status["post"].__globals__, {"run": fake_run}):
+        with mock.patch.dict(self.status["post"].__globals__, {"run": fake_run, "gh_json": lambda *_: []}):
             for state in ("success", "failure"):
                 posted.clear()
                 self.status["post"](
@@ -74,18 +84,18 @@ class GitHubStatusContinuityTests(unittest.TestCase):
     def test_exact_scoped_migration_requires_matching_head_sha(self) -> None:
         self.assertEqual(
             self.check["migration_reason"](
-                "Middleware-", MIGRATION_BRANCH, MIGRATION_BASE,
+                "Middleware-", MIGRATION_BRANCH, MIGRATION_BASE, SHA,
             ),
             "migration:expires=2026-10-15",
         )
         self.assertIsNone(
             self.check["migration_reason"](
-                "Middleware-", MIGRATION_BRANCH + "-unreviewed", MIGRATION_BASE,
+                "Middleware-", MIGRATION_BRANCH + "-unreviewed", MIGRATION_BASE, SHA,
             )
         )
         self.assertIsNone(
             self.check["migration_reason"](
-                "Middleware-", MIGRATION_BRANCH, "main",
+                "Middleware-", MIGRATION_BRANCH, "main", SHA,
             )
         )
 
@@ -115,13 +125,13 @@ class GitHubStatusContinuityTests(unittest.TestCase):
     def test_wrong_scope_never_inherits_migration(self) -> None:
         self.assertIsNone(
             self.check["migration_reason"](
-                "Kong", MIGRATION_BRANCH, MIGRATION_BASE,
+                "Kong", MIGRATION_BRANCH, MIGRATION_BASE, SHA,
             )
         )
         self.assertIsNone(
             self.check["migration_reason"](
                 "Middleware-", "sync/agent05-mw06-adapter-conformance-20261007-api",
-                "section/mw-06-adapters",
+                "section/mw-06-adapters", SHA,
             )
         )
 

@@ -26,6 +26,16 @@ MIDDLEWARE_BOOTSTRAP = {
     ("governance/agent-hierarchy-main-v1", "main"),
     ("governance/agent-hierarchy-v1", "development"),
 }
+# Explicit temporary release-bootstrap contract for Keycloak PR #146.
+# Retains live remote-head-SHA verification and all independent GitHub reviews.
+# This does not authorize general feature/* or implementation/* -> main flows.
+KEYCLOAK_BOOTSTRAP = {
+    ("governance/development-control-plane-v1", "main"): (
+        "777331d8907480977880923c5b012926a7dfc6b8",
+        date(2026, 10, 15),
+    ),
+}
+
 MIDDLEWARE_MIGRATIONS = {
     ("fix/source-hygiene-post430-20261005", "main"): date(2026, 10, 15),
     (
@@ -48,10 +58,17 @@ def canonical_product(name: str) -> str:
     return PRODUCT_ALIASES.get(name, name)
 
 
-def migration_reason(product: str, head: str, base: str) -> str | None:
+def migration_reason(product: str, head: str, base: str, head_sha: str) -> str | None:
+    pair = (head, base)
+    if product == "Keycloak":
+        reviewed_candidate = KEYCLOAK_BOOTSTRAP.get(pair)
+        if reviewed_candidate is not None:
+            exact_sha, expiry = reviewed_candidate
+            if head_sha == exact_sha and date.today() <= expiry:
+                return f"keycloak_bootstrap_exact_sha:expires={expiry.isoformat()}"
+        return None
     if product != "Middleware-":
         return None
-    pair = (head, base)
     if pair in MIDDLEWARE_BOOTSTRAP:
         return "bootstrap"
     expiry = MIDDLEWARE_MIGRATIONS.get(pair)
@@ -98,7 +115,7 @@ def main() -> int:
         print("CONTROL_PLANE_CERTIFICATION=FAIL remote_head_sha_mismatch")
         return 1
 
-    exception = migration_reason(args.product, args.head_ref, args.base_ref)
+    exception = migration_reason(args.product, args.head_ref, args.base_ref, args.head_sha)
     if exception is not None:
         print(
             "CONTROL_PLANE_CERTIFICATION=PASS "
@@ -125,7 +142,7 @@ def main() -> int:
 
             if args.head_ref.startswith("subsection/"):
                 cursor.execute(
-                    """SELECT status,remote_sha,parent_branch
+                    """SELECT status,remote_sha,parent_branch,exact_sha_certified
                        FROM workstations
                        WHERE product=%s AND branch=%s""",
                     (args.product, args.head_ref),
@@ -137,6 +154,7 @@ def main() -> int:
                 ok = bool(
                     row["status"] == "CERTIFIED"
                     and row["remote_sha"] == args.head_sha
+                    and row.get("exact_sha_certified") == args.head_sha
                 )
                 scope = f"subsection:{args.head_ref}"
 

@@ -10,9 +10,15 @@ BOOTSTRAP_HEADS={"governance/development-control-plane-v1","workstation/governan
 ROOT_BASES={"main","development","release/production-activation"}
 MIGRATION_REASON=runpy.run_path(str(__import__("pathlib").Path(__file__).resolve().with_name("codestra-github-check")),run_name="statusd_authority")["migration_reason"]
 
+class RateLimited(RuntimeError):
+    """Stop the scheduled cycle instead of retrying throttled GitHub calls."""
+
 def run(args,check=True):
     p=subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     if check and p.returncode:
+        response=(p.stderr+"\n"+p.stdout).lower()
+        if args[:2]==["gh","api"] and ("rate limit" in response or "http 429" in response):
+            raise RateLimited("GitHub throttled the request; no retry in this cycle")
         raise RuntimeError(p.stderr.strip() or p.stdout.strip())
     return p
 
@@ -24,15 +30,46 @@ def remote_sha(repo_path,ref):
            "ls-remote","origin",f"refs/heads/{ref}"],check=False)
     return p.stdout.split()[0] if p.returncode==0 and p.stdout.strip() else ""
 
+def latest_statuses(repo, sha):
+    """Read newest-first status history before deciding whether to append.
+
+    Stop once both owned contexts are known. A missing alias requires reading
+    through the end; a failed or incomplete lookup must not trigger writes.
+    """
+    latest = {}
+    for page in range(1, 101):
+        statuses = gh_json(
+            f"repos/{OWNER}/{repo}/commits/{sha}/statuses?per_page=100&page={page}"
+        )
+        if not isinstance(statuses, list) or len(statuses) > 100:
+            raise RuntimeError("invalid commit status response")
+        for status in statuses:
+            if not isinstance(status, dict) or not isinstance(status.get("context"), str):
+                raise RuntimeError("invalid commit status entry")
+            context = status["context"]
+            if context in CONTEXTS and context not in latest:
+                if status.get("state") not in {"success", "failure", "pending", "error"}:
+                    raise RuntimeError("invalid commit status state")
+                latest[context] = status
+        if len(latest) == len(CONTEXTS) or len(statuses) < 100:
+            return latest
+    raise RuntimeError("commit status pagination limit reached; publication refused")
+
+
 def post(repo,sha,state,desc,url):
-    # Publish the same independently validated outcome to the historic and
-    # repository-required contexts. Never synthesize a success condition.
+    # Compare with the remote's latest result, including after a process restart
+    # or a partial dual-context write. Never treat an older success as current.
+    latest = latest_statuses(repo, sha)
+    description = desc[:140]
     for context in CONTEXTS:
+        previous = latest.get(context, {})
+        if (previous.get("state"), previous.get("description"), previous.get("target_url")) == (state, description, url):
+            continue
         run([
           "gh","api","--method","POST",f"repos/{OWNER}/{repo}/statuses/{sha}",
           "-f",f"state={state}",
           "-f",f"context={context}",
-          "-f",f"description={desc[:140]}",
+          "-f",f"description={description}",
           "-f",f"target_url={url}"
         ])
 
@@ -66,27 +103,23 @@ def validate(c,product,test_branch,repo_path,head,base,sha):
     if observed!=sha:
         return False,"remote head SHA mismatch"
 
-    if product == "Middleware-":
-        # Reuse the control plane's existing exact-pair, expiring migration
-        # authority. A SHA mismatch above is always rejected first.
-        reason = MIGRATION_REASON(product, head, base)
-        if reason is not None:
-            return True, f"exact-SHA {reason} authority"
-    if head in BOOTSTRAP_HEADS and base in ROOT_BASES:
-        return True,"bootstrap governance installation"
-    if (head.startswith("workstation/standalone-v3-") or head.startswith("governance/standalone-v3-")) and base=="development":
-        return True,"standalone v3 governance bootstrap"
+    # Both entry points consume the same exact-scope and SHA-bound policy.
+    # A migration exception never overrides the remote-SHA check above.
+    reason = MIGRATION_REASON(product, head, base, sha)
+    if reason is not None:
+        return True, f"exact-SHA {reason} authority"
 
     with c.cursor(cursor_factory=RealDictCursor) as cur:
         if head.startswith("subsection/"):
             cur.execute(
-              "SELECT status,remote_sha,parent_branch FROM workstations WHERE product=%s AND branch=%s",
+              "SELECT status,remote_sha,parent_branch,exact_sha_certified FROM workstations WHERE product=%s AND branch=%s",
               (product,head)
             )
             row=cur.fetchone()
             if not row or row["parent_branch"]!=base:
                 return False,"subsection parent mismatch"
-            return bool(row["status"]=="CERTIFIED" and row["remote_sha"]==sha),"subsection exact-SHA certification"
+            return bool(row["status"]=="CERTIFIED" and row["remote_sha"]==sha
+                        and row.get("exact_sha_certified")==sha),"subsection exact-SHA certification"
 
         if base=="development":
             cur.execute("SELECT section_key FROM sections WHERE product=%s AND branch=%s",(product,head))
@@ -125,6 +158,8 @@ def main():
         try:
             prs=gh_json(f"repos/{OWNER}/{repo}/pulls?state=open&per_page=100")
             repos_seen+=1
+        except RateLimited as exc:
+            raise SystemExit(f"RATE_LIMITED repo={repo}: {exc}") from None
         except Exception as exc:
             print(f"REPO_ERROR repo={repo} error={str(exc)[:120]}")
             errors+=1
@@ -139,6 +174,8 @@ def main():
                 post(repo,sha,"success" if ok else "failure",
                      ("CERTIFIED: " if ok else "BLOCKED: ")+reason,
                      pr["html_url"])
+            except RateLimited as exc:
+                raise SystemExit(f"RATE_LIMITED repo={repo} pr={pr['number']}: {exc}") from None
             except Exception as exc:
                 print(f"STATUS_ERROR repo={repo} pr={pr['number']} error={str(exc)[:120]}")
                 errors+=1
