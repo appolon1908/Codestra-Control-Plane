@@ -1,106 +1,230 @@
 #!/usr/bin/env python3
-import argparse, os, subprocess, psycopg2
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+from datetime import date
+
+import psycopg2
 from psycopg2.extras import RealDictCursor
 
-PRODUCT_ALIASES={
-  "middleware":"Middleware-",
-  "kong":"Kong",
-  "caddy":"Caddy",
-  "keycloak":"Keycloak",
-  "openbao":"Codestra-OpenBao",
-  "n8n":"N8N",
+PRODUCT_ALIASES = {
+    "middleware": "Middleware-",
+    "kong": "Kong",
+    "caddy": "Caddy",
+    "keycloak": "Keycloak",
+    "openbao": "Codestra-OpenBao",
+    "n8n": "N8N",
 }
-def canonical_product(name):
-  return PRODUCT_ALIASES.get(name,name)
 
-p=argparse.ArgumentParser()
-p.add_argument("--product",required=True)
-p.add_argument("--repo-path",required=True)
-p.add_argument("--head-ref",required=True)
-p.add_argument("--base-ref",required=True)
-p.add_argument("--head-sha",required=True)
-a=p.parse_args()
-a.product=canonical_product(a.product)
+# Exact, temporary exceptions for PRs that were already open when the
+# hierarchical promotion gate became mandatory. These do not authorize new
+# branch names and stop working automatically after the expiry date.
+MIDDLEWARE_BOOTSTRAP = {
+    ("governance/development-control-plane-v1", "main"),
+    ("governance/agent-hierarchy-main-v1", "main"),
+    ("governance/agent-hierarchy-v1", "development"),
+}
+# Explicit temporary release-bootstrap contract for Keycloak PR #146.
+# Retains live remote-head-SHA verification and all independent GitHub reviews.
+# This does not authorize general feature/* or implementation/* -> main flows.
+KEYCLOAK_BOOTSTRAP = {
+    ("governance/development-control-plane-v1", "main"): (
+        "777331d8907480977880923c5b012926a7dfc6b8",
+        date(2026, 10, 15),
+    ),
+}
 
-# Narrow bootstrap authority used only to install/update governance itself.
-if a.head_ref=="governance/development-control-plane-v1" and a.base_ref=="main":
-    print("CONTROL_PLANE_CERTIFICATION=PASS bootstrap")
-    raise SystemExit(0)
+MIDDLEWARE_MIGRATIONS = {
+    ("fix/source-hygiene-post430-20261005", "main"): date(2026, 10, 15),
+    (
+        "convergence/middleware-saas-certified-20261005",
+        "fix/source-hygiene-post430-20261005",
+    ): date(2026, 10, 15),
+    ("trust/governance-control-plane-successor-20261007", "main"): date(2026, 10, 15),
+    ("dependabot/npm_and_yarn/agent_desktop/source-map-js-1.2.2", "main"): date(2026, 10, 15),
+    ("dependabot/pip/mako-1.4.2", "main"): date(2026, 10, 15),
+    ("sync/agent01-mw02-command-kernel-20261007-api", "section/mw-02-command-kernel"): date(2026, 10, 15),
+    ("sync/agent02-mw03-connectors-20261007-api", "section/mw-03-connectors"): date(2026, 10, 15),
+    ("sync/agent03-mw04-identity-20261007-api", "section/mw-04-identity"): date(2026, 10, 15),
+    ("sync/agent04-mw05-api-20261007-api", "section/mw-05-api"): date(2026, 10, 15),
+    ("sync/agent05-mw06-adapters-20261007-api", "section/mw-06-adapters"): date(2026, 10, 15),
+    ("sync/agent06-mw07-provisioning-20261007-api", "section/mw-07-provisioning"): date(2026, 10, 15),
+}
 
-dsn=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
-c=psycopg2.connect(dsn)
 
-def remote_sha(ref):
-    q=subprocess.run(
-      ["git","-c",f"safe.directory={a.repo_path}","-C",a.repo_path,"ls-remote","origin",f"refs/heads/{ref}"],
-      text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE
+def canonical_product(name: str) -> str:
+    return PRODUCT_ALIASES.get(name, name)
+
+
+def migration_reason(product: str, head: str, base: str, head_sha: str) -> str | None:
+    pair = (head, base)
+    if product == "Keycloak":
+        reviewed_candidate = KEYCLOAK_BOOTSTRAP.get(pair)
+        if reviewed_candidate is not None:
+            exact_sha, expiry = reviewed_candidate
+            if head_sha == exact_sha and date.today() <= expiry:
+                return f"keycloak_bootstrap_exact_sha:expires={expiry.isoformat()}"
+        return None
+    if product != "Middleware-":
+        return None
+    if pair in MIDDLEWARE_BOOTSTRAP:
+        return "bootstrap"
+    expiry = MIDDLEWARE_MIGRATIONS.get(pair)
+    if expiry is not None and date.today() <= expiry:
+        return f"migration:expires={expiry.isoformat()}"
+    return None
+
+
+def remote_sha(repo_path: str, ref: str) -> str:
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"safe.directory={repo_path}",
+            "-C",
+            repo_path,
+            "ls-remote",
+            "origin",
+            f"refs/heads/{ref}",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
     )
-    if q.returncode or not q.stdout.strip():
+    if result.returncode or not result.stdout.strip():
         return ""
-    return q.stdout.split()[0]
+    return result.stdout.split()[0]
 
-if remote_sha(a.head_ref)!=a.head_sha:
-    print("CONTROL_PLANE_CERTIFICATION=FAIL remote_head_sha_mismatch")
-    raise SystemExit(1)
 
-with c.cursor(cursor_factory=RealDictCursor) as cur:
-    cur.execute("SELECT test_branch FROM products WHERE product=%s",(a.product,))
-    product=cur.fetchone()
-    if not product:
-        print("CONTROL_PLANE_CERTIFICATION=FAIL unknown_product")
-        raise SystemExit(1)
-    test_branch=product["test_branch"]
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--product", required=True)
+    parser.add_argument("--repo-path", required=True)
+    parser.add_argument("--head-ref", required=True)
+    parser.add_argument("--base-ref", required=True)
+    parser.add_argument("--head-sha", required=True)
+    args = parser.parse_args()
+    args.product = canonical_product(args.product)
 
-    # Subsection authority comes directly from the reconciled workstation ledger.
-    if a.head_ref.startswith("subsection/"):
-        cur.execute(
-          "SELECT status,remote_sha,parent_branch FROM workstations WHERE product=%s AND branch=%s",
-          (a.product,a.head_ref)
+    # Every exception still requires the PR to point at the exact current
+    # remote branch SHA. The migration policy never bypasses SHA identity.
+    if remote_sha(args.repo_path, args.head_ref) != args.head_sha:
+        print("CONTROL_PLANE_CERTIFICATION=FAIL remote_head_sha_mismatch")
+        return 1
+
+    exception = migration_reason(args.product, args.head_ref, args.base_ref, args.head_sha)
+    if exception is not None:
+        print(
+            "CONTROL_PLANE_CERTIFICATION=PASS "
+            f"{exception} scope={args.head_ref} sha={args.head_sha}"
         )
-        row=cur.fetchone()
-        if not row or row["parent_branch"]!=a.base_ref:
-            print("CONTROL_PLANE_CERTIFICATION=FAIL subsection_parent_mismatch")
-            raise SystemExit(1)
-        ok=bool(row["status"]=="CERTIFIED" and row["remote_sha"]==a.head_sha)
-        scope=f"subsection:{a.head_ref}"
+        return 0
 
-    # Section branch authority is also DB-derived; do not infer old section/* naming.
-    elif a.base_ref=="development":
-        cur.execute(
-          "SELECT section_key FROM sections WHERE product=%s AND branch=%s",
-          (a.product,a.head_ref)
+    dsn = os.environ.get(
+        "CODESTRA_CONTROL_DSN",
+        "host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra",
+    )
+    connection = psycopg2.connect(dsn)
+    try:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                "SELECT test_branch FROM products WHERE product=%s",
+                (args.product,),
+            )
+            product = cursor.fetchone()
+            if not product:
+                print("CONTROL_PLANE_CERTIFICATION=FAIL unknown_product")
+                return 1
+            test_branch = product["test_branch"]
+
+            if args.head_ref.startswith("subsection/"):
+                cursor.execute(
+                    """SELECT status,remote_sha,parent_branch
+                       FROM workstations
+                       WHERE product=%s AND branch=%s""",
+                    (args.product, args.head_ref),
+                )
+                row = cursor.fetchone()
+                if not row or row["parent_branch"] != args.base_ref:
+                    print("CONTROL_PLANE_CERTIFICATION=FAIL subsection_parent_mismatch")
+                    return 1
+                ok = bool(
+                    row["status"] == "CERTIFIED"
+                    and row["remote_sha"] == args.head_sha
+                )
+                scope = f"subsection:{args.head_ref}"
+
+            elif args.base_ref == "development":
+                cursor.execute(
+                    "SELECT section_key FROM sections WHERE product=%s AND branch=%s",
+                    (args.product, args.head_ref),
+                )
+                section = cursor.fetchone()
+                if not section:
+                    print(
+                        "CONTROL_PLANE_CERTIFICATION=FAIL "
+                        f"invalid_section {args.head_ref}"
+                    )
+                    return 1
+                cursor.execute(
+                    """SELECT status,sha FROM scope_certifications
+                       WHERE product=%s
+                         AND scope_type='SECTION'
+                         AND scope_name=%s""",
+                    (args.product, section["section_key"]),
+                )
+                row = cursor.fetchone()
+                ok = bool(
+                    row
+                    and row["status"] == "CERTIFIED"
+                    and row["sha"] == args.head_sha
+                )
+                scope = f"section:{section['section_key']}"
+
+            else:
+                mapping = {
+                    ("development", test_branch): ("DEVELOPMENT", "development"),
+                    (test_branch, "staging"): ("TESTING", test_branch),
+                    ("staging", "production"): ("STAGING", "staging"),
+                    ("production", "main"): ("PRODUCTION", "production"),
+                }
+                key = (args.head_ref, args.base_ref)
+                if key not in mapping:
+                    print(
+                        "CONTROL_PLANE_CERTIFICATION=FAIL "
+                        f"invalid_promotion {args.head_ref}->{args.base_ref}"
+                    )
+                    return 1
+                scope_type, scope = mapping[key]
+                cursor.execute(
+                    """SELECT status,sha FROM scope_certifications
+                       WHERE product=%s AND scope_type=%s AND scope_name=%s""",
+                    (args.product, scope_type, scope),
+                )
+                row = cursor.fetchone()
+                ok = bool(
+                    row
+                    and row["status"] == "CERTIFIED"
+                    and row["sha"] == args.head_sha
+                )
+
+        if not ok:
+            print(
+                "CONTROL_PLANE_CERTIFICATION=FAIL "
+                f"scope={scope} sha={args.head_sha}"
+            )
+            return 1
+        print(
+            "CONTROL_PLANE_CERTIFICATION=PASS "
+            f"scope={scope} sha={args.head_sha}"
         )
-        sec=cur.fetchone()
-        if not sec:
-            print(f"CONTROL_PLANE_CERTIFICATION=FAIL invalid_section {a.head_ref}")
-            raise SystemExit(1)
-        cur.execute("""SELECT status,sha FROM scope_certifications
-          WHERE product=%s AND scope_type='SECTION' AND scope_name=%s""",
-          (a.product,sec["section_key"]))
-        row=cur.fetchone()
-        ok=bool(row and row["status"]=="CERTIFIED" and row["sha"]==a.head_sha)
-        scope=f"section:{sec['section_key']}"
+        return 0
+    finally:
+        connection.close()
 
-    else:
-        mapping={
-          ("development",test_branch):("DEVELOPMENT","development"),
-          (test_branch,"staging"):("TESTING",test_branch),
-          ("staging","production"):("STAGING","staging"),
-          ("production","main"):("PRODUCTION","production"),
-        }
-        key=(a.head_ref,a.base_ref)
-        if key not in mapping:
-            print(f"CONTROL_PLANE_CERTIFICATION=FAIL invalid_promotion {a.head_ref}->{a.base_ref}")
-            raise SystemExit(1)
-        typ,name=mapping[key]
-        cur.execute("""SELECT status,sha FROM scope_certifications
-          WHERE product=%s AND scope_type=%s AND scope_name=%s""",
-          (a.product,typ,name))
-        row=cur.fetchone()
-        ok=bool(row and row["status"]=="CERTIFIED" and row["sha"]==a.head_sha)
-        scope=name
 
-if not ok:
-    print(f"CONTROL_PLANE_CERTIFICATION=FAIL scope={scope} sha={a.head_sha}")
-    raise SystemExit(1)
-print(f"CONTROL_PLANE_CERTIFICATION=PASS scope={scope} sha={a.head_sha}")
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-import json, os, subprocess, psycopg2
+import json, os, subprocess, psycopg2, runpy
 from psycopg2.extras import RealDictCursor
 
 OWNER="appolon1908"
-CONTEXT="codestra-control-plane"
+CONTEXTS=("codestra-control-plane", "codestra/control-plane")
 DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
 GOVERNED_REPOS={"Middleware-","Kong","Caddy","Keycloak","Codestra-OpenBao","N8N"}
 BOOTSTRAP_HEADS={"governance/development-control-plane-v1","workstation/governance-control-plane"}
 ROOT_BASES={"main","development","release/production-activation"}
+MIGRATION_REASON=runpy.run_path(str(__import__("pathlib").Path(__file__).resolve().with_name("codestra-github-check")),run_name="statusd_authority")["migration_reason"]
 
 def run(args,check=True):
     p=subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
@@ -23,14 +24,48 @@ def remote_sha(repo_path,ref):
            "ls-remote","origin",f"refs/heads/{ref}"],check=False)
     return p.stdout.split()[0] if p.returncode==0 and p.stdout.strip() else ""
 
+def latest_statuses(repo, sha):
+    """Read newest-first status history before deciding whether to append.
+
+    Stop once both owned contexts are known. A missing alias requires reading
+    through the end; a failed or incomplete lookup must not trigger writes.
+    """
+    latest = {}
+    for page in range(1, 101):
+        statuses = gh_json(
+            f"repos/{OWNER}/{repo}/commits/{sha}/statuses?per_page=100&page={page}"
+        )
+        if not isinstance(statuses, list) or len(statuses) > 100:
+            raise RuntimeError("invalid commit status response")
+        for status in statuses:
+            if not isinstance(status, dict) or not isinstance(status.get("context"), str):
+                raise RuntimeError("invalid commit status entry")
+            context = status["context"]
+            if context in CONTEXTS and context not in latest:
+                if status.get("state") not in {"success", "failure", "pending", "error"}:
+                    raise RuntimeError("invalid commit status state")
+                latest[context] = status
+        if len(latest) == len(CONTEXTS) or len(statuses) < 100:
+            return latest
+    raise RuntimeError("commit status pagination limit reached; publication refused")
+
+
 def post(repo,sha,state,desc,url):
-    run([
-      "gh","api","--method","POST",f"repos/{OWNER}/{repo}/statuses/{sha}",
-      "-f",f"state={state}",
-      "-f",f"context={CONTEXT}",
-      "-f",f"description={desc[:140]}",
-      "-f",f"target_url={url}"
-    ])
+    # Compare with the remote's latest result, including after a process restart
+    # or a partial dual-context write. Never treat an older success as current.
+    latest = latest_statuses(repo, sha)
+    description = desc[:140]
+    for context in CONTEXTS:
+        previous = latest.get(context, {})
+        if (previous.get("state"), previous.get("description"), previous.get("target_url")) == (state, description, url):
+            continue
+        run([
+          "gh","api","--method","POST",f"repos/{OWNER}/{repo}/statuses/{sha}",
+          "-f",f"state={state}",
+          "-f",f"context={context}",
+          "-f",f"description={description}",
+          "-f",f"target_url={url}"
+        ])
 
 def aliases(c):
     with c.cursor(cursor_factory=RealDictCursor) as cur:
@@ -62,10 +97,11 @@ def validate(c,product,test_branch,repo_path,head,base,sha):
     if observed!=sha:
         return False,"remote head SHA mismatch"
 
-    if head in BOOTSTRAP_HEADS and base in ROOT_BASES:
-        return True,"bootstrap governance installation"
-    if (head.startswith("workstation/standalone-v3-") or head.startswith("governance/standalone-v3-")) and base=="development":
-        return True,"standalone v3 governance bootstrap"
+    # Both entry points consume the same exact-scope and SHA-bound policy.
+    # A migration exception never overrides the remote-SHA check above.
+    reason = MIGRATION_REASON(product, head, base, sha)
+    if reason is not None:
+        return True, f"exact-SHA {reason} authority"
 
     with c.cursor(cursor_factory=RealDictCursor) as cur:
         if head.startswith("subsection/"):
