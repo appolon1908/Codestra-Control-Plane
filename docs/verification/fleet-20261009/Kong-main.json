@@ -1,0 +1,31 @@
+{
+  "collected_at_utc": "2026-10-09T05:08:08.830237+00:00",
+  "container_image_id": "sha256:da5804b4d68ca099affa16ab8e47b142d040ef33e99587558ab30dd765d3474e",
+  "external_effects": "false",
+  "github_ci_certified": false,
+  "head_sha": "8a0d522fa20e72af1bc466e45a4b336e5be2c5fe",
+  "independent_codeowner_approved": false,
+  "level": "LOCAL_EXACT_SHA_SCOPED_SOURCE_TESTS_PASSED",
+  "live_capabilities_enabled": "NO",
+  "merge_or_promotion_authorized": false,
+  "network": "none",
+  "production_go": "NO",
+  "ref": "refs/heads/main",
+  "remote_sha": "8a0d522fa20e72af1bc466e45a4b336e5be2c5fe",
+  "repository": "appolon1908/Kong",
+  "runtime_deployment_certified": false,
+  "schema": "codestra.self-certification.scoped-source.v1",
+  "scope": "selected source tests only; no live/runtime certification",
+  "source_clean_before_after": true,
+  "source_mount": "read_only",
+  "source_verifier_sha256": "75c7751c9be546c2ac5354014d73d61b0fc8da11c397863731c99e6b631cd665",
+  "test_files": [
+    "tests/test_gateway_release_boundaries.py",
+    "tests/test_kong_v3_identity_security.py",
+    "tests/test_kong_cross_repo_parity.py"
+  ],
+  "test_output_sha256": "35131fc4e94b4681f11892993d0d51f3051f8c45314250e6ca981e3753b6414c",
+  "tests_passed": 17,
+  "tests_skipped": 0,
+  "tree_sha": "1bbaa11edcac537c199804d7aa392214490fedd1"
+}

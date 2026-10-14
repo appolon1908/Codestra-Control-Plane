@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+import argparse, json, os, pathlib, re, subprocess, sys
+from datetime import datetime, timezone, timedelta
+import psycopg2
+from psycopg2.extras import Json, RealDictCursor
+
+DB_DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
+VALID={"NOT_STARTED","CLAIMED","IN_PROGRESS","BLOCKED","REVIEW","COMPLETE","CERTIFIED"}
+
+def conn():
+    return psycopg2.connect(DB_DSN)
+
+def git(path,*args,check=True):
+    p=subprocess.run(["git","-C",path,*args],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    if check and p.returncode: raise RuntimeError(p.stderr.strip() or p.stdout.strip())
+    return p
+
+def event(c,wid,typ,actor=None,details=None):
+    with c.cursor() as cur:
+        cur.execute("INSERT INTO events(workstation_id,event_type,actor,details) VALUES(%s,%s,%s,%s)",
+                    (wid,typ,actor,Json(details or {})))
+
+def get_ws(c,wid,lock=False):
+    q="SELECT * FROM workstations WHERE workstation_id=%s"+(" FOR UPDATE" if lock else "")
+    with c.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(q,(wid,)); row=cur.fetchone()
+    if not row: raise SystemExit(f"UNKNOWN_WORKSTATION {wid}")
+    return row
+
+def deps_certified(c,row):
+    deps=row["depends_on"] or []
+    if isinstance(deps,str): deps=json.loads(deps)
+    if not deps: return []
+    with c.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT workstation_id,status FROM workstations WHERE workstation_id = ANY(%s)",(deps,))
+        got={r["workstation_id"]:r["status"] for r in cur.fetchall()}
+    return [d for d in deps if got.get(d)!="CERTIFIED"]
+
+def register(args):
+    root=pathlib.Path(args.root)
+    files=list(root.glob("*/sections/*/subsections/*/workstation.json"))
+    count=0
+    with conn() as c:
+        for f in files:
+            m=json.loads(f.read_text())
+            with c.cursor() as cur:
+                cur.execute("""
+                INSERT INTO workstations(workstation_id,product,section,subsection,branch,parent_branch,worktree,order_index,depends_on,required_gates,status)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(workstation_id) DO UPDATE SET
+                  product=EXCLUDED.product,section=EXCLUDED.section,subsection=EXCLUDED.subsection,
+                  branch=EXCLUDED.branch,parent_branch=EXCLUDED.parent_branch,worktree=EXCLUDED.worktree,
+                  order_index=EXCLUDED.order_index,depends_on=EXCLUDED.depends_on,required_gates=EXCLUDED.required_gates,
+                  updated_at=now()
+                """,(m["workstation"],m["product"],m["section"],m["subsection"],m["branch"],m["parent_branch"],
+                     m["worktree"],m["order"],Json(m.get("depends_on",[])),Json(m.get("required_gates",[])),m.get("status","NOT_STARTED")))
+            count+=1
+    print(f"REGISTERED={count}")
+
+def claim(args):
+    with conn() as c:
+        row=get_ws(c,args.workstation,True)
+        blocked=deps_certified(c,row)
+        if blocked: raise SystemExit("BLOCKED_DEPENDENCIES "+",".join(blocked))
+        now=datetime.now(timezone.utc)
+        if row["lease_state"]=="ACTIVE" and row["lease_expires_at"] and row["lease_expires_at"]>now and row["agent"]!=args.agent:
+            raise SystemExit(f"LEASE_HELD agent={row['agent']} until={row['lease_expires_at']}")
+        with c.cursor() as cur:
+            cur.execute("""UPDATE workstations SET status='CLAIMED',agent=%s,current_atomic_task=%s,
+              lease_started_at=now(),heartbeat_at=now(),lease_expires_at=now()+interval '60 minutes',
+              lease_state='ACTIVE',blocker=NULL,updated_at=now() WHERE workstation_id=%s""",
+              (args.agent,args.task,args.workstation))
+        event(c,args.workstation,"CLAIM",args.agent,{"task":args.task})
+    print("CLAIMED")
+
+def heartbeat(args):
+    with conn() as c:
+        row=get_ws(c,args.workstation,True)
+        if row["agent"]!=args.agent or row["lease_state"]!="ACTIVE": raise SystemExit("LEASE_NOT_OWNED")
+        with c.cursor() as cur:
+            cur.execute("UPDATE workstations SET heartbeat_at=now(),lease_expires_at=now()+interval '60 minutes',updated_at=now() WHERE workstation_id=%s",(args.workstation,))
+        event(c,args.workstation,"HEARTBEAT",args.agent)
+    print("HEARTBEAT_OK")
+
+def preflight(args):
+    checks={}
+    with conn() as c:
+        row=get_ws(c,args.workstation,True)
+        if row["agent"]!=args.agent or row["lease_state"]!="ACTIVE": raise SystemExit("LEASE_NOT_OWNED")
+        wt=row["worktree"]; branch=row["branch"]; parent=row["parent_branch"]
+        checks["WORKTREE_EXISTS"]=os.path.isdir(wt)
+        if not checks["WORKTREE_EXISTS"]: return fail_preflight(c,row,args,checks,"WORKTREE_MISSING")
+        checks["EXPECTED_BRANCH"]=git(wt,"branch","--show-current").stdout.strip()==branch
+        checks["PARENT_EXISTS"]=git(wt,"show-ref","--verify","--quiet",f"refs/remotes/origin/{parent}",check=False).returncode==0 or git(wt,"show-ref","--verify","--quiet",f"refs/heads/{parent}",check=False).returncode==0
+        checks["TREE_CLEAN"]=git(wt,"status","--porcelain").stdout.strip()==""
+        fetch=git(wt,"fetch","--prune","origin",check=False); checks["FETCH_OK"]=fetch.returncode==0
+        local=git(wt,"rev-parse","HEAD").stdout.strip()
+        par_ref=f"origin/{parent}" if git(wt,"show-ref","--verify","--quiet",f"refs/remotes/origin/{parent}",check=False).returncode==0 else parent
+        parent_sha=git(wt,"rev-parse",par_ref).stdout.strip() if checks["PARENT_EXISTS"] else None
+        checks["BASE_SHA_RECORDED"]=bool(local and parent_sha)
+        ab=git(wt,"rev-list","--left-right","--count",f"{par_ref}...HEAD",check=False)
+        checks["AHEAD_BEHIND_KNOWN"]=ab.returncode==0
+        if ab.returncode==0:
+            behind,ahead=(int(x) for x in ab.stdout.strip().split())
+            checks["PARENT_SYNCED"]=behind==0
+            checks["BRANCH_DIVERGENCE_KNOWN"]=True
+        else:
+            checks["PARENT_SYNCED"]=False
+            checks["BRANCH_DIVERGENCE_KNOWN"]=False
+        checks["DEPENDENCIES_CERTIFIED"]=not deps_certified(c,row)
+        checks["DOCKER_AVAILABLE"]=subprocess.run(["docker","info"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
+        checks["DATABASE_REACHABLE"]=subprocess.run(["psql","-h","127.0.0.1","-U","codestra","-d","codestra_dev_control","-Atqc","SELECT 1"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
+        conflict=git(wt,"grep","-nE",r"^(<<<<<<<|=======|>>>>>>>)",check=False)
+        checks["NO_CONFLICTS"]=conflict.returncode==1
+        secret=git(wt,"grep","-nE",r"(-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,})",check=False)
+        checks["NO_SECRET_LEAK"]=secret.returncode==1
+        checks["PRODUCTION_GO_NO"]=os.environ.get("PRODUCTION_GO","NO")=="NO"
+        checks["LIVE_CAPABILITIES_DISABLED"]=os.environ.get("LIVE_CAPABILITIES_ENABLED","NO")=="NO"
+        checks["EXTERNAL_EFFECTS_FALSE"]=os.environ.get("EXTERNAL_EFFECTS","false").lower()=="false"
+        bad=[k for k,v in checks.items() if not v]
+        if bad: return fail_preflight(c,row,args,checks,",".join(bad))
+        with c.cursor() as cur:
+            cur.execute("""UPDATE workstations SET status='IN_PROGRESS',base_sha=%s,parent_sha=%s,local_sha=%s,
+              evidence=evidence||%s::jsonb,updated_at=now() WHERE workstation_id=%s""",
+              (local,parent_sha,local,json.dumps({"preflight":checks,"preflight_at":datetime.now(timezone.utc).isoformat()}),args.workstation))
+        event(c,args.workstation,"PREFLIGHT_PASS",args.agent,checks)
+    print("PREFLIGHT_OK")
+    for k in checks: print(f"{k}=YES")
+
+def fail_preflight(c,row,args,checks,reason):
+    with c.cursor() as cur:
+        cur.execute("UPDATE workstations SET status='BLOCKED',blocker=%s,evidence=evidence||%s::jsonb,updated_at=now() WHERE workstation_id=%s",
+                    (reason,json.dumps({"preflight":checks}),args.workstation))
+    event(c,args.workstation,"PREFLIGHT_BLOCKED",args.agent,{"reason":reason,"checks":checks})
+    c.commit()
+    for k,v in checks.items(): print(f"{k}={'YES' if v else 'NO'}")
+    raise SystemExit("BLOCKED "+reason)
+
+def set_evidence(args):
+    val=json.loads(args.json)
+    with conn() as c:
+        row=get_ws(c,args.workstation,True)
+        with c.cursor() as cur:
+            cur.execute("UPDATE workstations SET evidence=evidence||%s::jsonb,last_test_run=CASE WHEN %s THEN now() ELSE last_test_run END,updated_at=now() WHERE workstation_id=%s",
+                        (json.dumps(val),bool(val.get("tests")),args.workstation))
+        event(c,args.workstation,"EVIDENCE",args.agent,val)
+    print("EVIDENCE_RECORDED")
+
+def validate_complete(c,row):
+    wt=row["worktree"]; checks={}
+    checks["TREE_CLEAN"]=git(wt,"status","--porcelain").stdout.strip()==""
+    local=git(wt,"rev-parse","HEAD").stdout.strip()
+    remote=git(wt,"ls-remote","origin",f"refs/heads/{row['branch']}",check=False)
+    remote_sha=remote.stdout.split()[0] if remote.returncode==0 and remote.stdout.strip() else ""
+    checks["LOCAL_REMOTE_SHA_MATCH"]=bool(remote_sha and remote_sha==local)
+    ev=row["evidence"] or {}
+    required=row["required_gates"] or []
+    if isinstance(required,str): required=json.loads(required)
+    gates=ev.get("gates",{})
+    for g in required:
+        if g=="clean_tree": continue
+        if g=="remote_sha_match": continue
+        checks[g.upper()]=gates.get(g)=="PASS"
+    return checks,local,remote_sha
+
+def complete(args):
+    with conn() as c:
+        row=get_ws(c,args.workstation,True)
+        checks,local,remote=validate_complete(c,row)
+        bad=[k for k,v in checks.items() if not v]
+        if bad: raise SystemExit("COMPLETE_REFUSED "+",".join(bad))
+        with c.cursor() as cur:
+            cur.execute("""UPDATE workstations SET status='COMPLETE',local_sha=%s,remote_sha=%s,completed_at=now(),
+              lease_state='FREE',updated_at=now() WHERE workstation_id=%s""",(local,remote,args.workstation))
+        event(c,args.workstation,"COMPLETE",args.agent,checks)
+    print("STATUS=COMPLETE")
+
+def certify(args):
+    with conn() as c:
+        row=get_ws(c,args.workstation,True)
+        if row["status"]!="COMPLETE": raise SystemExit("CERTIFY_REFUSED status_not_COMPLETE")
+        ev=row["evidence"] or {}; gates=ev.get("gates",{})
+        req={"ci_exact_sha","review","regression","security"}
+        bad=[g for g in sorted(req) if gates.get(g)!="PASS"]
+        if bad: raise SystemExit("CERTIFY_REFUSED "+",".join(bad))
+        checks,local,remote=validate_complete(c,row)
+        if not all(checks.values()): raise SystemExit("CERTIFY_REFUSED completion_drift")
+        with c.cursor() as cur:
+            cur.execute("UPDATE workstations SET status='CERTIFIED',certified_at=now(),ci_result='PASS',review_result='PASS',updated_at=now() WHERE workstation_id=%s",(args.workstation,))
+        event(c,args.workstation,"CERTIFIED",args.agent,{"sha":local})
+    print("STATUS=CERTIFIED")
+
+def reclaim(args):
+    with conn() as c:
+        with c.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT workstation_id,agent,heartbeat_at FROM workstations WHERE lease_state='ACTIVE' AND heartbeat_at < now()-interval '30 minutes' AND heartbeat_at >= now()-interval '60 minutes' FOR UPDATE")
+            warn=cur.fetchall()
+        for r in warn:
+            with c.cursor() as cur:
+                cur.execute("UPDATE workstations SET lease_state='WARNING',updated_at=now() WHERE workstation_id=%s",(r['workstation_id'],))
+            event(c,r['workstation_id'],'LEASE_WARNING','system',{'agent':r['agent']})
+        with c.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT workstation_id,agent,heartbeat_at FROM workstations WHERE lease_state IN ('ACTIVE','WARNING') AND heartbeat_at < now()-interval '60 minutes' FOR UPDATE")
+            stale=cur.fetchall()
+        for r in stale:
+            with c.cursor() as cur:
+                cur.execute("UPDATE workstations SET lease_state='STALE',status='BLOCKED',blocker='STALE_LEASE',updated_at=now() WHERE workstation_id=%s",(r['workstation_id'],))
+            event(c,r['workstation_id'],'LEASE_STALE','system',{'previous_agent':r['agent']})
+    print(f"WARNING={len(warn)} STALE={len(stale)}")
+
+def status(args):
+    with conn() as c, c.cursor(cursor_factory=RealDictCursor) as cur:
+        if args.product:
+            cur.execute("SELECT status,count(*) count FROM workstations WHERE product=%s GROUP BY status ORDER BY status",(args.product,))
+        else:
+            cur.execute("SELECT status,count(*) count FROM workstations GROUP BY status ORDER BY status")
+        rows=cur.fetchall()
+        cur.execute("SELECT count(*) total FROM workstations"+(" WHERE product=%s" if args.product else ""),((args.product,) if args.product else ()))
+        total=cur.fetchone()["total"]
+    print(f"TOTAL={total}")
+    for r in rows: print(f"{r['status']}={r['count']}")
+
+def main():
+    p=argparse.ArgumentParser()
+    sp=p.add_subparsers(dest="cmd",required=True)
+    q=sp.add_parser("register"); q.add_argument("--root",default="/srv/codestra/workstations"); q.set_defaults(fn=register)
+    q=sp.add_parser("claim"); q.add_argument("workstation"); q.add_argument("--agent",required=True); q.add_argument("--task",required=True); q.set_defaults(fn=claim)
+    q=sp.add_parser("heartbeat"); q.add_argument("workstation"); q.add_argument("--agent",required=True); q.set_defaults(fn=heartbeat)
+    q=sp.add_parser("preflight"); q.add_argument("workstation"); q.add_argument("--agent",required=True); q.set_defaults(fn=preflight)
+    q=sp.add_parser("evidence"); q.add_argument("workstation"); q.add_argument("--agent",required=True); q.add_argument("--json",required=True); q.set_defaults(fn=set_evidence)
+    q=sp.add_parser("complete"); q.add_argument("workstation"); q.add_argument("--agent",required=True); q.set_defaults(fn=complete)
+    q=sp.add_parser("certify"); q.add_argument("workstation"); q.add_argument("--agent",required=True); q.set_defaults(fn=certify)
+    q=sp.add_parser("reclaim-stale"); q.set_defaults(fn=reclaim)
+    q=sp.add_parser("status"); q.add_argument("--product"); q.set_defaults(fn=status)
+    a=p.parse_args(); a.fn(a)
+if __name__=="__main__": main()

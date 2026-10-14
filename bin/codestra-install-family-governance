@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+import argparse, json, os, pathlib, re, subprocess
+
+ROOT=pathlib.Path("/srv/codestra")
+P3=ROOT/"dev-platform/control-plane/products-v3"
+BEGIN="<!-- CODESTRA-GOVERNANCE-V3:BEGIN -->"
+END="<!-- CODESTRA-GOVERNANCE-V3:END -->"
+
+def run(cmd,check=True):
+    p=subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    if check and p.returncode:
+        raise RuntimeError((p.stderr or p.stdout).strip())
+    return p
+
+def slug(s):
+    return re.sub(r'[^a-z0-9]+','-',s.lower()).strip('-')
+
+ap=argparse.ArgumentParser()
+ap.add_argument("repo")
+ap.add_argument("--apply",action="store_true")
+args=ap.parse_args()
+
+mf=P3/(slug(args.repo)+".json")
+if not mf.exists():
+    raise SystemExit("NO_V3_MANIFEST")
+spec=json.loads(mf.read_text())
+repo=ROOT/"apps"/args.repo
+gov=ROOT/"workstations"/args.repo/"governance/repo"
+branch="workstation/governance-control-plane"
+
+def git(*a,check=True,cwd=None):
+    target=cwd or repo
+    return run(["sudo","-u","codestra","git","-c",f"safe.directory={target}","-C",str(target),*a],check=check)
+
+git("fetch","origin","--prune")
+remote=git("show-ref","--verify","--quiet","refs/remotes/origin/"+branch,check=False).returncode==0
+local=git("show-ref","--verify","--quiet","refs/heads/"+branch,check=False).returncode==0
+
+if not local:
+    if remote:
+        git("branch","--track",branch,"origin/"+branch)
+    else:
+        git("branch",branch,"origin/development")
+
+if not (gov/".git").exists():
+    gov.parent.mkdir(parents=True,exist_ok=True)
+    os.chown(gov.parent,1000,1000)
+    if gov.exists() and any(gov.iterdir()):
+        raise SystemExit("GOVERNANCE_PATH_NONEMPTY")
+    if gov.exists():
+        gov.rmdir()
+    git("worktree","add",str(gov),branch)
+else:
+    dirty=git("status","--porcelain",cwd=gov).stdout.strip()
+    if dirty:
+        raise SystemExit("GOVERNANCE_WORKTREE_DIRTY")
+    if remote:
+        counts=git("rev-list","--left-right","--count",branch+"...origin/"+branch,cwd=gov).stdout.split()
+        if counts==["0","0"]:
+            pass
+        elif counts[0]=="0":
+            git("merge","--ff-only","origin/"+branch,cwd=gov)
+        else:
+            raise SystemExit("GOVERNANCE_BRANCH_DIVERGED")
+
+if not args.apply:
+    print(f"PLAN repo={args.repo} sections={len(spec['sections'])} subsections={sum(len(s['subsections']) for s in spec['sections'])}")
+    raise SystemExit(0)
+
+contract=f"""{BEGIN}
+# Codestra Governed Development Contract v3
+
+This repository is a component of the **{spec['family_name']}** standalone product.
+
+## Mandatory hierarchy
+
+Product -> Section -> Subsection -> Atomic Task
+
+Promotion is only:
+
+subsection -> section -> development -> testing -> staging -> production
+
+No other promotion path is authorized.
+
+## Agent execution
+
+- One active lease per subsection.
+- Work only in the assigned subsection branch and worktree.
+- Implementation, tests, evidence, commit, and push are required; review-only output is not completion.
+- Never force-push or write directly to protected environment branches.
+- Every promotion must pass the centralized codestra-control-plane exact-SHA status plus repository CI.
+- Dirty, stale, divergent, uncertified, or dependency-incomplete work fails closed.
+- Preserve CODEOWNERS and repository-specific security and release rules.
+
+## Production safety
+
+- PRODUCTION_GO=NO
+- LIVE_CAPABILITIES_ENABLED=NO
+- EXTERNAL_EFFECTS=false
+
+Calls, SMS, email, WhatsApp, payments, publishing, credential issuance, production database writes, and production infrastructure mutation remain disabled until separately certified and explicitly approved.
+
+## Completion
+
+A subsection is complete only when applicable source, tests, contracts, migrations, security checks, clean-tree proof, remote-SHA match, CI evidence, review, and regression evidence are recorded. Certification is exact-SHA and independent of implementation.
+{END}
+"""
+agents=gov/"AGENTS.md"
+old=agents.read_text() if agents.exists() else ""
+if BEGIN in old and END in old:
+    pre=old.split(BEGIN,1)[0]
+    post=old.split(END,1)[1]
+    new=pre+contract+post
+elif old.strip():
+    new=contract+"\n\n# Repository-specific existing instructions\n\n"+old
+else:
+    new=contract
+agents.write_text(new)
+
+gdir=gov/".codestra/governance"
+gdir.mkdir(parents=True,exist_ok=True)
+policy={
+ "schema_version":"codestra.governance.v3",
+ "family":spec["family"],
+ "product":spec["product"],
+ "repository":spec["repository"],
+ "hierarchy":"product > section > subsection > atomic-task",
+ "promotion_chain":["subsection","section","development","testing","staging","production"],
+ "required_status":"codestra-control-plane",
+ "production":{"PRODUCTION_GO":"NO","LIVE_CAPABILITIES_ENABLED":"NO","EXTERNAL_EFFECTS":"false"},
+ "worktree_mode":"lazy-subsection",
+ "force_push":False,
+ "direct_protected_branch_writes":False
+}
+(gdir/"policy.json").write_text(json.dumps(policy,indent=2)+"\n")
+wm={
+ "schema_version":"codestra.workstations.v3",
+ "product":spec["product"],
+ "family":spec["family"],
+ "sections":[{
+   "section":s["section"],
+   "branch":s["branch"],
+   "order":s["order"],
+   "depends_on":s["depends_on"],
+   "subsections":[{
+      "subsection":x["subsection"],
+      "workstation_id":x["workstation"],
+      "branch":x["branch"],
+      "parent_branch":x["parent_branch"],
+      "order":x["order"],
+      "depends_on":x["depends_on"],
+      "required_gates":x["required_gates"],
+      "worktree":x["worktree"]
+   } for x in s["subsections"]]
+ } for s in spec["sections"]]
+}
+(gdir/"workstations.json").write_text(json.dumps(wm,indent=2)+"\n")
+
+for p in (agents,gdir/"policy.json",gdir/"workstations.json"):
+    os.chown(p,1000,1000)
+os.chown(gdir,1000,1000)
+
+git("add","AGENTS.md",".codestra/governance/policy.json",".codestra/governance/workstations.json",cwd=gov)
+git("diff","--check","--cached",cwd=gov)
+if git("diff","--cached","--quiet",cwd=gov,check=False).returncode==0:
+    print("NO_CHANGES")
+else:
+    git("commit","-m","chore(governance): install standalone development system v3",cwd=gov)
+
+git("push","-u","origin",branch,cwd=gov)
+sha=git("rev-parse","HEAD",cwd=gov).stdout.strip()
+print(f"GOVERNANCE_SHA={sha}")

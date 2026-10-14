@@ -1,0 +1,20 @@
+version: 1
+name: Codestra Agent Governance Standard
+hierarchy:
+  levels: [atomic_task, subsection, section, development, testing, staging, production]
+  allowed_promotions:
+    - {from: subsection, to: section}
+    - {from: section, to: development}
+    - {from: development, to: testing}
+    - {from: testing, to: staging}
+    - {from: staging, to: production}
+leases:
+  ttl_minutes: 60
+  heartbeat_minutes: 10
+  warning_after_minutes: 30
+states: [NOT_STARTED, CLAIMED, IN_PROGRESS, BLOCKED, REVIEW, COMPLETE, CERTIFIED]
+production_effects:
+  PRODUCTION_GO: "NO"
+  LIVE_CAPABILITIES_ENABLED: "NO"
+  EXTERNAL_EFFECTS: "false"
+required_gates: [lint, unit, integration, contract, security, secret_scan, clean_tree, remote_sha_match, ci_exact_sha, review]

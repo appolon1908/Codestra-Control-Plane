@@ -1,0 +1,32 @@
+name: Control plane source checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 'atomic/**'
+      - 'subsection/**'
+      - 'section/**'
+      - development
+      - testing
+      - staging
+      - production
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  control-plane-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Offline entry-point regression suite
+        env:
+          PRODUCTION_GO: 'NO'
+          LIVE_CAPABILITIES_ENABLED: 'NO'
+          EXTERNAL_EFFECTS: 'false'
+        run: python3 -m unittest discover -s tests -v

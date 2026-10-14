@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "verified_on": "2026-10-07",
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "pull_request": "https://github.com/appolon1908/Codestra-Control-Plane/pull/1",
+  "scope": "Source import provenance and promotion-checker syntax/CLI startup only",
+  "source_verification": "PASS",
+  "promotion_certification": "BLOCKED",
+  "is_control_plane_certificate": false,
+  "source_commit": "c0249afefa4cd4f9bf3b65595f6713e6feb04e0e",
+  "source_tree": "bbabd7c24f09770aaf2be67b7075822b732bea88",
+  "runtime_bin_tree": "605ac0d58844f0a93c236c807ddf98dbd0e293fd",
+  "legacy_tree": "5e0a20eaacaf5521622da02b2d6cde1683eba701",
+  "tests_tree": "614045ad69324b1a43e791f31b1e17b1dbb52884",
+  "snapshot_commit": "47ad959b550d792e269f2624832638a5f2033d8b",
+  "fix_commit": "589dfa9aeef34e2422df76eaab5e6553bd9f312a",
+  "runtime_fix_sha256": "16d70af73e610312685550923add5bcc6a6869a2f073578a6f0cd23e11f554b7",
+  "source_import": {"files": 51, "bytes": 123064, "digest_discrepancies": 0},
+  "tests": {
+    "command": "python3 -m unittest discover -s tests -v",
+    "fresh_local_result": "5 passed; exit 0",
+    "python_entrypoints_parsed": 21,
+    "shell_entrypoints_syntax_checked": 20,
+    "original_snapshot_result": "4 expected IndentationError failures; shell syntax passed",
+    "desktop_prior_result": "5 passed at the same source commit during the previous turn",
+    "desktop_current_result": "Unavailable: dev-desktop disconnected at 2026-10-07T14:55:33Z",
+    "github_check_runs_observed": 0,
+    "limits": "No promotion decision, PostgreSQL transaction, installed dependency, certificate authenticity or deployment certification"
+  },
+  "review": {
+    "source_import_and_fix": "Independent local review: no findings",
+    "delivery_audit": "Identified two unpublished approved documents and explicit evidence-writer/environment-scope trust tests missing from the plan; documentation corrected",
+    "github_approval": "Missing"
+  },
+  "published_documents": [
+    {
+      "path": "docs/superpowers/specs/2026-10-07-breero-governance-repair-design.md",
+      "original_repository": "appolon1908/Breero.com",
+      "original_local_commit": "bebfb50b6409e76c8dac9e6d5d963a79014ad1a4",
+      "original_sha256": "e88bdd41c673e79b3b7901d944478384523f2afc000dd083dc615888fc587b3f",
+      "adaptation": "Status and source-owner references updated; approved architecture retained"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-07-breero-governance-repair.md",
+      "original_repository": "appolon1908/Breero.com",
+      "original_local_commit": "96700bc08f5678f47c15ad826462673126fae297",
+      "original_sha256": "f99efe4bafb8c39dabd175b351e563af9c27e8004e536554326323f024ad29fb",
+      "adaptation": "Source binding, execution status and legacy AGENTS observation corrected; explicit untrusted PASS and environment-scope negative tests added"
+    }
+  ],
+  "blockers": [
+    {"gate": "private_repository_rulesets", "status": "BLOCKED", "evidence": "Fresh GitHub HTTP403: upgrade to GitHub Pro or make the repository public; repository remains private"},
+    {"gate": "workflow_installation", "status": "BLOCKED", "evidence": "Previous push rejected for missing OAuth workflow scope; workflow remains an inactive template"},
+    {"gate": "trusted_owned_lane", "status": "MISSING", "evidence": "Source-adoption assignment is recorded; no trusted database lease or certificate claimed"},
+    {"gate": "independent_github_approval", "status": "MISSING", "evidence": "Local reviewer verdict is not a GitHub approval"},
+    {"gate": "current_head_ci", "status": "MISSING", "evidence": "GitHub returned zero check runs"},
+    {"gate": "desktop_sync", "status": "BLOCKED", "evidence": "Primary development host is offline for this publication update"}
+  ],
+  "next_implementation": "Task 2: trusted mapping, evidence and pure promotion-decision engine in its recorded source assignment, with negative tests for legacy PASS assertions",
+  "deployed": false,
+  "live_effects_enabled": false
+}

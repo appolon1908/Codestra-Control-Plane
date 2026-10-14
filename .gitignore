@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.superpowers/
+.worktrees/
+*.bak.*
+.env
+.env.*
+!.env.example
+logs/
+backups/

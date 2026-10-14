@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+import argparse,json,os,psycopg2
+p=argparse.ArgumentParser()
+p.add_argument("--product",required=True)
+p.add_argument("--scope-type",required=True,choices=["SECTION","DEVELOPMENT","TESTING","STAGING","PRODUCTION"])
+p.add_argument("--scope-name",required=True)
+p.add_argument("--sha",required=True)
+p.add_argument("--actor",required=True)
+p.add_argument("--evidence-json",default="{}")
+a=p.parse_args()
+ev=json.loads(a.evidence_json)
+required=["ci_exact_sha","review","regression","security"]
+missing=[x for x in required if ev.get(x)!="PASS"]
+if missing:
+    raise SystemExit("CERTIFY_SCOPE_REFUSED "+",".join(missing))
+c=psycopg2.connect(os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"))
+with c:
+  with c.cursor() as cur:
+    cur.execute("""INSERT INTO scope_certifications(product,scope_type,scope_name,sha,status,evidence,certified_by,certified_at)
+      VALUES(%s,%s,%s,%s,'CERTIFIED',%s::jsonb,%s,now())
+      ON CONFLICT(product,scope_type,scope_name) DO UPDATE SET
+      sha=EXCLUDED.sha,status='CERTIFIED',evidence=EXCLUDED.evidence,certified_by=EXCLUDED.certified_by,
+      certified_at=now(),updated_at=now()""",
+      (a.product,a.scope_type,a.scope_name,a.sha,json.dumps(ev),a.actor))
+print(f"CERTIFIED {a.product} {a.scope_type} {a.scope_name} {a.sha}")
