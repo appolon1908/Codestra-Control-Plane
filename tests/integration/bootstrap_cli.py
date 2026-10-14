@@ -169,6 +169,40 @@ class BootstrapCliIntegration(unittest.TestCase):
         self.assertEqual(replay["reason"], "REQUEST_ALREADY_CONSUMED")
         self.assertEqual(self.git("rev-parse", "refs/heads/" + self.head), self.candidate)
 
+    def test_cli_retains_old_replay_denial_without_exhausting_history(self):
+        bootstrap.ReplayLedger(bootstrap.LEDGER_PATH)
+        rows = []
+        states = ("REJECTED", "RESERVED", "UNCERTAIN", "PUBLISHED")
+        for i in range(10001):
+            binding = dict(self.binding, head_ref="subsection/history-" + str(i))
+            rows.append((f"{i + 1:064x}", "b" * 64, binding["repository"],
+                         binding["head_ref"], json.dumps(binding), states[i % 4],
+                         10 + i, 20000))
+        with sqlite3.connect(bootstrap.LEDGER_PATH) as connection:
+            connection.executemany("INSERT INTO admissions VALUES(?,?,?,?,?,?,?,?)", rows)
+
+        # The oldest expired rejection stays consumed, even beyond the former
+        # snapshot cap. Do not truncate or prune history to admit fresh work.
+        self.policy["request_id"] = self.payload["request_id"] = "0" * 63 + "1"
+        self.write_json(bootstrap.POLICY_PATH, self.policy)
+        self.sign()
+        code, replay = self.cli()
+        self.assertEqual((code, replay["reason"]), (2, "REQUEST_ALREADY_CONSUMED"))
+        self.assert_no_publication()
+
+        self.policy["request_id"] = self.payload["request_id"] = "a" * 64
+        self.write_json(bootstrap.POLICY_PATH, self.policy)
+        self.sign()
+        code, result = self.cli()
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result["result"], "REVIEW_REF_PUBLISHED")
+        self.assertEqual(self.git("rev-parse", "refs/heads/" + self.head), self.candidate)
+        with sqlite3.connect(bootstrap.LEDGER_PATH) as connection:
+            self.assertEqual(connection.execute("SELECT count(*) FROM admissions").fetchone()[0],
+                             10002)
+            self.assertEqual(connection.execute("SELECT state FROM admissions WHERE request_id=?",
+                             ("0" * 63 + "1",)).fetchone()[0], "REJECTED")
+
     def test_cli_denies_a_moved_parent(self):
         self.git("update-ref", "refs/heads/" + self.target, self.candidate)
         code, result = self.cli()

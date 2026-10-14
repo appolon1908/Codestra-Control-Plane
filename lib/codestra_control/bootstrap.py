@@ -333,10 +333,14 @@ class ReplayLedger:
             row = conn.execute("SELECT state FROM admissions WHERE request_id=?", (request_id,)).fetchone()
             return row[0] if row else None
 
-    def snapshot(self, now: int) -> dict:
+    def snapshot(self, now: int, request_id: str) -> dict:
+        # The verifier only asks whether this trusted policy's nonce is used.
+        # Keep every historical row; the durable unique constraints still
+        # arbitrate concurrent reservations after this bounded observation.
+        digest(request_id, 64, "INVALID_REQUEST_ID")
         with self.connect() as conn:
-            rows = conn.execute("SELECT request_id FROM admissions ORDER BY reserved_at DESC LIMIT 10001").fetchall()
-        ensure(len(rows) <= 10000, "REPLAY_SNAPSHOT_CAPACITY")
+            rows = conn.execute("SELECT request_id FROM admissions WHERE request_id=?",
+                                (request_id,)).fetchall()
         return {"schema": "codestra.prepublication-state.v1", "observed_at": now,
                 "consumed_request_ids": [r[0] for r in rows]}
 
@@ -347,7 +351,8 @@ def publish_review(envelope: bytes, policy: dict, payload: dict, protocol: dict,
                    reload_authority: Callable[[], tuple[dict, dict]] | None = None) -> dict:
     verify_protocol(protocol)
     now = int(clock())
-    verdict = verify_review_evidence(envelope, policy, ledger.snapshot(now), now=now)
+    verdict = verify_review_evidence(envelope, policy,
+                                    ledger.snapshot(now, policy["request_id"]), now=now)
     ensure(hashlib.sha256(canonical(payload)).hexdigest() == verdict["payload_sha256"],
            "PAYLOAD_BINDING_MISMATCH")
     ensure(verdict["verdict"] == "REVIEW_EVIDENCE_VALID"
