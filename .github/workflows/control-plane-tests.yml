@@ -1,0 +1,39 @@
+name: Control plane offline source checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 'atomic/**'
+      - 'subsection/**'
+      - 'section/**'
+      - development
+      - testing
+      - staging
+      - production
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: control-plane-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-source-validation:
+    name: control-plane-offline-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run no-effect offline regression suite
+        env:
+          PRODUCTION_GO: 'NO'
+          LIVE_CAPABILITIES_ENABLED: 'NO'
+          EXTERNAL_EFFECTS: 'false'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -m unittest discover -s tests -v

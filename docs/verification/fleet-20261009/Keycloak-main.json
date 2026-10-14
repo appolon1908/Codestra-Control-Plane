@@ -1,0 +1,31 @@
+{
+  "collected_at_utc": "2026-10-09T05:08:55.614994+00:00",
+  "container_image_id": "sha256:da5804b4d68ca099affa16ab8e47b142d040ef33e99587558ab30dd765d3474e",
+  "external_effects": "false",
+  "github_ci_certified": false,
+  "head_sha": "d9db059c23f20255134828bb924137eaa0b9adb4",
+  "independent_codeowner_approved": false,
+  "level": "LOCAL_EXACT_SHA_SCOPED_SOURCE_TESTS_PASSED",
+  "live_capabilities_enabled": "NO",
+  "merge_or_promotion_authorized": false,
+  "network": "none",
+  "production_go": "NO",
+  "ref": "refs/heads/main",
+  "remote_sha": "d9db059c23f20255134828bb924137eaa0b9adb4",
+  "repository": "appolon1908/Keycloak",
+  "runtime_deployment_certified": false,
+  "schema": "codestra.self-certification.scoped-source.v1",
+  "scope": "selected source tests only; no live/runtime certification",
+  "source_clean_before_after": true,
+  "source_mount": "read_only",
+  "source_verifier_sha256": "75c7751c9be546c2ac5354014d73d61b0fc8da11c397863731c99e6b631cd665",
+  "test_files": [
+    "tests/test_keycloak_token_scope_and_plan_errors.py",
+    "tests/test_production_certification_contract.py",
+    "tests/test_openbao_workload_identity.py"
+  ],
+  "test_output_sha256": "cabbbc12bab4c1cb3d40ef05cd2d563da829a4ff8b3882e11dd1a294f5ca144b",
+  "tests_passed": 44,
+  "tests_skipped": 0,
+  "tree_sha": "9291e3042eb6ec9730aa001d19e1710828f66e87"
+}
