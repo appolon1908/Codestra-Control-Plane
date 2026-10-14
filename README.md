@@ -6,6 +6,13 @@ Source ownership was approved on October 7, 2026.
 
 ## Current state
 
+This candidate adds the pure promotion-policy and decision component described
+in [trusted decision preparation](docs/trusted-decision-preparation.md). Its
+25 offline tests include malformed/stale evidence, independent review, registered
+ref mapping and bound-lease cases. Runtime evidence acquisition and command
+integration remain incomplete; the new component is not deployed or enforcing
+promotions. PR #1's source adoption remains a prerequisite awaiting acceptance.
+
 This branch adopts reviewed source snapshots from the development desktop and
 repairs the promotion checker's startup syntax error. The import preserves modern
 tools at the repository root and older tools under `legacy/`. It does not deploy

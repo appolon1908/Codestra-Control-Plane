@@ -7,7 +7,7 @@ repository. It was created private with GitHub's README initialization commit
 `29524563f423fc257569cb8969d60ffda96996b2`. Environment, section and subsection
 branches were initialized at that same commit; no application code was promoted.
 
-The active assignment is source import and checker syntax repair under
+The initial assignment was source import and checker syntax repair under
 `cp-01-foundation / 01-source-provenance`. An isolated atomic-task worktree owns
 the implementation. No existing product lease or certification was claimed.
 
@@ -95,3 +95,34 @@ authorization, trusted lane registration and independent GitHub approval remain
 unmet. The next engineering task is the trusted evidence/mapping/decision boundary
 in Task 2 after an authorized source lane is established; broad provider/domain
 closure must not be claimed from this startup fix.
+
+## Task 2 source preparation
+
+The user explicitly approved the next described implementation mission on
+October 7, 2026. A separate source-only assignment is recorded in
+`governance/source-preparation/task-02.json`. The initial import assignment and
+PR #1 remain pending governed acceptance. The single active source implementation
+is now `cp-01-foundation / 02-trusted-decisions` in its isolated atomic branch.
+
+Ruling: missing runtime lease, protection and CI stop governed acceptance and
+promotion, while repository AGENTS explicitly allows useful source preparation.
+The earlier blanket stop on implementation was too broad. This new user-approved
+assignment creates no database registration, lease, receipt or certificate.
+Cost if confused with governed authority: accepting unregistered work. All those
+acceptance gates remain blocked.
+
+The pure mapping and decision portion is implemented with 25 passing offline
+tests. They cover bound repository/ref/head/base evidence, registered aliases,
+independent eligible review, lease ownership/expiry, malformed input and zero-I/O
+evaluation. Two negative assertions exposed an unrelated lease and ineligible
+approval being accepted; both failed before their fixes and now pass.
+
+Task 2 is partial. The privileged evidence loader and actual CLI adaptation are
+not implemented. Typed snapshots and receipt strings do not authenticate evidence.
+No live PASS rows are trusted by the new component, and no existing command calls
+it yet. See `docs/trusted-decision-preparation.md` for the remaining trust boundary.
+
+Independent review found duplicate review receipts could count as separate
+approvals. Tests reproduced that and equivalent check receipt reuse; rejection
+of both was implemented and all 25 tests now pass. One malformed-registry error
+reporting Minor remains deferred and is documented in the preparation record.
