@@ -15,7 +15,7 @@ it grants no lease, prerequisite exemption, certification or publishing authorit
 
 Use session_user, never current_user, caller JSON, --owner, SET ROLE or a custom
 session setting as authentication. Explicit grants bind a login role to one exact
-product and capability (register_product, register_workstation, register_candidate).
+product and capability (product, workstation, candidate).
 Principal records pin role name and PostgreSQL role OID and support explicit
 revocation; recreated names receive no old authority. A separately administered per-task assignment binds an exact principal, product,
 workstation and task. Candidate registration requires both the capability and task
@@ -46,7 +46,8 @@ workstation and task assignment. Store exact repository, atomic branch, subsecti
 target, absolute atomic worktree, nonzero 40-character head/base SHA, principal,
 manifest digest and request ID. Atomic worktree/branch must differ from the
 subsection worktree/branch. A shared subsection/atomic lane table with unique product/branch and global worktree constraints
-prevent duplicate physical lanes. Cross-product workstation, task, prerequisites
+prevent duplicate declared lane path strings. Filesystem realpath, symlink and
+Git identity verification remains a trusted materialization-adapter prerequisite. Cross-product workstation, task, prerequisites
 or target bindings are rejected. Branch names are validated, not treated as grants.
 
 Registration uses one transaction and row locks/unique constraints. Identical
