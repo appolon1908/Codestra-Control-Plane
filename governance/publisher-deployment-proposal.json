@@ -12,7 +12,7 @@
     {
       "path": "bin/codestra-github-statusd",
       "expected_installed_sha256": "7dc06b9e56293d74474fdf7fbd0fb349103ab4292dce62c78055144952a849d7",
-      "candidate_sha256": "999499c701e299c4006203b8f68ed00cdbcaaf43280215014861811cf17be1b7"
+      "candidate_sha256": "d8f316aa6168bd60418881e26bb29bd33e1ddc01d83504486c49581b72881c65"
     },
     {
       "path": "bin/codestra-promotion-check",
@@ -35,7 +35,8 @@
     "Independent current-source approval, enforced protection and exact-source/result CI",
     "Explicit approval of reconciled policy and publisher/service ownership",
     "Exact reviewed artifact SHA plus no-effect staging and backup/rollback verification",
-    "Verify exact_sha_certified schema and per-gate exact-commit evidence format compatibility; obtain genuine current evidence rather than relabeling historical PASS strings"
+    "Verify exact_sha_certified schema and per-gate exact-commit evidence format compatibility; obtain genuine current evidence rather than relabeling historical PASS strings",
+    "Review exact 43-repository source coverage and new registry binding checks; active assignment blockers remain excluded and no live coverage is authorized by source approval"
   ],
   "excluded": [
     "Database/schema changes",
@@ -49,5 +50,6 @@
     "No deployment command is supplied before assignment and approval.",
     "Remote status deduplication does not coordinate independent publishers on different hosts.",
     "Already exhausted SHA/context histories cannot be repaired by appending more statuses."
-  ]
+  ],
+  "coverage_source_base": "7ec0dc586b92bba651103aea51e71eaf894c6228"
 }
