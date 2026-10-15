@@ -24,7 +24,10 @@ ADDITIONAL_GOVERNED_REPOS=frozenset({
 GOVERNED_REPOS=PRIOR_GOVERNED_REPOS | ADDITIONAL_GOVERNED_REPOS
 BOOTSTRAP_HEADS={"governance/development-control-plane-v1","workstation/governance-control-plane"}
 ROOT_BASES={"main","development","release/production-activation"}
-MIGRATION_REASON=runpy.run_path(str(__import__("pathlib").Path(__file__).resolve().with_name("codestra-github-check")),run_name="statusd_authority")["migration_reason"]
+AUTHORITY=runpy.run_path(str(__import__("pathlib").Path(__file__).resolve().with_name("codestra-github-check")),run_name="statusd_authority")
+MIGRATION_REASON=AUTHORITY["migration_reason"]
+PROMOTION_LEVELS=AUTHORITY["promotion_levels"]
+PROMOTION_ROUTE_ERROR=AUTHORITY["promotion_route_error"]
 
 class RateLimited(RuntimeError):
     """Stop the scheduled cycle instead of retrying throttled GitHub calls."""
@@ -162,8 +165,12 @@ def validate(c,product,test_branch,repo_path,head,base,sha):
     if reason is not None:
         return True, f"exact-SHA {reason} authority"
 
+    levels = PROMOTION_LEVELS(head, base, test_branch)
+    if levels is None:
+        return False, PROMOTION_ROUTE_ERROR(head, base)
+
     with c.cursor(cursor_factory=RealDictCursor) as cur:
-        if head.startswith("subsection/"):
+        if levels == ("subsection", "section"):
             cur.execute(
               "SELECT status,remote_sha,parent_branch,exact_sha_certified FROM workstations WHERE product=%s AND branch=%s",
               (product,head)
