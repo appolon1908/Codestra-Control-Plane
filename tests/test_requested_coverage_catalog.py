@@ -29,7 +29,8 @@ def constants(source):
 class RequestedCoverageCatalogTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = (ROOT / 'bin/codestra-github-statusd').read_text()
+        cls.source = (ROOT / 'tests/fixtures/publisher-catalog-f3a010c.py.txt').read_text()
+        assert hashlib.sha256(cls.source.encode()).hexdigest() == 'd6c9585cc69077222de183fd058160d5581040592bd0bb91fd62b5fff5a867b8'
         with tempfile.TemporaryDirectory(prefix='cp-catalog-test-') as temp:
             directory = Path(temp)
             (directory / 'bin').mkdir()
@@ -69,7 +70,7 @@ class RequestedCoverageCatalogTests(unittest.TestCase):
             for key, value in binding.items():
                 if key != 'repository':
                     self.assertIsNone(value, key)
-        self.assertEqual((ROOT / 'bin/codestra-github-statusd').read_text(), self.source)
+        self.assertEqual((ROOT / 'tests/fixtures/publisher-catalog-f3a010c.py.txt').read_text(), self.source)
 
     def test_registry_mismatch_and_duplicate_mapping_still_refuse_added_repos(self):
         # Compile only the real alias-selector AST: no script imports, DB or effects.

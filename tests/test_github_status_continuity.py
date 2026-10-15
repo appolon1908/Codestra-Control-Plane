@@ -63,7 +63,8 @@ class GitHubStatusContinuityTests(unittest.TestCase):
             posted.append(argv)
 
         # Isolate the actual function global environment, not a copy.
-        with mock.patch.dict(self.status["post"].__globals__, {"run": fake_run, "gh_json": lambda *_: []}):
+        with mock.patch.dict(self.status["post"].__globals__, {"run": fake_run, "gh_json": lambda *_: [],
+                                                               "require_publication_adapter": lambda: None}):
             for state in ("success", "failure"):
                 posted.clear()
                 self.status["post"](

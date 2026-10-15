@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""Stage committed candidate bytes only; never install, stop/start or provision."""
+import argparse
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from codestra_control.publisher_release import prepare_release
+p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--source-sha', required=True)
+p.add_argument('--output', required=True, type=Path)
+p.add_argument('--driver-wheel', required=True, type=Path)
+a = p.parse_args()
+prepare_release(Path(__file__).resolve().parents[1], a.source_sha, a.output, a.driver_wheel)
+print(a.output / 'release-manifest.json')

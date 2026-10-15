@@ -81,7 +81,7 @@ class PublisherReconciliationTests(unittest.TestCase):
         post = self.load("codestra-github-statusd")["post"]
         read = mock.Mock(side_effect=pages)
         write = mock.Mock()
-        with mock.patch.dict(post.__globals__, {"gh_json": read, "run": write}):
+        with mock.patch.dict(post.__globals__, {"require_publication_adapter": lambda: None, "gh_json": read, "run": write}):
             post("Middleware-", SHA, state, desc, "https://example.invalid/pr/1")
         return read, write
 
@@ -106,7 +106,7 @@ class PublisherReconciliationTests(unittest.TestCase):
     def test_status_lookup_failure_prevents_any_post(self):
         post = self.load("codestra-github-statusd")["post"]
         write = mock.Mock()
-        with mock.patch.dict(post.__globals__, {"gh_json": mock.Mock(side_effect=RuntimeError("read failed")),
+        with mock.patch.dict(post.__globals__, {"require_publication_adapter": lambda: None, "gh_json": mock.Mock(side_effect=RuntimeError("read failed")),
                                                 "run": write}):
             with self.assertRaisesRegex(RuntimeError, "read failed"):
                 post("Middleware-", SHA, "success", "verdict", "https://example.invalid/pr/1")
@@ -134,14 +134,14 @@ class PublisherReconciliationTests(unittest.TestCase):
         for response in invalid:
             write = mock.Mock()
             with self.subTest(response=response), mock.patch.dict(post.__globals__, {
-                "gh_json": lambda *_: response, "run": write,
+                "require_publication_adapter": lambda: None, "gh_json": lambda *_: response, "run": write,
             }):
                 with self.assertRaises(RuntimeError):
                     post("Middleware-", SHA, "success", "verdict", "https://example.invalid/pr/1")
             write.assert_not_called()
         write = mock.Mock()
         read = mock.Mock(return_value=[self.status("unrelated") for _ in range(100)])
-        with mock.patch.dict(post.__globals__, {"gh_json": read, "run": write}):
+        with mock.patch.dict(post.__globals__, {"require_publication_adapter": lambda: None, "gh_json": read, "run": write}):
             with self.assertRaisesRegex(RuntimeError, "pagination limit"):
                 post("Middleware-", SHA, "success", "verdict", "https://example.invalid/pr/1")
         write.assert_not_called()
@@ -156,7 +156,7 @@ class PublisherReconciliationTests(unittest.TestCase):
             if len(attempts) == 2:
                 raise RuntimeError("second context failed")
             remote.insert(0, self.status(context))
-        with mock.patch.dict(post.__globals__, {"gh_json": lambda *_: list(remote), "run": write}):
+        with mock.patch.dict(post.__globals__, {"require_publication_adapter": lambda: None, "gh_json": lambda *_: list(remote), "run": write}):
             with self.assertRaisesRegex(RuntimeError, "second context failed"):
                 post("Middleware-", SHA, "success", "verdict", "https://example.invalid/pr/1")
             post("Middleware-", SHA, "success", "verdict", "https://example.invalid/pr/1")
