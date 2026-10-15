@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "publisher-inventory",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--publisher-inventory",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "5548645621cacb2d80c61eb3f387d3bb63504695",
+  "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "authorization_basis": "User delegated controller-status coverage assessment and narrow source-only repairs on 2026-10-15 through parent01a139f8-a0bf-71e6-86e4-9838454020d8.",
+  "scope": "Complete bounded open-PR inventory with fail-closed validation and offline regressions; document existing source coverage/reconciliation and unresolved publisher ownership. No coverage expansion, new trust policy, live publication, deployment or credentials.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}
