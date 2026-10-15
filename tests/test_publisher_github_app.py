@@ -77,3 +77,23 @@ class GitHubAppTests(unittest.TestCase):
             raise AssertionError('PR read must not occur')
         self.client.request=request
         with self.assertRaises(PublicationDenied):self.client.inventory(7,8,('appolon1908/Breero.com',))
+    def test_materialization_token_has_no_status_or_workflow_write_permission(self):
+        original=self.request
+        def request(method,path,token,body=None):
+            if path=='/app/installations/8':return {'id':8,'app_id':7,'suspended_at':None,'permissions':{'metadata':'read','contents':'read','checks':'read'}}
+            if path.endswith('/access_tokens'):
+                self.calls.append((method,path,body))
+                return {'token':'synthetic-materializer-token','expires_at':(fixture.NOW+timedelta(minutes=2)).isoformat(),'permissions':{'metadata':'read','contents':'read','checks':'read'},'repositories':[{'id':123}]}
+            return original(method,path,token,body)
+        self.client.request=request
+        self.client.authorize_readonly(7,8,123,fixture.NOW)
+        body=self.calls[-1][2]
+        self.assertEqual(body['repository_ids'],[123]);self.assertTrue(all(v=='read' for v in body['permissions'].values()))
+    def test_materializer_key_with_write_installation_grant_is_rejected_before_token(self):
+        original=self.request
+        def request(method,path,token,body=None):
+            if path=='/app/installations/8':return {'id':8,'app_id':7,'suspended_at':None,'permissions':{'metadata':'read','contents':'read','checks':'read','statuses':'write'}}
+            return original(method,path,token,body)
+        self.client.request=request
+        with self.assertRaisesRegex(PublicationDenied,'READONLY_INSTALLATION_REQUIRED'):self.client.authorize_readonly(7,8,123,fixture.NOW)
+        self.assertFalse(any(path.endswith('/access_tokens') for _,path,_ in self.calls))

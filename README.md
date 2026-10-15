@@ -61,3 +61,8 @@ Branches follow atomic task -> subsection -> section -> development -> testing -
 staging -> production -> main. Their initialization is not promotion evidence.
 An independent review, passing current-commit CI and enforced branch protections
 are required before acceptance. Live capabilities remain disabled.
+
+The source-only [assignment-backed lease contract](docs/assignment-backed-leases.md)
+describes the proposed authenticated issuer, independent materialization verifier,
+read-only publisher acquisition and activation boundaries. No runtime setup is
+authorized or performed by this source change.

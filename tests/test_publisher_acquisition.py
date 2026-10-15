@@ -78,13 +78,27 @@ class AcquisitionTests(unittest.TestCase):
     def test_complete_restricted_reader_decodes_bound_operator_record(self):
         import json
         connection=mock.MagicMock();connection.get_dsn_parameters.return_value={'sslmode':'verify-full','host':'authority.example','sslrootcert':'/fixture/ca.pem'};cursor=connection.cursor.return_value.__enter__.return_value
-        cursor.fetchone.return_value=(True,True)
         a=Store().authority
+        assignment='11111111-1111-4111-8111-111111111111'
+        snapshot=replace(fixture.ready(),lease=replace(fixture.ready().lease,assignment_id=assignment))
+        receipt={'authority':'ONLINE_DATABASE_RECEIPT','binding_id':assignment,'lease_id':'22222222-2222-4222-8222-222222222222',
+                 'epoch':7,'state':'ACTIVE','principal':snapshot.lease.owner,'expires_at':snapshot.lease.expires_at.isoformat(),
+                 'binding':dict(asdict(fixture.REQUEST),repository_id=123,principal=snapshot.lease.owner)}
+        receipt['binding']['head_sha']=receipt['binding'].pop('source_sha')
+        receipt['binding']['base_sha']=receipt['binding'].pop('target_base_sha')
         cursor.fetchall.return_value=[(json.loads(json.dumps(asdict(a),default=lambda v:v.isoformat())),
-                                      json.loads(json.dumps(asdict(fixture.ready()),default=lambda v:v.isoformat())),123,9,10,json.loads(json.dumps(asdict(Store().acquire(fixture.REQUEST).issuer),default=lambda v:v.isoformat())))]
+                                      json.loads(json.dumps(asdict(snapshot),default=lambda v:v.isoformat())),123,9,10,json.loads(json.dumps(asdict(Store().acquire(fixture.REQUEST).issuer),default=lambda v:v.isoformat())))]
+        cursor.fetchone.side_effect=[(True,True),(receipt,)]
         result=RestrictedRegistry(connection).acquire(fixture.REQUEST)
-        self.assertEqual(result.snapshot,fixture.ready());self.assertEqual(result.authority,a)
-        self.assertEqual(cursor.execute.call_args.args[1],(binding_digest(fixture.REQUEST),))
+        self.assertEqual(result.snapshot,snapshot);self.assertEqual(result.authority,a)
+        self.assertEqual(result.lease_id,receipt['lease_id']);self.assertEqual(result.lease_epoch,7)
+        self.assertEqual(cursor.execute.call_args.args,('SELECT assignment_leases.inspect_binding(%s)',(assignment,)))
+        for field,value in [('state','REVOKED'),('principal','forged'),('epoch',0),('binding_id','different')]:
+            cursor.fetchone.side_effect=[(True,True),(dict(receipt,**{field:value}),)]
+            with self.subTest(field=field),self.assertRaises(PublicationDenied):RestrictedRegistry(connection).acquire(fixture.REQUEST)
+        moved=dict(receipt,binding=dict(receipt['binding'],head_sha='d'*40))
+        cursor.fetchone.side_effect=[(True,True),(moved,)]
+        with self.assertRaises(PublicationDenied):RestrictedRegistry(connection).acquire(fixture.REQUEST)
     def test_source_catalog_exactly_matches_approved_publisher(self):
         import ast
         from pathlib import Path
