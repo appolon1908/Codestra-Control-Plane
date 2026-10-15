@@ -274,9 +274,13 @@ class ReplayLedger:
             os.close(fd)
         for suffix in ("-journal", "-wal", "-shm"):
             sidecar = Path(str(self.path) + suffix)
-            if sidecar.exists() or sidecar.is_symlink():
-                ensure(not sidecar.is_symlink(), "UNTRUSTED_LEDGER_SIDECAR")
-                self.check_file(sidecar.lstat())
+            try:
+                info = sidecar.lstat()
+            except FileNotFoundError:
+                # Concurrent SQLite writers may remove a completed sidecar.
+                continue
+            ensure(not stat.S_ISLNK(info.st_mode), "UNTRUSTED_LEDGER_SIDECAR")
+            self.check_file(info)
         with self.connect() as conn:
             conn.execute("""CREATE TABLE IF NOT EXISTS admissions (
                 request_id TEXT PRIMARY KEY, payload_sha256 TEXT NOT NULL,
