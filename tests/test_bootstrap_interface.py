@@ -59,7 +59,8 @@ class BootstrapInterfaceTests(unittest.TestCase):
     def test_invalid_request_never_calls_verifier(self):
         for field, value in (('source_sha', 'a' * 39), ('target_base_sha', '0' * 40),
                              ('repository', ''), ('assignment_id', ''), ('owner_principal', ''),
-                             ('source_ref', 'development\n'), ('target_ref', 'section/../bad')):
+                             ('source_ref', 'development\n'), ('target_ref', 'section/../bad'),
+                             ('target_ref', 'section/.hidden')):
             with self.subTest(field=field):
                 def unexpected(request):
                     self.fail('invalid request reached verifier')

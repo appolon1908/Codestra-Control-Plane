@@ -60,7 +60,7 @@ def _valid_request(request: BootstrapRequest) -> bool:
     for ref in (request.source_ref, request.target_ref):
         if (not re.fullmatch(r'[A-Za-z0-9_/-]+(?:[.][A-Za-z0-9_/-]+)*', ref)
                 or ref.startswith('/') or ref.endswith('/') or '//' in ref
-                or any(part in ('.', '..') or part.endswith('.lock') for part in ref.split('/'))):
+                or any(part.startswith('.') or part.endswith('.lock') for part in ref.split('/'))):
             return False
     return request.source_ref != request.target_ref
 
