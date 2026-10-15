@@ -172,7 +172,7 @@ def validate(c,product,test_branch,repo_path,head,base,sha):
     if reason is not None:
         return True, f"exact-SHA {reason} authority"
 
-    levels = PROMOTION_LEVELS(head, base, test_branch)
+    levels = PROMOTION_LEVELS(head, base, test_branch, product=product)
     if levels is None:
         return False, PROMOTION_ROUTE_ERROR(head, base)
 

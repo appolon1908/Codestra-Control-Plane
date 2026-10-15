@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "codestra-governed-routing",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--codestra-governed-routing",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "e6fcbf88dfd6a31b619c8d2520471dc0b1390a4e",
+  "authority": "Ralph L. Appolon",
+  "owner": "Current user-assigned Codestra governed-routing source session",
+  "authorization": "User explicitly requested: implement Governed routing and genuine controller certification.",
+  "scope": "Implement and publish source consistency for the declared Codestra section references; preserve genuine certification gates. This assignment is not a runtime grant, lease, certificate or installation approval.",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false,
+  "observed_product_manifest_commit": "141471caff8b774a06fa97080acd87419fd8f6e9",
+  "observed_product_manifest_path": ".codestra/control-plane.yml"
+}

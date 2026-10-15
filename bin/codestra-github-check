@@ -58,7 +58,23 @@ def canonical_product(name: str) -> str:
     return PRODUCT_ALIASES.get(name, name)
 
 
-def promotion_levels(head: str, base: str, test_branch: str) -> tuple[str, str] | None:
+# These are section names already declared by the Codestra Frontend manifest.
+# Classification is not registration, custody, approval, or certification.
+CODESTRA_SECTION_REFS = {
+    "01-core": "workstation/ws01-core",
+    "02-api": "workstation/ws02-api",
+    "03-security": "workstation/ws03-security",
+    "04-deployment": "workstation/ws04-deployment",
+    "05-observability": "workstation/ws05-observability",
+    "06-testing": "workstation/ws06-testing",
+    "07-saas": "workstation/ws07-saas",
+    "08-release": "workstation/ws08-release",
+}
+
+
+def promotion_levels(
+    head: str, base: str, test_branch: str, *, product: str | None = None,
+) -> tuple[str, str] | None:
     """Resolve actual refs before consulting caller labels or certificates.
 
     This validates hierarchy only. A matching route still needs the existing
@@ -67,7 +83,7 @@ def promotion_levels(head: str, base: str, test_branch: str) -> tuple[str, str] 
     if any(not isinstance(ref, str) or not ref for ref in (head, base, test_branch)):
         return None
     if test_branch in {"development", "staging", "production", "main"} or \
-            test_branch.startswith(("section/", "subsection/", "atomic/")):
+            test_branch.startswith(("section/", "subsection/", "atomic/", "workstation/", "subworkstation/")):
         return None
     if head == base:
         return None
@@ -75,8 +91,14 @@ def promotion_levels(head: str, base: str, test_branch: str) -> tuple[str, str] 
         section = head[len("subsection/"):].split("--", 1)[0]
         if section and base == f"section/{section}":
             return "subsection", "section"
+        if (product == "codestra" and head[len("subsection/"):].partition("--")[2]
+                and base == CODESTRA_SECTION_REFS.get(section)):
+            return "subsection", "section"
         return None
     if head.startswith("section/") and head[len("section/"):] and base == "development":
+        return "section", "development"
+    if (product == "codestra" and head in CODESTRA_SECTION_REFS.values()
+            and base == "development"):
         return "section", "development"
     return {
         ("development", test_branch): ("development", "testing"),
@@ -176,7 +198,7 @@ def main() -> int:
                 return 1
             test_branch = product["test_branch"]
 
-            levels = promotion_levels(args.head_ref, args.base_ref, test_branch)
+            levels = promotion_levels(args.head_ref, args.base_ref, test_branch, product=args.product)
             if levels is None:
                 print("CONTROL_PLANE_CERTIFICATION=FAIL "
                       + promotion_route_error(args.head_ref, args.base_ref))
