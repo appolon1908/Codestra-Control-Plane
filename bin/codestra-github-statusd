@@ -255,8 +255,10 @@ def reconcile():
 def main():
     try:
         with publisher_session():
-            require_publication_adapter()
-            reconcile()
+            from codestra_control.publisher_startup import run_configured_cycle
+            outcomes=run_configured_cycle()
+            if not outcomes or any(state != "COMPLETE" for state in outcomes):
+                raise PublisherUnavailable("INCOMPLETE_AUTHENTICATED_PUBLICATION")
     except PublisherUnavailable as exc:
         raise SystemExit("PUBLICATION_REFUSED " + str(exc)) from None
 

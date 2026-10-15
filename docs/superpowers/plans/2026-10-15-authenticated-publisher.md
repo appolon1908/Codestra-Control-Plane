@@ -28,3 +28,13 @@
 - A moving target, unknown merge result or absent protection denies each context write.
 - Revocation between writes leaves PARTIAL; ambiguous POST leaves UNCERTAIN, no compensation.
 - Local fences and authenticated objects do not imply global credential exclusivity or atomic external writes.
+
+## Completed source follow-up before publication
+
+Concrete fixed-path protected TOML startup and local OpenSSL RS256 signer added;
+main wires authenticated cycles only after designated-service/local-lock ownership.
+All secret/config/CA ancestors and runtime code custody are checked. Signing tool
+binary/libcrypto/libssl digests are candidate-pinned and included in release metadata.
+Certificate acquisition additionally requires a separately operator-granted expiring
+exact-binding issuer capability; generic CI/Actions/self-issued aliases deny.
+Accepted PR22/PR24 target source is merged locally before final full-suite verification.

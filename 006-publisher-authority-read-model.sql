@@ -12,6 +12,7 @@ CREATE TABLE publisher_authority.bindings (
  expires_at timestamptz NOT NULL,
  authority jsonb NOT NULL CHECK(jsonb_typeof(authority)='object'),
  snapshot jsonb NOT NULL CHECK(jsonb_typeof(snapshot)='object'),
+ issuer jsonb NOT NULL CHECK(jsonb_typeof(issuer)='object'),
  repository_id bigint NOT NULL CHECK(repository_id>0),
  pr_number bigint NOT NULL CHECK(pr_number>0),
  certificate_check_id bigint NOT NULL CHECK(certificate_check_id>0)

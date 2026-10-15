@@ -8,7 +8,9 @@ from datetime import datetime
 from urllib.parse import quote
 from . import evidence as e
 from .policy import ProductMapping,ScopeEdge
-from .publisher_adapter import Acquired,Authority,require,binding_digest
+from .publisher_startup import protected_read
+from .publisher_ownership import PublisherUnavailable
+from .publisher_adapter import Acquired,Authority,CertificateIssuer,verify_issuer,require,binding_digest
 
 
 def decode_snapshot(raw):
@@ -32,31 +34,53 @@ def decode_snapshot(raw):
 
 class RestrictedRegistry:
     def __init__(self,connection):self.connection=connection
-    def acquire(self,binding):
+    def _session(self):
         params=self.connection.get_dsn_parameters()
         require(params.get('sslmode')=='verify-full' and bool(params.get('host'))
                 and not params['host'].startswith('/') and bool(params.get('sslrootcert')),'VERIFIED_DATABASE_TLS_REQUIRED')
+        try:protected_read(params['sslrootcert'],allow_public=True)
+        except PublisherUnavailable:
+            require(False,'UNTRUSTED_DATABASE_CA')
         self.connection.set_session(readonly=True,autocommit=False)
+    @staticmethod
+    def _roles(cur):
+        cur.execute("""SELECT session_user=current_user,
+         NOT (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls)
+         AND NOT pg_has_role(session_user,n.nspowner,'MEMBER')
+         AND NOT has_schema_privilege(session_user,'publisher_authority','CREATE')
+         AND NOT has_table_privilege(session_user,'publisher_authority.bindings','INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+         AND EXISTS (SELECT 1 FROM pg_stat_ssl WHERE pid=pg_backend_pid() AND ssl)
+         FROM pg_roles r CROSS JOIN pg_namespace n
+         WHERE r.rolname=session_user AND n.nspname='publisher_authority'""")
+        row=cur.fetchone()
+        require(row is not None and tuple(row)==(True,True),'RESTRICTED_AUTHENTICATED_SESSION_REQUIRED')
+    def acquire(self,binding):
+        self._session()
         with self.connection:
             with self.connection.cursor() as cur:
-                cur.execute("""SELECT session_user=current_user,
-                 NOT (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls)
-                 AND NOT pg_has_role(session_user,n.nspowner,'MEMBER')
-                 AND NOT has_schema_privilege(session_user,'publisher_authority','CREATE')
-                 AND NOT has_table_privilege(session_user,'publisher_authority.bindings','INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
-                 AND EXISTS (SELECT 1 FROM pg_stat_ssl WHERE pid=pg_backend_pid() AND ssl)
-                 FROM pg_roles r CROSS JOIN pg_namespace n
-                 WHERE r.rolname=session_user AND n.nspname='publisher_authority'""")
-                row=cur.fetchone()
-                require(row is not None and tuple(row)==(True,True),'RESTRICTED_AUTHENTICATED_SESSION_REQUIRED')
-                cur.execute("""SELECT authority,snapshot,repository_id,pr_number,certificate_check_id
+                self._roles(cur)
+                cur.execute("""SELECT authority,snapshot,repository_id,pr_number,certificate_check_id,issuer
                  FROM publisher_authority.bindings WHERE binding_hash=%s AND principal=session_user
                  AND role_oid=(SELECT oid FROM pg_roles WHERE rolname=session_user)
                  AND active AND expires_at>clock_timestamp()""",(binding_digest(binding),))
                 rows=cur.fetchall();require(len(rows)==1,'ACTIVE_AUTHORITY_BINDING_REQUIRED')
-                raw,snapshot,repo_id,pr,certificate=rows[0]
+                raw,snapshot,repo_id,pr,certificate,issuer=rows[0]
+                issuer=dict(issuer);issuer['expires_at']=datetime.fromisoformat(issuer['expires_at'])
                 raw=dict(raw);raw['expires_at']=datetime.fromisoformat(raw['expires_at']);raw['repositories']=tuple(raw['repositories'])
-                return Acquired(Authority(**raw),decode_snapshot(snapshot),repo_id,pr,certificate)
+                return Acquired(Authority(**raw),decode_snapshot(snapshot),repo_id,pr,certificate,CertificateIssuer(**issuer))
+
+
+    def bindings(self):
+        self._session()
+        with self.connection:
+            with self.connection.cursor() as cur:
+                self._roles(cur)
+                cur.execute("""SELECT snapshot->'observed_binding' FROM publisher_authority.bindings
+                 WHERE principal=session_user AND role_oid=(SELECT oid FROM pg_roles WHERE rolname=session_user)
+                 AND active AND expires_at>clock_timestamp() ORDER BY binding_hash LIMIT 1001""")
+                rows=cur.fetchall()
+                require(len(rows)<=1000,'AUTHORITY_INVENTORY_LIMIT')
+                return tuple(e.PromotionRequest(**row[0]) for row in rows)
 
 class GitHubVerifier:
     def __init__(self,api,*,certificate_name,certificate_app_id=None):
@@ -72,6 +96,8 @@ class GitHubVerifier:
             require(check['head_sha']==sha and check['status']=='completed' and check['conclusion']=='success','ONLINE_CHECK_NOT_SUCCESS')
         return checks
     def verify(self,acquired,now):
+        verify_issuer(acquired,now)
+        require(acquired.issuer.app_id==self.certificate_app_id and acquired.issuer.name==self.certificate_name,'CERTIFIER_CONFIG_CAPABILITY_MISMATCH')
         s=acquired.snapshot;b=s.observed_binding;a=acquired.authority;repo=b.repository
         self.api.assert_identity(a,acquired.repository_id,now)
         pr=self.api.get(f'/repos/{repo}/pulls/{acquired.pr_number}')

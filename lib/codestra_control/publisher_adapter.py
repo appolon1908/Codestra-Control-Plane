@@ -29,12 +29,23 @@ class Authority:
     repositories:tuple[str,...]
 
 @dataclass(frozen=True)
+class CertificateIssuer:
+    app_id:int
+    name:str
+    binding_hash:str
+    capability_receipt:str
+    expires_at:datetime
+    approved_by:str
+    purpose:str
+
+@dataclass(frozen=True)
 class Acquired:
     authority:Authority
     snapshot:TrustedSnapshot
     repository_id:int
     pr_number:int
     certificate_check_id:int
+    issuer:CertificateIssuer | None = None
 
 @dataclass(frozen=True)
 class PublicationResult:
@@ -43,6 +54,19 @@ class PublicationResult:
 
 def binding_digest(binding):
     return hashlib.sha256(json.dumps(asdict(binding),sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+
+def verify_issuer(acquired,now):
+    issuer=acquired.issuer
+    require(type(issuer) is CertificateIssuer,'CERTIFIER_CAPABILITY_UNAVAILABLE')
+    require(type(issuer.app_id) is int and issuer.app_id>0 and issuer.app_id not in (15368,acquired.authority.app_id),'DEDICATED_INDEPENDENT_CERTIFIER_REQUIRED')
+    require(issuer.approved_by=='Ralph L. Appolon' and issuer.purpose=='SCOPE_CERTIFICATION'
+            and type(issuer.capability_receipt) is str and bool(issuer.capability_receipt.strip()),'CERTIFIER_CAPABILITY_INVALID')
+    require(issuer.binding_hash==binding_digest(acquired.snapshot.observed_binding),'CERTIFIER_CAPABILITY_BINDING_MISMATCH')
+    require(issuer.expires_at.tzinfo is not None and issuer.expires_at>now,'CERTIFIER_CAPABILITY_EXPIRED')
+    from .decision import CONTROL_PLANE_CONTEXTS
+    require(type(issuer.name) is str and bool(issuer.name.strip()) and issuer.name not in CONTROL_PLANE_CONTEXTS
+            and issuer.name not in {v.name for v in acquired.snapshot.required_checks},'CI_ALIAS_IS_NOT_CERTIFICATION')
 
 class AuthenticatedPublisher:
     """Single-host orchestration with durable intent before any status effect.
@@ -71,10 +95,12 @@ class AuthenticatedPublisher:
         decision=evaluate_promotion(binding,snapshot)
         require(decision.allowed,'PROMOTION_DENIED:'+','.join(decision.reasons))
         acquired=replace(acquired,snapshot=snapshot)
+        verify_issuer(acquired,now)
         self.github.verify(acquired,now)
         require(self.store.acquire(binding)==original,'AUTHORITY_CHANGED_DURING_VERIFICATION')
         fresh=self.clock()
         require(authority.expires_at>fresh,'AUTHORITY_EXPIRED')
+        verify_issuer(acquired,fresh)
         snapshot=replace(snapshot,evaluated_at=fresh)
         decision=evaluate_promotion(binding,snapshot)
         require(decision.allowed,'FINAL_PROMOTION_DENIED:'+','.join(decision.reasons))

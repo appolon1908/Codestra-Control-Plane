@@ -1,3 +1,5 @@
+> Historical PR24 preparation. The successor source implementation and updated operational prerequisites are documented in [authenticated-publisher-source.md](authenticated-publisher-source.md). Runtime remains unactivated.
+
 # Approved source design; runtime cutover remains prohibited
 
 Human approval at 2026-10-15 15:38 UTC accepted the six catalog additions in PR23

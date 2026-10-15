@@ -23,6 +23,7 @@ class PublisherReleaseTests(unittest.TestCase):
             p = self.root / path
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text('# fixture\n')
+        (self.root / 'runtime-publisher-tools.json').write_text(json.dumps({'schema':'codestra.publisher-system-tools.v1','openssl_version':'synthetic fixture','files':{'/usr/bin/openssl':'a'*64},'provisioning_approved':False,'target_verified':False}))
         (self.root / 'requirements-publisher.txt').write_text('psycopg2-binary==2.9.10 --hash=sha256:' + hashlib.sha256(self.wheel.read_bytes()).hexdigest() + '\n')
         self.run_git('add', '.')
         self.run_git('commit', '-m', 'fixture')
@@ -37,6 +38,9 @@ class PublisherReleaseTests(unittest.TestCase):
         manifest = prepare_release(self.root, self.sha, self.output, self.wheel)
         self.assertFalse(manifest['install_allowed'])
         self.assertFalse(manifest['activation_allowed'])
+        self.assertFalse(manifest['runtime']['system_tools']['target_verified'])
+        self.assertFalse(manifest['runtime']['system_tools']['provisioning_approved'])
+        self.assertIn('/usr/bin/openssl',manifest['runtime']['system_tools']['files'])
         self.assertEqual((self.output / 'lib/codestra_control/routes.py').read_text(), '# fixture\n')
         for entry in manifest['files']:
             data = (self.output / entry['source_path']).read_bytes()

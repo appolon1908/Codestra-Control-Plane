@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import replace,asdict
+from datetime import timedelta
 from unittest import mock
 import test_decision as fixture
 from test_authenticated_publisher import Store
@@ -30,6 +31,8 @@ class API:
 
 class AcquisitionTests(unittest.TestCase):
     def setUp(self):
+        patch=mock.patch('codestra_control.publisher_acquisition.protected_read',return_value=b'synthetic accepted CA fixture')
+        patch.start();self.addCleanup(patch.stop)
         self.api=API();self.acquired=Store().acquire(fixture.REQUEST)
         self.acquired=replace(self.acquired,snapshot=replace(fixture.ready(),certificate=replace(fixture.ready().certificate,receipt_id='check:10')))
         self.verifier=GitHubVerifier(self.api,certificate_name='scope-certification',certificate_app_id=99)
@@ -78,7 +81,7 @@ class AcquisitionTests(unittest.TestCase):
         cursor.fetchone.return_value=(True,True)
         a=Store().authority
         cursor.fetchall.return_value=[(json.loads(json.dumps(asdict(a),default=lambda v:v.isoformat())),
-                                      json.loads(json.dumps(asdict(fixture.ready()),default=lambda v:v.isoformat())),123,9,10)]
+                                      json.loads(json.dumps(asdict(fixture.ready()),default=lambda v:v.isoformat())),123,9,10,json.loads(json.dumps(asdict(Store().acquire(fixture.REQUEST).issuer),default=lambda v:v.isoformat())))]
         result=RestrictedRegistry(connection).acquire(fixture.REQUEST)
         self.assertEqual(result.snapshot,fixture.ready());self.assertEqual(result.authority,a)
         self.assertEqual(cursor.execute.call_args.args[1],(binding_digest(fixture.REQUEST),))
@@ -119,3 +122,25 @@ class AcquisitionTests(unittest.TestCase):
         for mode in ('require','verify-ca','prefer'):
             connection=mock.MagicMock();connection.get_dsn_parameters.return_value={'sslmode':mode,'host':'authority.example','sslrootcert':'/fixture/ca.pem'}
             with self.subTest(mode=mode),self.assertRaises(PublicationDenied):RestrictedRegistry(connection).acquire(fixture.REQUEST)
+    def test_untrusted_database_ca_denied_even_with_verify_full(self):
+        from codestra_control.publisher_ownership import PublisherUnavailable
+        connection=mock.MagicMock();connection.get_dsn_parameters.return_value={'sslmode':'verify-full','host':'authority.example','sslrootcert':'/fixture/attacker-ca.pem'}
+        with mock.patch('codestra_control.publisher_acquisition.protected_read',side_effect=PublisherUnavailable('UNTRUSTED_OPERATOR_ANCESTOR')):
+            with self.assertRaisesRegex(PublicationDenied,'UNTRUSTED_DATABASE_CA'):RestrictedRegistry(connection).acquire(fixture.REQUEST)
+    def test_ordinary_ci_or_self_issued_certificate_is_not_certification(self):
+        from codestra_control.publisher_adapter import CertificateIssuer
+        from dataclasses import replace
+        original=self.api.get
+        for app_id in (15368,7):
+            def wrong(path):
+                value=original(path)
+                if path.endswith('/check-runs/10'):value['app']['id']=app_id
+                return value
+            self.api.get=wrong
+            acquired=replace(self.acquired,issuer=CertificateIssuer(app_id,'scope-certification',binding_digest(fixture.REQUEST),'synthetic-issuer-capability',fixture.NOW+timedelta(minutes=2),'Ralph L. Appolon','SCOPE_CERTIFICATION'))
+            self.verifier.certificate_app_id=app_id
+            with self.subTest(app_id=app_id),self.assertRaises(PublicationDenied):self.verifier.verify(acquired,fixture.NOW)
+    def test_missing_expired_wrong_target_capability_and_ci_alias_denied(self):
+        issuer=self.acquired.issuer
+        for value in (None,replace(issuer,expires_at=fixture.NOW),replace(issuer,binding_hash='0'*64),replace(issuer,name='quality'),replace(issuer,name='codestra-control-plane')):
+            with self.subTest(value=value),self.assertRaises(PublicationDenied):self.verifier.verify(replace(self.acquired,issuer=value),fixture.NOW)

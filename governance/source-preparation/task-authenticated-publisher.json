@@ -11,8 +11,9 @@
   "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
   "authority": "Ralph L. Appolon",
   "authorization": "Explicit user approval 2026-10-15: source-only single-host dedicated GitHub App, restricted PostgreSQL principal, online authoritative GitHub receipt verification; target/merge-result/protection gates mandatory.",
-  "scope": "Implement source acquisition and guarded effect integration. No runtime provisioning, secret distribution, external network mutations, grants, leases, or activation.",
+  "scope": "Implement source acquisition and guarded effect integration. No runtime provisioning, secret distribution, runtime network mutations, grants, leases, or activation.",
   "database_lease": null,
   "certification": null,
-  "live_effects_authorized": false
+  "live_effects_authorized": false,
+  "publication_authorization": "Subsequent explicit user instruction permits ordinary source branch and draft PR publication in this assigned repository scope. No runtime status/ref/credential/grant/lease mutations or activation."
 }

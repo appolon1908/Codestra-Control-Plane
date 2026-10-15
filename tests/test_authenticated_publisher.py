@@ -5,14 +5,14 @@ from pathlib import Path
 import tempfile
 import unittest
 import test_decision as fixture
-from codestra_control.publisher_adapter import Authority, Acquired, AuthenticatedPublisher, PublicationDenied
+from codestra_control.publisher_adapter import Authority, Acquired, CertificateIssuer, AuthenticatedPublisher, PublicationDenied,binding_digest
 from codestra_control.publisher_effect import IntentLedger
 
 class Store:
     def __init__(self):
         self.authority=Authority('Ralph L. Appolon','dev-desktop',7,8,1,fixture.NOW+timedelta(minutes=4),'custody:1',('appolon1908/Breero.com',))
         self.snapshot=fixture.ready()
-    def acquire(self, binding): return Acquired(self.authority,self.snapshot,123,9,10)
+    def acquire(self, binding): return Acquired(self.authority,self.snapshot,123,9,10,CertificateIssuer(99,'scope-certification',binding_digest(binding),'synthetic-issuer-capability',fixture.NOW+timedelta(minutes=4),'Ralph L. Appolon','SCOPE_CERTIFICATION'))
 
 class GitHub:
     def __init__(self): self.calls=[];self.revoked=False;self.failure=False;self.moved=False

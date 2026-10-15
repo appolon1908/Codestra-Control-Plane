@@ -55,3 +55,25 @@ class GitHubAppTests(unittest.TestCase):
             return value
         self.client.request=expanded
         with self.assertRaises(PublicationDenied):self.client.assert_identity(Store().authority,123,fixture.NOW)
+    def test_complete_inventory_uses_read_only_token_and_actual_repository_ids(self):
+        def request(method,path,token,body=None):
+            self.calls.append((method,path,body))
+            if path=='/app':return {'id':7}
+            if path=='/app/installations/8':return {'id':8,'app_id':7,'suspended_at':None,'account':{'login':'appolon1908'}}
+            if path.endswith('/access_tokens'):
+                return {'token':'synthetic-read-token','expires_at':(fixture.NOW+timedelta(minutes=2)).isoformat(),'permissions':{'metadata':'read','pull_requests':'read'},'repositories':[{'id':123,'full_name':'appolon1908/Breero.com'}]}
+            if '/pulls?' in path:return [{'id':1,'number':9,'state':'open','head':{'ref':'staging','sha':'a'*40},'base':{'ref':'production/environment','sha':'b'*40,'repo':{'id':123}}}]
+            raise AssertionError(path)
+        self.client.request=request
+        values=self.client.inventory(7,8,('appolon1908/Breero.com',))
+        self.assertEqual(values[0].repository_id,123);self.assertEqual(values[0].number,9)
+        minted=next(body for method,path,body in self.calls if path.endswith('/access_tokens'))
+        self.assertEqual(minted['repositories'],['Breero.com']);self.assertNotIn('statuses',minted['permissions'])
+    def test_incomplete_inventory_repository_scope_denies_before_pr_reads(self):
+        def request(method,path,token,body=None):
+            if path=='/app':return {'id':7}
+            if path=='/app/installations/8':return {'id':8,'app_id':7,'suspended_at':None,'account':{'login':'appolon1908'}}
+            if path.endswith('/access_tokens'):return {'permissions':{'metadata':'read','pull_requests':'read'},'repositories':[]}
+            raise AssertionError('PR read must not occur')
+        self.client.request=request
+        with self.assertRaises(PublicationDenied):self.client.inventory(7,8,('appolon1908/Breero.com',))
