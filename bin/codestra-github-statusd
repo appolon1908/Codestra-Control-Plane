@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, subprocess, psycopg2, runpy
+import json, os, subprocess, psycopg2, runpy, re
 from collections import Counter
 from psycopg2.extras import RealDictCursor
 
@@ -40,6 +40,36 @@ def run(args,check=True):
 
 def gh_json(path):
     return json.loads(run(["gh","api",path]).stdout)
+
+def open_prs(repo):
+    """Collect a bounded inventory before any validation/publication for a repo.
+
+    API lists are not transactional snapshots. Duplicate IDs reveal pagination
+    drift and fail closed; no partial page set is used after errors or exhaustion.
+    """
+    collected = []
+    seen = set()
+    for page in range(1, 101):
+        rows = gh_json(f"repos/{OWNER}/{repo}/pulls?state=open&per_page=100&page={page}")
+        if not isinstance(rows, list) or len(rows) > 100:
+            raise RuntimeError("invalid pull request response")
+        for pr in rows:
+            if (not isinstance(pr, dict) or type(pr.get("number")) is not int
+                    or pr["number"] <= 0 or pr["number"] in seen
+                    or not isinstance(pr.get("head"), dict)
+                    or not isinstance(pr.get("base"), dict)
+                    or not isinstance(pr["head"].get("ref"), str) or not pr["head"]["ref"]
+                    or not isinstance(pr["base"].get("ref"), str) or not pr["base"]["ref"]
+                    or not isinstance(pr["head"].get("sha"), str)
+                    or not re.fullmatch(r"[0-9a-f]{40}", pr["head"]["sha"])
+                    or not isinstance(pr.get("html_url"), str) or not pr["html_url"]):
+                raise RuntimeError("invalid or duplicate pull request entry")
+            seen.add(pr["number"])
+            collected.append(pr)
+        if len(rows) < 100:
+            return collected
+    raise RuntimeError("pull request pagination limit reached; publication refused")
+
 
 def remote_sha(repo_path,ref):
     p=run(["git","-c",f"safe.directory={repo_path}","-C",repo_path,
@@ -179,7 +209,7 @@ def main():
         if not os.path.isdir(repo_path):
             continue
         try:
-            prs=gh_json(f"repos/{OWNER}/{repo}/pulls?state=open&per_page=100")
+            prs=open_prs(repo)
             repos_seen+=1
         except RateLimited as exc:
             raise SystemExit(f"RATE_LIMITED repo={repo}: {exc}") from None

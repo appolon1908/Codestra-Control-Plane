@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "inactive-bootstrap-interface",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--inactive-bootstrap-interface",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "5548645621cacb2d80c61eb3f387d3bb63504695",
+  "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "worktree": "/tmp/cp-inactive-bootstrap-20261014",
+  "authorization_basis": "Explicit human source-work request relayed by parent thread 01a139f8-a0bf-71e6-86e4-9838454020d8: create a separate source-only task record for an inactive deny-by-default bootstrap interface. This commit records that bounded source assignment only; interface implementation is a subsequent step.",
+  "scope": "Inactive bootstrap interface source and mocked authorization tests only. Deny by default; opaque authorization verifier; exact source bindings, authenticated operator grants, genuine owned lease and independent approval requirements. No production adapter or activation. No credentials, grants, live leases, live branch bootstrap, status publication or new approval policy.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}
