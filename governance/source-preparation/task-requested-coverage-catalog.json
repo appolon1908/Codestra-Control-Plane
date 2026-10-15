@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "requested-coverage-catalog",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--requested-coverage-catalog",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "f3a010c21bfa07111f1e7deeeac0f91ef5af1bfd",
+  "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "worktree": "/tmp/cp-requested-coverage-catalog-20261015",
+  "authorization_basis": "Explicit user13-repository controller coverage and code-missing-pieces request, relayed by parent01a139f8-a0bf-71e6-86e4-9838454020d8. Separate source-only task to prepare an inactive exact catalog/binding proposal.",
+  "scope": "Prepare reviewable six-name source catalog patch and unverified exact13 binding template. Do not apply patch to publisher, expand active coverage, define new trust policy, deploy, grant identities, register tasks, claim leases, publish status or modify PAS233 hook lanes.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}

@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "kind": "INACTIVE_SOURCE_CATALOG_PROPOSAL",
+  "source_commit": "f3a010c21bfa07111f1e7deeeac0f91ef5af1bfd",
+  "canonical_publisher_sha256": "d6c9585cc69077222de183fd058160d5581040592bd0bb91fd62b5fff5a867b8",
+  "proposed_publisher_sha256": "e098e70112989fbb1576576d48237dd9a9615c793a49caf92cbeae65c69cbb9f",
+  "catalog_patch_sha256": "ca1d899871b6bb42cd9ad3fadde349ddd8350fb49b64919db02380cacb210360",
+  "requested_repositories": [
+    "appolon1908/Caddy",
+    "appolon1908/Codestra-Control-Plane",
+    "appolon1908/Codestra-Mission-Control",
+    "appolon1908/Codestra-OpenBao",
+    "appolon1908/Codestra-PostgreSQL",
+    "appolon1908/Keycloak",
+    "appolon1908/Kong",
+    "appolon1908/Middleware-",
+    "appolon1908/OpenAPI",
+    "appolon1908/codestra-foundation",
+    "appolon1908/codestra-provisioning-service",
+    "appolon1908/codestra-ruleset-toolkit",
+    "appolon1908/openrerefine-"
+  ],
+  "existing_count": 43,
+  "proposed_count": 49,
+  "additions": [
+    "Codestra-Control-Plane",
+    "Codestra-PostgreSQL",
+    "OpenAPI",
+    "codestra-foundation",
+    "codestra-ruleset-toolkit",
+    "openrerefine-"
+  ],
+  "bindings": [
+    {
+      "repository": "appolon1908/Caddy",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/Codestra-Control-Plane",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/Codestra-Mission-Control",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/Codestra-OpenBao",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/Codestra-PostgreSQL",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/Keycloak",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/Kong",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/Middleware-",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/OpenAPI",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/codestra-foundation",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/codestra-provisioning-service",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/codestra-ruleset-toolkit",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    },
+    {
+      "repository": "appolon1908/openrerefine-",
+      "repository_id": null,
+      "accepted_product_receipt": null,
+      "assignment_receipt": null,
+      "owned_lease_receipt": null,
+      "certification_receipt": null,
+      "publisher_ownership_receipt": null
+    }
+  ],
+  "activated": false,
+  "authority": false,
+  "publication_enabled": false,
+  "operator_approval_receipt": null
+}

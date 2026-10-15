@@ -18,6 +18,7 @@ Codestra-Tempo Codestra-cAdvisor Evolution-API Frontend-Resturant- Infustruction
 LARIM-A-Backend LARIM-A-Fornt-end Leads-Workstation Meltano-Leads-Importer Moneybee-Backend
 Moneybee-frontend- Odoo Sentry Superset Wazuh WhatsApp WhatsApp-Frontend backend2
 beyvra-backend beyvra-frontend codestra codestra-provisioning-service klyrow.com kyqra-crawler
+Codestra-Control-Plane Codestra-PostgreSQL OpenAPI codestra-foundation codestra-ruleset-toolkit openrerefine-
 """.split())
 
 
@@ -45,11 +46,11 @@ class ActiveRepositoryCoverageTests(unittest.TestCase):
         rows = [self.row(name) for name in PRIOR | ADDITIONS]
         aliases = self.aliases(rows)
         self.assertEqual({r[0] for r in aliases}, PRIOR | ADDITIONS)
-        self.assertEqual(len(aliases), 43)
-        self.assertEqual(len(self.module["GOVERNED_REPOS"]), 43)
+        self.assertEqual(len(aliases), 49)
+        self.assertEqual(len(self.module["GOVERNED_REPOS"]), 49)
 
     def test_retired_unverified_external_and_unregistered_candidates_stay_out(self):
-        excluded = ("codestra-backend", "kyqra", "Codestra-Control-Plane", "codestra-production-platform",
+        excluded = ("codestra-backend", "kyqra", "Unapproved-Repository", "codestra-production-platform",
                     "DJONE", "Codestra-Device-Forge", "Codestra-Workstation", "transportation-backend-",
                     "transportaion-Frontend", "ralpha-node-api")
         rows = [self.row(name) for name in excluded] + [self.row("backend2")]

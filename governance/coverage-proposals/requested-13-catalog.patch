@@ -1,0 +1,10 @@
+--- a/bin/codestra-github-statusd
++++ b/bin/codestra-github-statusd
+@@ -20,6 +20,7 @@
+     "Sentry", "Superset", "Wazuh", "WhatsApp", "WhatsApp-Frontend", "backend2",
+     "beyvra-backend", "beyvra-frontend", "codestra", "codestra-provisioning-service",
+     "klyrow.com", "kyqra-crawler",
++    "Codestra-Control-Plane", "Codestra-PostgreSQL", "OpenAPI", "codestra-foundation", "codestra-ruleset-toolkit", "openrerefine-",
+ })
+ GOVERNED_REPOS=PRIOR_GOVERNED_REPOS | ADDITIONAL_GOVERNED_REPOS
+ BOOTSTRAP_HEADS={"governance/development-control-plane-v1","workstation/governance-control-plane"}

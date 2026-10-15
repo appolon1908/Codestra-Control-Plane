@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "replay-ledger-sidecar-race",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--replay-ledger-sidecar-race",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "f3a010c21bfa07111f1e7deeeac0f91ef5af1bfd",
+  "owner_thread": "01a13c31-799c-7d72-8fe5-dd1fcd92c279",
+  "worktree": "/tmp/cp-replay-ledger-race-01a13c31",
+  "authorization_basis": "User authorized development and continuation of the controller prerequisite source fixes for Middleware PR453. Hosted CI on source PR21 exposed this inherited race; the correction is a separate source-only follow-up after PR21 was merged externally.",
+  "scope": "Repair transient SQLite sidecar disappearance during ReplayLedger initialization and add offline regressions. Preserve symlink, type, link-count, ownership, permission and durable replay checks. No policy, schema, issuer, command, production verifier, persistence adapter, credentials, grants, database registration, lease changes, successful statuses, protection changes, deployment or activation.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}
