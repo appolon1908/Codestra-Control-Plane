@@ -20,7 +20,9 @@ repository. The capabilities are `product`, `workstation`, and `candidate`.
 Candidate registration additionally requires an exact operator-created task
 assignment. No grants or assignments are automatically created by the migration.
 The schema, function owner, role membership and PostgreSQL authentication policy
-must remain under independent operator control.
+must remain under independent operator control. Production authentication must
+authenticate distinct principals; permissive trust authentication is only used in
+the socket-only disposable fixtures, not as an accepted production identity policy.
 
 Registration records **declared** refs/SHAs and provenance, not observed Git
 truth. It always returns `authority=false` and `ready=false`. Empty prerequisites
@@ -33,7 +35,7 @@ The legacy `codestra-devctl register --root`, claim/evidence/certification comma
 and privileged direct SQL writers remain separate historical interfaces. Do not
 expose those writers or grant direct public-table DML to the new runtime roles.
 This patch does not claim to secure privileged legacy mutation paths or integrate
-atomic candidates with the publisher/promotion checker. A shared physical-lane table makes cross-kind path uniqueness transactional.
+atomic candidates with the publisher/promotion checker. A shared lane table makes cross-kind uniqueness of declared path strings transactional.
 The approved 43-repository
 publisher coverage and Keycloak exact-SHA/expiry policy are unchanged.
 
@@ -72,7 +74,8 @@ Assignments can be revoked with `active=false` without deleting binding/audit
 history. Repeated requests revalidate current grants and assignments.
 
 No workstation/atomic binding is overwritten. A matching legacy row may be
-adopted by an authorized product grant; a conflicting tuple is rejected. Adoption
+adopted with the corresponding product-scoped capability and, for candidates,
+the exact task assignment; a conflicting tuple is rejected. Adoption
 retains existing status, lease, gates and dependencies without asserting they are
 trusted. Existing task IDs and workstation IDs remain globally unique to match
 the legacy schema. New request IDs are scoped by product and authenticated login.
@@ -118,7 +121,11 @@ the CLI emits generic failure codes and never echoes the DSN.
 `python3 -m unittest discover -s tests -v` includes real SQL tests using a fresh
 PostgreSQL 16 cluster under `/tmp`, socket-only, with fixture identities and no
 caller DSN. PostgreSQL 16 binaries and psycopg2 are required; tests report a skip
-if the binaries are absent. No installed database is modified. The source has no
+if the binaries are absent in an ad hoc local run. Both CI workflows explicitly
+require PostgreSQL 16 binaries and install the hash-pinned driver from
+`requirements-ci.txt` into an isolated directory exposed through `PYTHONPATH`,
+including under `python3 -S`. Missing prerequisites fail CI before the suite; all
+20 SQL/CLI tests must execute. No installed database is modified. The source has no
 schema definition for the installed legacy `scope_certifications` table; tests
 construct its relevant contract explicitly. Deployments lacking it cannot validate
 nonempty prerequisites and must stop for reviewed schema compatibility work.
@@ -133,3 +140,8 @@ this patch deliberately provides no destructive down migration.
 Actual installation, login provisioning, product grants, task assignments,
 authenticated certification/lease integration, current-SHA checks/review,
 repository protection and every promotion step remain operator prerequisites.
+
+The source-preparation branch recorded in governance is not a registered runtime
+candidate and is not required to match the runtime atomic branch grammar. Its
+registration, lease and certification remain null; never infer a live binding
+from a source-preparation branch label.
