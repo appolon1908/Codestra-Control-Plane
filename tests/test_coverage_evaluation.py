@@ -18,9 +18,14 @@ class CoverageEvaluationTests(unittest.TestCase):
         return evaluate_coverage((binding or self.binding,), lambda request: evidence or self.evidence)[0]
 
     def test_default_reports_every_supplied_repo_without_filtering(self):
-        requests = tuple(replace(self.binding, repository_id=i, pr_number=i) for i in range(1, 14))
+        # Approved audit names; IDs and PRs remain synthetic, including repos with no open PR.
+        repositories = ('appolon1908/Middleware-', 'appolon1908/Codestra-Control-Plane', 'appolon1908/Codestra-Mission-Control', 'appolon1908/codestra-foundation', 'appolon1908/codestra-provisioning-service', 'appolon1908/codestra-ruleset-toolkit', 'appolon1908/Caddy', 'appolon1908/Kong', 'appolon1908/Keycloak', 'appolon1908/Codestra-OpenBao', 'appolon1908/OpenAPI', 'appolon1908/Codestra-PostgreSQL', 'appolon1908/openrerefine-')
+        requests = tuple(replace(self.binding, repository_id=i, pr_number=i,
+                                 promotion=replace(REQUEST, repository=repo, product=repo.split('/', 1)[1]))
+                         for i, repo in enumerate(repositories, 1))
         results = evaluate_coverage(requests)
         self.assertEqual(len(results), 13)
+        self.assertEqual({r.binding.promotion.repository for r in results}, set(repositories))
         self.assertTrue(all(r.status == 'UNAVAILABLE' and not r.authority and not r.publish for r in results))
 
     def test_complete_mock_evidence_remains_inactive(self):
