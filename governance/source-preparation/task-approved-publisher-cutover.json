@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "approved-publisher-cutover",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--approved-publisher-cutover",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "f3a010c21bfa07111f1e7deeeac0f91ef5af1bfd",
+  "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "worktree": "/tmp/cp-approved-publisher-cutover-20261015",
+  "authorization_basis": "Human2026-10-15 15:38UTC Sentinel_a91d9ff56f608191aa25345a18987d27: you can approve it, approving requested49catalog and soleprimarypublisher design described at14:49UTC Sentinel_9056de78bcd881918fde8ce83975e3c2. Parent explicitly authorizes separate source task; no runtime approval.",
+  "scope": "Apply exact six approved catalog additions; source-only designated-service/process ownership guards; retire competing publisher source command; pinned candidate package and specific cutover/rollback approval documentation. No authenticated adapter/issuer policy invention or runtime activation. PR22 review/promotion remains separate.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}

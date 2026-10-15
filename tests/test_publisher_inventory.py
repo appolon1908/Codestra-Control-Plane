@@ -53,7 +53,7 @@ class PublisherInventoryTests(unittest.TestCase):
                      [[self.pr(page * 100 + i + 1) for i in range(100)] for page in range(100)])
         for pages in scenarios:
             with self.subTest(pages=len(pages)):
-                main = self.module['main']
+                main = self.module['reconcile']
                 read = mock.Mock(side_effect=pages)
                 validate, post = mock.Mock(), mock.Mock()
                 with mock.patch.dict(main.__globals__, {
@@ -85,7 +85,7 @@ class PublisherInventoryTests(unittest.TestCase):
         self.assertEqual(read.call_count, 2)
 
     def test_main_evaluates_pr_on_second_page_after_complete_inventory(self):
-        main = self.module['main']
+        main = self.module['reconcile']
         read = mock.Mock(side_effect=[[self.pr(i) for i in range(1, 101)], [self.pr(101)]])
         validate = mock.Mock(return_value=(False, 'fixture denial'))
         post = mock.Mock()

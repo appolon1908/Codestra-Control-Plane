@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+import json, os, subprocess, psycopg2, runpy, re
+from collections import Counter
+from psycopg2.extras import RealDictCursor
+
+OWNER="appolon1908"
+CONTEXTS=("codestra-control-plane", "codestra/control-plane")
+DSN=os.environ.get("CODESTRA_CONTROL_DSN","host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra")
+PRIOR_GOVERNED_REPOS=frozenset({"Middleware-","Kong","Caddy","Keycloak","Codestra-OpenBao","N8N"})
+# Explicit owner-approved active scope, not every repository in the registry.
+# Coverage selects repositories for evaluation; it grants no certification.
+ADDITIONAL_GOVERNED_REPOS=frozenset({
+    "Backstage", "Breero.com", "Codestra-Alertmanager", "Codestra-Alloy",
+    "Codestra-Blackbox-Exporter", "Codestra-Grafana-", "Codestra-Loki",
+    "Codestra-Mission-Control", "Codestra-Node-Exporter", "Codestra-Postgres-Exporter",
+    "Codestra-Prometheus", "Codestra-Redis-Exporter", "Codestra-Telemetry",
+    "Codestra-Tempo", "Codestra-cAdvisor", "Evolution-API", "Frontend-Resturant-",
+    "Infustruction-repo", "LARIM-A-Backend", "LARIM-A-Fornt-end", "Leads-Workstation",
+    "Meltano-Leads-Importer", "Moneybee-Backend", "Moneybee-frontend-", "Odoo",
+    "Sentry", "Superset", "Wazuh", "WhatsApp", "WhatsApp-Frontend", "backend2",
+    "beyvra-backend", "beyvra-frontend", "codestra", "codestra-provisioning-service",
+    "klyrow.com", "kyqra-crawler",
+})
+GOVERNED_REPOS=PRIOR_GOVERNED_REPOS | ADDITIONAL_GOVERNED_REPOS
+BOOTSTRAP_HEADS={"governance/development-control-plane-v1","workstation/governance-control-plane"}
+ROOT_BASES={"main","development","release/production-activation"}
+AUTHORITY=runpy.run_path(str(__import__("pathlib").Path(__file__).resolve().with_name("codestra-github-check")),run_name="statusd_authority")
+MIGRATION_REASON=AUTHORITY["migration_reason"]
+PROMOTION_LEVELS=AUTHORITY["promotion_levels"]
+PROMOTION_ROUTE_ERROR=AUTHORITY["promotion_route_error"]
+
+class RateLimited(RuntimeError):
+    """Stop the scheduled cycle instead of retrying throttled GitHub calls."""
+
+def run(args,check=True):
+    p=subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    if check and p.returncode:
+        response=(p.stderr+"\n"+p.stdout).lower()
+        if args[:2]==["gh","api"] and ("rate limit" in response or "http 429" in response):
+            raise RateLimited("GitHub throttled the request; no retry in this cycle")
+        raise RuntimeError(p.stderr.strip() or p.stdout.strip())
+    return p
+
+def gh_json(path):
+    return json.loads(run(["gh","api",path]).stdout)
+
+def open_prs(repo):
+    """Collect a bounded inventory before any validation/publication for a repo.
+
+    API lists are not transactional snapshots. Duplicate IDs reveal pagination
+    drift and fail closed; no partial page set is used after errors or exhaustion.
+    """
+    collected = []
+    seen = set()
+    for page in range(1, 101):
+        rows = gh_json(f"repos/{OWNER}/{repo}/pulls?state=open&per_page=100&page={page}")
+        if not isinstance(rows, list) or len(rows) > 100:
+            raise RuntimeError("invalid pull request response")
+        for pr in rows:
+            if (not isinstance(pr, dict) or type(pr.get("number")) is not int
+                    or pr["number"] <= 0 or pr["number"] in seen
+                    or not isinstance(pr.get("head"), dict)
+                    or not isinstance(pr.get("base"), dict)
+                    or not isinstance(pr["head"].get("ref"), str) or not pr["head"]["ref"]
+                    or not isinstance(pr["base"].get("ref"), str) or not pr["base"]["ref"]
+                    or not isinstance(pr["head"].get("sha"), str)
+                    or not re.fullmatch(r"[0-9a-f]{40}", pr["head"]["sha"])
+                    or not isinstance(pr.get("html_url"), str) or not pr["html_url"]):
+                raise RuntimeError("invalid or duplicate pull request entry")
+            seen.add(pr["number"])
+            collected.append(pr)
+        if len(rows) < 100:
+            return collected
+    raise RuntimeError("pull request pagination limit reached; publication refused")
+
+
+def remote_sha(repo_path,ref):
+    p=run(["git","-c",f"safe.directory={repo_path}","-C",repo_path,
+           "ls-remote","origin",f"refs/heads/{ref}"],check=False)
+    return p.stdout.split()[0] if p.returncode==0 and p.stdout.strip() else ""
+
+def latest_statuses(repo, sha):
+    """Read newest-first status history before deciding whether to append.
+
+    Stop once both owned contexts are known. A missing alias requires reading
+    through the end; a failed or incomplete lookup must not trigger writes.
+    """
+    latest = {}
+    for page in range(1, 101):
+        statuses = gh_json(
+            f"repos/{OWNER}/{repo}/commits/{sha}/statuses?per_page=100&page={page}"
+        )
+        if not isinstance(statuses, list) or len(statuses) > 100:
+            raise RuntimeError("invalid commit status response")
+        for status in statuses:
+            if not isinstance(status, dict) or not isinstance(status.get("context"), str):
+                raise RuntimeError("invalid commit status entry")
+            context = status["context"]
+            if context in CONTEXTS and context not in latest:
+                if status.get("state") not in {"success", "failure", "pending", "error"}:
+                    raise RuntimeError("invalid commit status state")
+                latest[context] = status
+        if len(latest) == len(CONTEXTS) or len(statuses) < 100:
+            return latest
+    raise RuntimeError("commit status pagination limit reached; publication refused")
+
+
+def post(repo,sha,state,desc,url):
+    # Compare with the remote's latest result, including after a process restart
+    # or a partial dual-context write. Never treat an older success as current.
+    latest = latest_statuses(repo, sha)
+    description = desc[:140]
+    for context in CONTEXTS:
+        previous = latest.get(context, {})
+        if (previous.get("state"), previous.get("description"), previous.get("target_url")) == (state, description, url):
+            continue
+        run([
+          "gh","api","--method","POST",f"repos/{OWNER}/{repo}/statuses/{sha}",
+          "-f",f"state={state}",
+          "-f",f"context={context}",
+          "-f",f"description={description}",
+          "-f",f"target_url={url}"
+        ])
+
+def aliases(c):
+    with c.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT product,repository,test_branch,promotion_chain FROM products ORDER BY repository")
+        rows=cur.fetchall()
+    counts=Counter(row["repository"].casefold() for row in rows if isinstance(row.get("repository"),str))
+    out=[]
+    for row in rows:
+        repo_full=row["repository"]
+        if not isinstance(repo_full,str) or not repo_full.startswith(OWNER+"/"):
+            continue
+        repo=repo_full.split("/",1)[1]
+        if repo not in GOVERNED_REPOS:
+            continue
+        if repo in ADDITIONAL_GOVERNED_REPOS:
+            if (counts[repo_full.casefold()]!=1 or row.get("product")!=repo
+                    or row.get("test_branch")!="testing"
+                    or row.get("promotion_chain")!=["development","testing","staging","production"]):
+                print(f"COVERAGE_BLOCKED repo={repo_full} reason=registry_mapping_mismatch")
+                continue
+        out.append((repo,row["product"],row["test_branch"],f"/srv/codestra/apps/{repo}"))
+    return out
+
+def section_target(c,product,base):
+    with c.cursor() as cur:
+        cur.execute("SELECT 1 FROM sections WHERE product=%s AND branch=%s",(product,base))
+        return bool(cur.fetchone())
+
+def governed(c,product,test_branch,base):
+    if base in {"main","development",test_branch,"staging","production"}:
+        return True
+    return section_target(c,product,base)
+
+def validate(c,product,test_branch,repo_path,head,base,sha):
+    observed=remote_sha(repo_path,head)
+    if observed!=sha:
+        return False,"remote head SHA mismatch"
+
+    # Both entry points consume the same exact-scope and SHA-bound policy.
+    # A migration exception never overrides the remote-SHA check above.
+    reason = MIGRATION_REASON(product, head, base, sha)
+    if reason is not None:
+        return True, f"exact-SHA {reason} authority"
+
+    levels = PROMOTION_LEVELS(head, base, test_branch)
+    if levels is None:
+        return False, PROMOTION_ROUTE_ERROR(head, base)
+
+    with c.cursor(cursor_factory=RealDictCursor) as cur:
+        if levels == ("subsection", "section"):
+            cur.execute(
+              "SELECT status,remote_sha,parent_branch,exact_sha_certified FROM workstations WHERE product=%s AND branch=%s",
+              (product,head)
+            )
+            row=cur.fetchone()
+            if not row or row["parent_branch"]!=base:
+                return False,"subsection parent mismatch"
+            return bool(row["status"]=="CERTIFIED" and row["remote_sha"]==sha
+                        and row.get("exact_sha_certified")==sha),"subsection exact-SHA certification"
+
+        if base=="development":
+            cur.execute("SELECT section_key FROM sections WHERE product=%s AND branch=%s",(product,head))
+            sec=cur.fetchone()
+            if not sec:
+                return False,f"invalid section {head}"
+            cur.execute("""SELECT status,sha FROM scope_certifications
+              WHERE product=%s AND scope_type='SECTION' AND scope_name=%s""",
+              (product,sec["section_key"]))
+            row=cur.fetchone()
+            return bool(row and row["status"]=="CERTIFIED" and row["sha"]==sha),f"section {sec['section_key']} exact-SHA certification"
+
+        mapping={
+          ("development",test_branch):("DEVELOPMENT","development"),
+          (test_branch,"staging"):("TESTING",test_branch),
+          ("staging","production"):("STAGING","staging"),
+          ("production","main"):("PRODUCTION","production"),
+        }
+        key=(head,base)
+        if key in mapping:
+            typ,name=mapping[key]
+            cur.execute("""SELECT status,sha FROM scope_certifications
+              WHERE product=%s AND scope_type=%s AND scope_name=%s""",
+              (product,typ,name))
+            row=cur.fetchone()
+            return bool(row and row["status"]=="CERTIFIED" and row["sha"]==sha),f"{name} exact-SHA certification"
+
+    return False,f"invalid promotion path {head}->{base}"
+
+def main():
+    c=psycopg2.connect(DSN)
+    checked=passed=failed=repos_seen=errors=0
+    for repo,product,test_branch,repo_path in aliases(c):
+        if not os.path.isdir(repo_path):
+            continue
+        try:
+            prs=open_prs(repo)
+            repos_seen+=1
+        except RateLimited as exc:
+            raise SystemExit(f"RATE_LIMITED repo={repo}: {exc}") from None
+        except Exception as exc:
+            print(f"REPO_ERROR repo={repo} error={str(exc)[:120]}")
+            errors+=1
+            continue
+        for pr in prs:
+            head=pr["head"]["ref"]; base=pr["base"]["ref"]; sha=pr["head"]["sha"]
+            is_bootstrap=head in BOOTSTRAP_HEADS and base in ROOT_BASES
+            if not is_bootstrap and not governed(c,product,test_branch,base):
+                continue
+            ok,reason=validate(c,product,test_branch,repo_path,head,base,sha)
+            try:
+                post(repo,sha,"success" if ok else "failure",
+                     ("CERTIFIED: " if ok else "BLOCKED: ")+reason,
+                     pr["html_url"])
+            except RateLimited as exc:
+                raise SystemExit(f"RATE_LIMITED repo={repo} pr={pr['number']}: {exc}") from None
+            except Exception as exc:
+                print(f"STATUS_ERROR repo={repo} pr={pr['number']} error={str(exc)[:120]}")
+                errors+=1
+                continue
+            checked+=1; passed+=int(ok); failed+=int(not ok)
+            print(f"STATUS repo={repo} pr={pr['number']} state={'PASS' if ok else 'BLOCK'} reason={reason}")
+    print(f"REPOSITORIES={repos_seen} CHECKED={checked} PASS={passed} FAIL={failed} ERRORS={errors}")
+    raise SystemExit(1 if errors else 0)
+
+if __name__=="__main__":
+    main()

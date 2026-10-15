@@ -45,7 +45,7 @@ class PublisherRateLimitTests(unittest.TestCase):
         self.assertNotIsInstance(error.exception, rate_limited)
 
     def main_context(self, **overrides):
-        return mock.patch.dict(self.module["main"].__globals__, {
+        return mock.patch.dict(self.module["reconcile"].__globals__, {
             "psycopg2": types.SimpleNamespace(connect=lambda *_: object()),
             "aliases": lambda *_: [("Middleware-", "Middleware-", "testing", "/unused"),
                                      ("Kong", "Kong", "testing", "/unused")],
@@ -56,7 +56,7 @@ class PublisherRateLimitTests(unittest.TestCase):
         read = mock.Mock(side_effect=self.rate_limit_type()("throttled"))
         with self.main_context(gh_json=read), mock.patch("os.path.isdir", return_value=True):
             with self.assertRaisesRegex(SystemExit, "RATE_LIMITED"):
-                self.module["main"]()
+                self.module["reconcile"]()
         read.assert_called_once()
 
     def test_rate_limited_post_stops_before_next_pr(self):
@@ -67,7 +67,7 @@ class PublisherRateLimitTests(unittest.TestCase):
         with self.main_context(gh_json=lambda *_: [pr, dict(pr, number=2, head=dict(ref="fixture-two", sha="b" * 40))], post=post, validate=validate), \
                 mock.patch("os.path.isdir", return_value=True):
             with self.assertRaisesRegex(SystemExit, "RATE_LIMITED"):
-                self.module["main"]()
+                self.module["reconcile"]()
         post.assert_called_once()
         validate.assert_called_once()
 

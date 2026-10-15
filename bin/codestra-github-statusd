@@ -2,6 +2,10 @@
 import json, os, subprocess, psycopg2, runpy, re
 from collections import Counter
 from psycopg2.extras import RealDictCursor
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from codestra_control.publisher_ownership import (PublisherUnavailable, publisher_session, require_publication_adapter)
 
 OWNER="appolon1908"
 CONTEXTS=("codestra-control-plane", "codestra/control-plane")
@@ -20,6 +24,8 @@ ADDITIONAL_GOVERNED_REPOS=frozenset({
     "Sentry", "Superset", "Wazuh", "WhatsApp", "WhatsApp-Frontend", "backend2",
     "beyvra-backend", "beyvra-frontend", "codestra", "codestra-provisioning-service",
     "klyrow.com", "kyqra-crawler",
+    "Codestra-Control-Plane", "Codestra-PostgreSQL", "OpenAPI",
+    "codestra-foundation", "codestra-ruleset-toolkit", "openrerefine-",
 })
 GOVERNED_REPOS=PRIOR_GOVERNED_REPOS | ADDITIONAL_GOVERNED_REPOS
 BOOTSTRAP_HEADS={"governance/development-control-plane-v1","workstation/governance-control-plane"}
@@ -106,6 +112,7 @@ def latest_statuses(repo, sha):
 
 
 def post(repo,sha,state,desc,url):
+    require_publication_adapter()
     # Compare with the remote's latest result, including after a process restart
     # or a partial dual-context write. Never treat an older success as current.
     latest = latest_statuses(repo, sha)
@@ -209,7 +216,7 @@ def validate(c,product,test_branch,repo_path,head,base,sha):
 
     return False,f"invalid promotion path {head}->{base}"
 
-def main():
+def reconcile():
     c=psycopg2.connect(DSN)
     checked=passed=failed=repos_seen=errors=0
     for repo,product,test_branch,repo_path in aliases(c):
@@ -244,6 +251,14 @@ def main():
             print(f"STATUS repo={repo} pr={pr['number']} state={'PASS' if ok else 'BLOCK'} reason={reason}")
     print(f"REPOSITORIES={repos_seen} CHECKED={checked} PASS={passed} FAIL={failed} ERRORS={errors}")
     raise SystemExit(1 if errors else 0)
+
+def main():
+    try:
+        with publisher_session():
+            require_publication_adapter()
+            reconcile()
+    except PublisherUnavailable as exc:
+        raise SystemExit("PUBLICATION_REFUSED " + str(exc)) from None
 
 if __name__=="__main__":
     main()
