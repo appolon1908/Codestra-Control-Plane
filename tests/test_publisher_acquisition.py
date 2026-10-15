@@ -158,3 +158,37 @@ class AcquisitionTests(unittest.TestCase):
         issuer=self.acquired.issuer
         for value in (None,replace(issuer,expires_at=fixture.NOW),replace(issuer,binding_hash='0'*64),replace(issuer,name='quality'),replace(issuer,name='codestra-control-plane')):
             with self.subTest(value=value),self.assertRaises(PublicationDenied):self.verifier.verify(replace(self.acquired,issuer=value),fixture.NOW)
+
+
+class AuthenticatedSessionPredicateTests(unittest.TestCase):
+    """Exercise the reader's scalar SQL identity predicate with synthetic SQL rows.
+
+    SQLite evaluates the shared equality/AND/IS NULL subset only. Privilege/TLS
+    result is deliberately true to isolate authentication; no PostgreSQL session,
+    credential, role or authority store is created or used by these tests.
+    """
+    class Cursor:
+        def __init__(self, authenticated_identity, current='publisher-fixture'):
+            self.authenticated_identity=authenticated_identity
+            self.current=current
+        def execute(self, statement):
+            import sqlite3
+            predicate=statement.split('SELECT',1)[1].split(',\n',1)[0].strip()
+            with sqlite3.connect(':memory:') as database:
+                row=database.execute(
+                    'SELECT '+predicate+' FROM (SELECT ? AS session_user, ? AS current_user, ? AS system_user)',
+                    ('publisher-fixture',self.current,self.authenticated_identity),
+                ).fetchone()
+            self.result=(bool(row[0]),True)
+        def fetchone(self):return self.result
+
+    def test_trust_cannot_supply_authenticated_role_even_with_verified_tls(self):
+        with self.assertRaisesRegex(PublicationDenied,'RESTRICTED_AUTHENTICATED_SESSION_REQUIRED'):
+            RestrictedRegistry._roles(self.Cursor(None))
+
+    def test_authenticated_identity_with_unchanged_role_preserves_reader_gate(self):
+        RestrictedRegistry._roles(self.Cursor('scram-sha-256:publisher-fixture'))
+
+    def test_authenticated_role_switch_still_denied(self):
+        with self.assertRaisesRegex(PublicationDenied,'RESTRICTED_AUTHENTICATED_SESSION_REQUIRED'):
+            RestrictedRegistry._roles(self.Cursor('scram-sha-256:publisher-fixture',current='different-role'))

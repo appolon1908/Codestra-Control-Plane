@@ -45,7 +45,7 @@ class RestrictedRegistry:
         self.connection.set_session(readonly=True,autocommit=False)
     @staticmethod
     def _roles(cur):
-        cur.execute("""SELECT session_user=current_user,
+        cur.execute("""SELECT session_user=current_user AND system_user IS NOT NULL,
          NOT (r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls)
          AND NOT pg_has_role(session_user,n.nspowner,'MEMBER')
          AND NOT has_schema_privilege(session_user,'publisher_authority','CREATE')
