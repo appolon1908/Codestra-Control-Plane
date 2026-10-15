@@ -64,7 +64,7 @@ class PublisherRateLimitTests(unittest.TestCase):
                   number=1, html_url="https://example.invalid/pr/1")
         post = mock.Mock(side_effect=self.rate_limit_type()("throttled"))
         validate = mock.Mock(return_value=(False, "fixture denial"))
-        with self.main_context(gh_json=lambda *_: [pr, pr], post=post, validate=validate), \
+        with self.main_context(gh_json=lambda *_: [pr, dict(pr, number=2, head=dict(ref="fixture-two", sha="b" * 40))], post=post, validate=validate), \
                 mock.patch("os.path.isdir", return_value=True):
             with self.assertRaisesRegex(SystemExit, "RATE_LIMITED"):
                 self.module["main"]()
