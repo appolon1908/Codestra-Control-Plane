@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "assignment-backed-lease-issuer",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--assignment-backed-lease-issuer",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "6b3284fc0dd3bb1e451abc0a0eb75f7c9d48c5e2",
+  "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "worktree": "/tmp/cp-assignment-lease-issuer-20261015",
+  "authorization": "Explicit user source implementation: have them code whats missing; have all agents push pr work; do the controller assigment; so fix it and implement. Parent directs existing sole owner to implement authenticated assignment-backed lease issuer in source.",
+  "scope": "Authenticated assignment-bound issuer, independent actual-materialization verifier, transactional exclusivity, bounded lifecycle and audit; disposable-service tests, local commits and ordinary source draft PR publication only.",
+  "runtime_assignment": null,
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false,
+  "installation_performed": false
+}

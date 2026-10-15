@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "reconcile-pr9-main-conflicts-with-approved-subsection-policy",
+  "owner": "Codex task 01a13af3-ce33-75c1-a6d3-640fa06e4027",
+  "branch": "atomic/cp-01-foundation--02-main-conflict-reconciliation-20261014",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "9ab5690708cd8f72a8379da1121604a95a1f990f",
+  "observed_main": "e99ff6f0b1ac30cd9d591f90630e68c9affe1894",
+  "authorization_basis": "User requested PR9 conflict source repair, testing and publication while preserving earlier controller fixes and the existing exact-SHA Keycloak exception. No authorization to merge PR9, skip promotion stages or deploy.",
+  "scope": "Source-only atomic reconciliation of observed main into the subsection candidate; preserve both parent histories, adapt inherited offline tests, independent review and draft publication. Coverage source work is preserved and paused in its separate worktree.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}

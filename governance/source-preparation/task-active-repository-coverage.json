@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "extend-publisher-source-coverage-to-verified-active-repositories",
+  "owner": "Codex task 01a13af3-ce33-75c1-a6d3-640fa06e4027",
+  "branch": "atomic/cp-01-foundation--02-active-repository-coverage-20261014",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "7ec0dc586b92bba651103aea51e71eaf894c6228",
+  "depends_on_source_pr": "https://github.com/appolon1908/Codestra-Control-Plane/pull/10",
+  "dependency_governed_acceptance": "pending",
+  "authorization_basis": "User approved source coverage for Infustruction-repo and all verified active repositories on 2026-10-14 at 17:35:18 UTC. Scope is the verified working set, not all GitHub repositories.",
+  "scope": "43 canonical source coverage entries; retain six prior entries, add 37 verified active repositories, enforce reviewed new mappings, preserve all certification gates, offline regressions, independent source review and draft publication.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}

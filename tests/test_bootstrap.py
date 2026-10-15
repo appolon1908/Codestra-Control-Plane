@@ -114,6 +114,50 @@ class BootstrapTests(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
             self.assertEqual(sum(pool.map(reserve, range(12))), 1)
 
+    def test_sidecar_disappearing_during_initialization_preserves_replay_fencing(self):
+        original_exists = Path.exists
+        for suffix in ("-journal", "-wal", "-shm"):
+            with self.subTest(suffix=suffix):
+                path = self.root / ("transient" + suffix + ".sqlite")
+                sidecar = Path(str(path) + suffix)
+
+                def previously_present(candidate):
+                    # SQLite removed the sidecar after an earlier existence probe.
+                    return True if candidate == sidecar else original_exists(candidate)
+
+                with patch.object(Path, "exists", previously_present):
+                    ledger = bootstrap.ReplayLedger(path)
+                ledger.reserve("a" * 64, "b" * 64, self.binding,
+                               now=110, expires_at=200)
+                with self.assertRaisesRegex(bootstrap.BootstrapDenied,
+                                            "REQUEST_ALREADY_CONSUMED"):
+                    bootstrap.ReplayLedger(path).reserve(
+                        "a" * 64, "b" * 64, self.binding, now=111, expires_at=200)
+
+    def test_sidecar_inspection_errors_are_not_treated_as_absence(self):
+        original_lstat = Path.lstat
+        sidecar = Path(str(self.ledger.path) + "-journal")
+
+        def inaccessible(candidate, *args, **kwargs):
+            if candidate == sidecar:
+                raise PermissionError("fixture denies inspection")
+            return original_lstat(candidate, *args, **kwargs)
+
+        with patch.object(Path, "lstat", inaccessible), self.assertRaises(PermissionError):
+            bootstrap.ReplayLedger(self.ledger.path)
+
+    def test_dangling_sidecar_symlinks_are_rejected(self):
+        for suffix in ("-journal", "-wal", "-shm"):
+            with self.subTest(suffix=suffix):
+                sidecar = Path(str(self.ledger.path) + suffix)
+                sidecar.symlink_to(self.root / "missing")
+                try:
+                    with self.assertRaisesRegex(bootstrap.BootstrapDenied,
+                                                "UNTRUSTED_LEDGER_SIDECAR"):
+                        bootstrap.ReplayLedger(self.ledger.path)
+                finally:
+                    sidecar.unlink()
+
     def test_failed_or_uncertain_attempt_never_reopens_nonce(self):
         self.ledger.reserve("a" * 64, "b" * 64, self.binding, now=110, expires_at=200)
         self.ledger.finish("a" * 64, "b" * 64, "UNCERTAIN")

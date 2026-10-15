@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import argparse, json, re, sys, subprocess
+import argparse, json, re, sys, subprocess, runpy
+from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 
@@ -16,6 +17,10 @@ def canonical_product(name):
 
 DSN="host=127.0.0.1 port=5432 dbname=codestra_dev_control user=codestra"
 MANDATORY=("ci_exact_sha","review","regression","security","clean_tree","remote_sha_match")
+PROMOTION_LEVELS=runpy.run_path(
+  str(Path(__file__).resolve().with_name("codestra-github-check")),
+  run_name="promotion_route_authority",
+)["promotion_levels"]
 
 def post_github_status(repository, sha, decision, reasons):
   state="success" if decision=="PASS" else "failure"
@@ -48,15 +53,19 @@ def main():
       cur.execute("SELECT 1 FROM promotion_edges WHERE source_level=%s AND target_level=%s",(x.source_level,x.target_level))
       if not cur.fetchone(): reasons.append("ILLEGAL_PROMOTION_EDGE")
 
+      # Atomic registration currently returns authority=false/ready=false.
+      # Legacy PASS evidence must not substitute for the missing trusted adapter.
+      if x.source_level=="atomic_task":
+        reasons.append("ATOMIC_CANDIDATE_VERIFIER_UNAVAILABLE")
+
       if product:
         test_branch=product["test_branch"]
-        expected={
-          ("development","testing"):("development",test_branch),
-          ("testing","staging"):(test_branch,"staging"),
-          ("staging","production"):("staging","production"),
-        }
-        pair=(x.source_level,x.target_level)
-        if pair in expected and (x.source_ref,x.target_ref)!=expected[pair]:
+        # SQL retains logical 'test'; both spellings must validate actual refs.
+        # Keep the exact caller edge/evidence queries above and below unchanged:
+        # this normalization never creates an edge or upgrades stored evidence.
+        levels=tuple("testing" if level=="test" else level
+                     for level in (x.source_level,x.target_level))
+        if PROMOTION_LEVELS(x.source_ref,x.target_ref,test_branch)!=levels:
           reasons.append("BRANCH_CHAIN_MISMATCH")
         if x.target_level=="production":
           if product["production_go"] or product["live_capabilities_enabled"] or product["external_effects_enabled"]:
