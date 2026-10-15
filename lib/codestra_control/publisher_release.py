@@ -7,7 +7,7 @@ import re
 import subprocess
 
 ENTRYPOINTS = ('bin/codestra-github-statusd', 'bin/codestra-github-check',
-               'legacy/bin/github-status-sync', 'requirements-publisher.txt')
+               'legacy/bin/github-status-sync', 'requirements-publisher.txt', 'runtime-publisher-tools.json')
 
 
 def git(root, *args):
@@ -42,6 +42,9 @@ def prepare_release(root, source_sha, output, driver_wheel):
     wheel_sha = hashlib.sha256(wheel_bytes).hexdigest()
     if match is None or match[1] != wheel_sha:
         raise ValueError('DRIVER_HASH_MISMATCH')
+    tools=json.loads(entries['runtime-publisher-tools.json'][1])
+    if tools.get('schema')!='codestra.publisher-system-tools.v1' or tools.get('target_verified') is not False or tools.get('provisioning_approved') is not False:
+        raise ValueError('INVALID_SYSTEM_TOOL_REQUIREMENTS')
     output = Path(output)
     output.mkdir(mode=0o700)  # Refuse overwrites, including an existing symlink.
     manifest = {'schema': 'codestra.publisher-candidate.v1', 'source_commit': source_sha,
@@ -54,13 +57,14 @@ def prepare_release(root, source_sha, output, driver_wheel):
                                     'unused alias verified stopped', 'rollback backup verified before any installed write'],
                 'designated_service': 'codestra-control-plane-status.service',
                 'contexts': ['codestra-control-plane', 'codestra/control-plane'],
+                'code_custody': {'required_owner': 'root', 'group_writable': False, 'other_writable': False, 'target_verified': False, 'provisioning_approved': False, 'isolated_imports_required': True, 'bytecode_and_site_packages_custody_required': True},
                 'runtime': {'python': 'CPython3.12', 'platform': 'Linux x86_64',
                             'builder_python_version': platform.python_version(),
                             'target_interpreter_verified': False, 'target_driver_import_verified': False,
-                            'driver': 'psycopg2-binary2.9.10', 'driver_installation_approved': False},
-                'unmet_gates': ['PR22 independent exact-head review and governed integration',
+                            'system_tools': tools, 'driver': 'psycopg2-binary2.9.10', 'driver_installation_approved': False},
+                'unmet_gates': ['governed dependency integration and candidate exact-head review',
                                 'candidate independent review and governed promotion',
-                                'authenticated publication adapter and issuer contract',
+                                'accepted operator startup configuration, credential custody and actual issuer identities',
                                 'registered bindings and genuine owned leases',
                                 'separate installation/cutover approval'], 'files': []}
     for path, (mode, data) in sorted(entries.items()):
