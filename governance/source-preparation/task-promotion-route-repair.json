@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "reconcile-controller-promotion-reference-validation",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--promotion-route-repair",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "source_base": "c1d703ef95d8d3541d543e25c681a9114330b679",
+  "authorization_basis": "User explicitly requested work on the control-plane checks and authorized source updates and publication. AGENTS.md permits in-scope source preparation while runtime acceptance is missing.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}

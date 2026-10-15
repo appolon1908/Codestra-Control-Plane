@@ -58,6 +58,42 @@ def canonical_product(name: str) -> str:
     return PRODUCT_ALIASES.get(name, name)
 
 
+def promotion_levels(head: str, base: str, test_branch: str) -> tuple[str, str] | None:
+    """Resolve actual refs before consulting caller labels or certificates.
+
+    This validates hierarchy only. A matching route still needs the existing
+    product, registered scope, current SHA and certification checks below.
+    """
+    if any(not isinstance(ref, str) or not ref for ref in (head, base, test_branch)):
+        return None
+    if test_branch in {"development", "staging", "production", "main"} or \
+            test_branch.startswith(("section/", "subsection/", "atomic/")):
+        return None
+    if head == base:
+        return None
+    if head.startswith("subsection/"):
+        section = head[len("subsection/"):].split("--", 1)[0]
+        if section and base == f"section/{section}":
+            return "subsection", "section"
+        return None
+    if head.startswith("section/") and head[len("section/"):] and base == "development":
+        return "section", "development"
+    return {
+        ("development", test_branch): ("development", "testing"),
+        (test_branch, "staging"): ("testing", "staging"),
+        ("staging", "production"): ("staging", "production"),
+        ("production", "main"): ("production", "main"),
+    }.get((head, base))
+
+
+def promotion_route_error(head: str, base: str) -> str:
+    if head.startswith("subsection/"):
+        return "matching_section_target_required: subsection -> matching section"
+    if base == "development":
+        return "section_source_required: subsection -> section -> development"
+    return f"invalid promotion path {head}->{base}"
+
+
 def migration_reason(product: str, head: str, base: str, head_sha: str) -> str | None:
     pair = (head, base)
     if product == "Keycloak":
@@ -140,7 +176,13 @@ def main() -> int:
                 return 1
             test_branch = product["test_branch"]
 
-            if args.head_ref.startswith("subsection/"):
+            levels = promotion_levels(args.head_ref, args.base_ref, test_branch)
+            if levels is None:
+                print("CONTROL_PLANE_CERTIFICATION=FAIL "
+                      + promotion_route_error(args.head_ref, args.base_ref))
+                return 1
+
+            if levels == ("subsection", "section"):
                 cursor.execute(
                     """SELECT status,remote_sha,parent_branch,exact_sha_certified
                        FROM workstations
