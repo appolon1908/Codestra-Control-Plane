@@ -7,7 +7,7 @@ import re
 import subprocess
 
 ENTRYPOINTS = ('bin/codestra-github-statusd', 'bin/codestra-github-check',
-               'legacy/bin/github-status-sync', 'requirements-publisher.txt', 'runtime-publisher-tools.json')
+               'legacy/bin/github-status-sync', 'requirements-publisher.txt', 'runtime-publisher-tools.json', 'bin/codestra-lease')
 
 
 def git(root, *args):

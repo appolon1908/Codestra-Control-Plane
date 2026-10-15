@@ -62,6 +62,20 @@ class GitHubAppClient:
         require(expiry.tzinfo is not None and expiry>now,'TOKEN_EXPIRED')
         require(type(token['token']) is str and bool(token['token']),'TOKEN_UNAVAILABLE')
         self._token=token['token'];self._expires=min(expiry,authority.expires_at)
+    def authorize_readonly(self,app_id,installation_id,repository_id,now):
+        """Independent materializer credentials cannot have write installation grants."""
+        self._token=None;self._expires=None
+        jwt=self.jwt_provider()
+        require(self.request('GET','/app',jwt)['id']==app_id,'APP_IDENTITY_MISMATCH')
+        installation=self.request('GET',f'/app/installations/{installation_id}',jwt)
+        required={'metadata':'read','contents':'read','checks':'read'}
+        require(installation['id']==installation_id and installation['app_id']==app_id and installation['suspended_at'] is None,'INSTALLATION_REVOKED_OR_MISMATCHED')
+        require(required.items()<=installation['permissions'].items() and all(v=='read' for v in installation['permissions'].values()),'READONLY_INSTALLATION_REQUIRED')
+        token=self.request('POST',f'/app/installations/{installation_id}/access_tokens',jwt,{'repository_ids':[repository_id],'permissions':required})
+        require(token['permissions']==required and {v['id'] for v in token['repositories']}=={repository_id},'TOKEN_SCOPE_MISMATCH')
+        expiry=datetime.fromisoformat(token['expires_at'].replace('Z','+00:00'))
+        require(expiry.tzinfo is not None and expiry>now and type(token['token']) is str and bool(token['token']),'TOKEN_EXPIRED')
+        self._token=token['token'];self._expires=expiry
     def inventory(self,app_id,installation_id,repositories):
         """Complete read-only discovery of the fixed approved source catalog.
 

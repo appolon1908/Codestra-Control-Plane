@@ -46,6 +46,8 @@ class Acquired:
     pr_number:int
     certificate_check_id:int
     issuer:CertificateIssuer | None = None
+    lease_id:str | None = None
+    lease_epoch:int | None = None
 
 @dataclass(frozen=True)
 class PublicationResult:

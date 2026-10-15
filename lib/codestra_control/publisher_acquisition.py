@@ -5,6 +5,7 @@ GitHub is independently queried on every preflight; stored PASS values are unuse
 """
 from dataclasses import fields,replace
 from datetime import datetime
+import uuid
 from urllib.parse import quote
 from . import evidence as e
 from .policy import ProductMapping,ScopeEdge
@@ -67,7 +68,29 @@ class RestrictedRegistry:
                 raw,snapshot,repo_id,pr,certificate,issuer=rows[0]
                 issuer=dict(issuer);issuer['expires_at']=datetime.fromisoformat(issuer['expires_at'])
                 raw=dict(raw);raw['expires_at']=datetime.fromisoformat(raw['expires_at']);raw['repositories']=tuple(raw['repositories'])
-                return Acquired(Authority(**raw),decode_snapshot(snapshot),repo_id,pr,certificate,CertificateIssuer(**issuer))
+                snapshot=decode_snapshot(snapshot)
+                lease=snapshot.lease
+                require(type(lease) is e.LeaseEvidence,'AUTHENTICATED_LEASE_REQUIRED')
+                try:assignment=str(uuid.UUID(lease.assignment_id))
+                except (ValueError,TypeError,AttributeError):require(False,'AUTHENTICATED_ASSIGNMENT_REQUIRED')
+                cur.execute('SELECT assignment_leases.inspect_binding(%s)',(assignment,))
+                row=cur.fetchone()
+                require(row is not None and type(row[0]) is dict,'ONLINE_LEASE_UNAVAILABLE')
+                receipt=row[0];actual=receipt.get('binding',{})
+                require(receipt.get('authority')=='ONLINE_DATABASE_RECEIPT' and receipt.get('binding_id')==assignment
+                        and receipt.get('state')=='ACTIVE' and receipt.get('principal')==lease.owner==lease.expected_owner
+                        and actual.get('principal')==lease.owner,'ONLINE_LEASE_OWNER_OR_STATE_MISMATCH')
+                expected={'repository':binding.repository,'repository_id':repo_id,'product':binding.product,
+                          'source_ref':binding.source_ref,'target_ref':binding.target_ref,
+                          'head_sha':binding.source_sha,'base_sha':binding.target_base_sha}
+                require(all(actual.get(k)==v for k,v in expected.items()),'ONLINE_LEASE_BINDING_MISMATCH')
+                try:
+                    lease_id=str(uuid.UUID(receipt['lease_id']))
+                    expiry=datetime.fromisoformat(receipt['expires_at'])
+                except (KeyError,ValueError,TypeError,AttributeError):require(False,'ONLINE_LEASE_RECEIPT_INVALID')
+                require(type(receipt.get('epoch')) is int and receipt['epoch']>0 and expiry.tzinfo is not None,'ONLINE_LEASE_RECEIPT_INVALID')
+                snapshot=replace(snapshot,lease=replace(lease,state='ACTIVE',expires_at=expiry))
+                return Acquired(Authority(**raw),snapshot,repo_id,pr,certificate,CertificateIssuer(**issuer),lease_id,receipt['epoch'])
 
 
     def bindings(self):
