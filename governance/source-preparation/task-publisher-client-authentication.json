@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "publisher-client-authentication",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--publisher-client-authentication",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "e6fcbf88dfd6a31b619c8d2520471dc0b1390a4e",
+  "authority": "Ralph L. Appolon",
+  "owner": "Current user-requested source-publication session",
+  "authorization": "User requested push of the prepared authentication work; source publication only. HBA/TLS application remains pending accepted references and separate authorization.",
+  "source_patch_sha256": "2565f02dad4d66655eb550a4b147f974eca3a1bb64c2c9e016134a0cb36954e2",
+  "scope": "Publish the reviewed RestrictedRegistry client-authentication guard, regression tests and source documentation. No live configuration, credential, certificate, grant, lease, backup, restore or recovery change.",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false
+}

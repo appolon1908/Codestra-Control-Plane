@@ -53,9 +53,11 @@ The proposed DDL `006-publisher-authority-read-model.sql` defines an operator-ow
 schema/table; it creates no login, grants, credentials, tasks, certificates or
 leases. It has not been run against the installed database. A separately approved
 operator owns the schema and all authority writes. Runtime receives USAGE/SELECT
-only. The reader requires session_user=current_user, rejects privileged logins,
+only. The reader requires session_user=current_user and non-null PostgreSQL system_user authentication evidence, rejects privileged logins,
 schema-owner membership, schema CREATE or table mutation privileges, and requires
 `sslmode=verify-full`, a configured CA trust root and a named server; the factory observes the actual kernel hostname. TLS encryption alone is rejected. Shared superuser sessions and role-switch impersonation cannot pass.
+Verified server TLS alone does not authenticate the database client. Plain trust with a null system_user is refused even when TLS and role privileges otherwise pass. This observation does not approve an authentication method, identity mapping, custodian or runtime principal; those remain operator-owned policy and acceptance prerequisites.
+
 Role OID, authenticated session identity, exact SHA/ref binding digest, active row
 and database expiration are checked on every acquisition. A dedicated principal
 must be provisioned; a shared account cannot identify an individual.

@@ -65,7 +65,7 @@ def main():
         # this normalization never creates an edge or upgrades stored evidence.
         levels=tuple("testing" if level=="test" else level
                      for level in (x.source_level,x.target_level))
-        if PROMOTION_LEVELS(x.source_ref,x.target_ref,test_branch)!=levels:
+        if PROMOTION_LEVELS(x.source_ref,x.target_ref,test_branch,product=x.product)!=levels:
           reasons.append("BRANCH_CHAIN_MISMATCH")
         if x.target_level=="production":
           if product["production_go"] or product["live_capabilities_enabled"] or product["external_effects_enabled"]:
