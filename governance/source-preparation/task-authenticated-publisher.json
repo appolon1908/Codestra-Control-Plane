@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "authenticated-publisher",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--authenticated-publisher",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "625c40a3e4a1ad7726523d8677b63121f965056a",
+  "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "authority": "Ralph L. Appolon",
+  "authorization": "Explicit user approval 2026-10-15: source-only single-host dedicated GitHub App, restricted PostgreSQL principal, online authoritative GitHub receipt verification; target/merge-result/protection gates mandatory.",
+  "scope": "Implement source acquisition and guarded effect integration. No runtime provisioning, secret distribution, external network mutations, grants, leases, or activation.",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false
+}
