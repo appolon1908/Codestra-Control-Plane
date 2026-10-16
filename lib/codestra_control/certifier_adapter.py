@@ -783,12 +783,42 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
                 and (mapping.development_ref, mapping.testing_ref, mapping.staging_ref,
                      mapping.production_ref, mapping.release_ref) == (development, test_ref, staging, production, release),
                 'FIRST_CERTIFICATION_PRODUCT_REGISTRY_DRIFT')
-        cur.execute("""SELECT section_key,branch FROM public.sections
+        cur.execute("""SELECT section_id,section_key,branch,depends_on FROM public.sections
          WHERE product=%s ORDER BY branch LIMIT 1001""", (b.product,))
         sections = cur.fetchall()
-        require(len(sections) <= 1000 and len({key for key, _ in sections}) == len(sections)
-                and len({ref for _, ref in sections}) == len(sections), 'FIRST_CERTIFICATION_SECTION_INVENTORY_INVALID')
-        section_refs = dict(sections)
+        require(len(sections) <= 1000 and all(all(_text(value) for value in row[:3]) for row in sections)
+                and all(len({row[index] for row in sections}) == len(sections) for index in (0, 1, 2)),
+                'FIRST_CERTIFICATION_SECTION_INVENTORY_INVALID')
+        section_refs = {key: ref for _, key, ref, _ in sections}
+        section_ids = {ref: identity for identity, _, ref, _ in sections}
+        section_branches = {identity: ref for identity, _, ref, _ in sections}
+        aliases = {}
+        for identity, key, _, _ in sections:
+            for alias in (identity, key): aliases.setdefault(alias, set()).add(identity)
+        prerequisites = {}; dependents = {identity: set() for identity in section_branches}
+        for identity, _, _, declared in sections:
+            require(type(declared) is list and len(declared) <= 1000
+                    and all(_text(value) for value in declared) and len(set(declared)) == len(declared),
+                    'FIRST_CERTIFICATION_SECTION_DEPENDENCY_SHAPE_INVALID')
+            resolved = set()
+            for alias in declared:
+                matches = aliases.get(alias, set())
+                require(len(matches) == 1 and identity not in matches,
+                        'FIRST_CERTIFICATION_SECTION_DEPENDENCY_REFERENCE_INVALID')
+                dependency = next(iter(matches))
+                require(dependency not in resolved, 'FIRST_CERTIFICATION_SECTION_DEPENDENCY_REFERENCE_INVALID')
+                resolved.add(dependency); dependents[dependency].add(identity)
+            prerequisites[identity] = resolved
+        # Validate the bounded graph iteratively without recursion depth limits.
+        outstanding = {identity: len(values) for identity, values in prerequisites.items()}
+        ready = [identity for identity, count in outstanding.items() if count == 0]
+        visited = 0
+        while ready:
+            identity = ready.pop(); visited += 1
+            for dependent in dependents[identity]:
+                outstanding[dependent] -= 1
+                if outstanding[dependent] == 0: ready.append(dependent)
+        require(visited == len(sections), 'FIRST_CERTIFICATION_SECTION_DEPENDENCY_CYCLE')
         cur.execute("""SELECT w.workstation_id,w.section,w.subsection,w.branch,w.parent_branch,
          w.worktree,w.order_index,w.depends_on,r.branch,r.worktree,r.payload,l.worktree,l.branch,l.identity
          FROM public.workstations w
@@ -797,7 +827,7 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
          WHERE w.product=%s ORDER BY w.branch LIMIT 1001""", (b.product,))
         workstations = cur.fetchall()
         require(len(workstations) <= 1000, 'FIRST_CERTIFICATION_SUBSECTION_INVENTORY_LIMIT')
-        edges = {ScopeEdge('section', ref, 'development', development) for _, ref in sections}
+        edges = {ScopeEdge('section', ref, 'development', development) for _, _, ref, _ in sections}
         scopes = {}; identities = {}
         for row in workstations:
             wid, section, subsection, ref, parent, worktree, order, depends, registered_ref, registered_tree, payload, lane_tree, lane_ref, lane_id = row
@@ -815,9 +845,12 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
                 'FIRST_CERTIFICATION_SCOPE_MAPPING_HIDES_CURRENT_REGISTRY')
         scope = acquired.scope_type
         if scope == 'SECTION':
+            require(b.source_ref in section_ids, 'FIRST_CERTIFICATION_SECTION_REGISTRY_REQUIRED')
             required = {(ref, parent) for ref, (parent, _, _) in scopes.items() if parent == b.source_ref}
+            required.update((section_branches[value], development)
+                            for value in prerequisites[section_ids[b.source_ref]])
         elif scope == 'DEVELOPMENT':
-            required = {(ref, development) for _, ref in sections}
+            required = {(ref, development) for _, _, ref, _ in sections}
         elif scope in ('TESTING', 'STAGING', 'PRODUCTION'):
             required = {dict(TESTING=(development, test_ref), STAGING=(test_ref, staging), PRODUCTION=(staging, production))[scope]}
         elif scope == 'SUBSECTION':

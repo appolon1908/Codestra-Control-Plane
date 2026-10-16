@@ -901,8 +901,8 @@ class ConfiguredDependencyInventoryTests(unittest.TestCase):
                 123,88,99,'scope-certification',fixture.NOW+timedelta(minutes=2))
             acquired = replace(pending, scope_type=scope, scope_name=binding.source_ref,
                 snapshot=replace(pending.snapshot, mapping=mapping, observed_binding=binding), dependencies=())
-            cursor = mock.Mock(); cursor.fetchone.return_value = product; cursor.fetchall.side_effect = [[('sec','section/sec')],[]]
+            cursor = mock.Mock(); cursor.fetchone.return_value = product; cursor.fetchall.side_effect = [[('section-id','sec','section/sec',[])],[]]
             with self.subTest(scope=scope), self.assertRaisesRegex(PublicationDenied, 'CURRENT_DEPENDENCY_INVENTORY_MISMATCH'):
                 RestrictedFirstCertificationRegistry._registered_dependencies(cursor, acquired)
-            cursor.fetchall.side_effect = [[('sec','section/sec')],[]]
+            cursor.fetchall.side_effect = [[('section-id','sec','section/sec',[])],[]]
             RestrictedFirstCertificationRegistry._registered_dependencies(cursor, replace(acquired, dependencies=(dependency,)))
