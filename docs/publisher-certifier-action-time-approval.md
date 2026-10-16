@@ -99,11 +99,13 @@ no group/other write permission. Record actual identities and modes privately.
 | `/etc/codestra/control-plane/credentials/publisher.dsn` | `root:codestra-publisher 0640`, or compatible `0600`; restricted authenticated database principal and verified TLS. No DSN value enters Git. |
 | `/etc/codestra/control-plane/certifier-observer.toml` | `root:root 0600`; exact four fields `app_key_file`, `producer_acceptance_file`, `socket_file`, `publisher_user="codestra-publisher"`. IDs come only from protected accepted policy. |
 | `/etc/codestra/scope-certifier/credentials/certifier-app.pem` | `root:root 0600`; independent root custodian, never readable by publisher. A separate certifier issuance service must use its independently accepted custody boundary. |
+| `/etc/codestra/scope-certifier/credentials/certifier.dsn` | `root:root 0600`; separate restricted certifier reader credential, private handoff only. Never reuse publisher or bootstrap authentication. |
 | `/etc/codestra`, `/etc/codestra/control-plane`, credential directories and certifier configuration parents | `root:root 0750` or `0755` as required for accepted traversal; all ancestors root-owned with no group/other write. Choose `0755` where the service must traverse without membership in root. |
 | `/run/codestra-control-plane` and `publisher.lock` | Directory `root:codestra-publisher 0750`; precreated lock `root:codestra-publisher 0640`. Publisher does not create or replace it. Boot recreation needs separate accepted provisioning. |
 | `/run/codestra-certifier-observer` and `observer.sock` | Protected directory `root:codestra-publisher 0750`; proposed socket `root:codestra-publisher 0660`, client verifies server peer UID root (`0`), server verifies caller UID resolved for the proposed `codestra-publisher` account. Socket protocol and isolated server deployment must be reviewed before use. |
 | `/var/lib/codestra-control-plane` | Root-owned non-writable ancestor, proposed `root:root 0755`. |
 | `/var/lib/codestra-control-plane/publisher` | `codestra-publisher:codestra-publisher 0700`; dedicated private ledger directory. Ledger/SQLite sidecars `codestra-publisher:codestra-publisher 0600`. Preserve intent history on rollback. |
+| `/var/lib/codestra-control-plane/certifier` | `root:root 0700`; separate root-custodian durable certifier intent ledger and sidecars `root:root 0600`. Preserve first-issuance history independently. |
 | `/opt/codestra-control-plane/releases/<SOURCE_SHA>` | New immutable release tree, root-owned directories `0755`, root-owned non-writable files with manifest modes; replace `<SOURCE_SHA>` only with the exact approved 40-character source commit. No mutable developer-owned ancestor is trusted. |
 
 Protected-read checks validate owners, ancestry and modes; they do not prove
@@ -304,3 +306,88 @@ first-issuance policy and check effect. All are unprovisioned and unapproved her
 Phase B remains postponed; confirm a fresh exact maintenance window only if those
 operational steps later become necessary. Do not apply these definitions or seed
 rows against the installed database from source tests or this proposal.
+
+## Concrete first-issuance bundle, still blocked
+
+The [certifier source guide's six-step first-issuance proposal](certifier-existing-receipt-source.md#concrete-first-issuance-operational-proposal)
+names the implemented source path: `011-certifier-authority.sql`, isolated
+`012-scope-assignment-leases.sql` and empty
+`013-first-certification-pending.sql`. The administered factory is
+`codestra_control.certifier_adapter.build_first_certifier_service(connection,
+jwt_provider, ledger_path, policy_reader, host=...)`; its issuer is
+`AuthenticatedFirstCertifier.publish(exact_promotion_request)`. This path requires
+`snapshot.certificate=None`, with no existing certificate or check-run needed.
+It still needs an accepted exact pending delegation, current genuine scope lease
+and independently established complete canonical child receipt inventory.
+
+No eligible first binding is selected. The packet deliberately leaves product,
+PR, levels, refs, head/base SHAs, assignment, lease and delegation fields empty;
+this is an explicit operational block, not permission to select one automatically.
+The known pilot repository is `appolon1908/codestra`, ID `1319808791`.
+**PR56's hotfix→production route is ineligible** under the registered promotion
+policy and must not be presented as the first pilot check. Operator authority
+cannot override a forbidden edge or omit canonical children.
+
+The following PostgreSQL identities are **proposed, new and uncreated**, each with
+accepted OID `0` until its actual SCRAM/TLS session and private credential handoff
+are independently verified. Creation/authentication, product grants and one exact
+assignment each require separate operator approval.
+
+| Proposed role | Exact restricted runtime purpose |
+| --- | --- |
+| `codestra_publisher_ro` | `SELECT publisher_authority.bindings`, schema usage for that reader and `scope_assignment_leases.inspect_binding(uuid)` only, with an OID-pinned scope-product `read` grant. |
+| `codestra_scope_certifier_ro` | `SELECT certifier_authority.product_grants` and `pending_bindings`; the canonical hierarchy reads listed below; schema usage and `scope_assignment_leases.inspect_binding(uuid)` only, with independent OID-pinned product/read grants. No claim execution. |
+| `codestra_scope_builder` | Ralph-private, separately accepted credential; schema usage and `scope_assignment_leases.claim(uuid,uuid)` only, with its operator-created product `claim` grant and exact assignment ownership. No authority-table SELECT/write or verifier function grant. |
+
+The certifier's canonical hierarchy reader needs only `SELECT` on
+`public.products`, `public.sections`, `public.workstations`, `public.atomic_tasks`,
+`scoped_registration.products`, `scoped_registration.workstations`,
+`scoped_registration.lanes`, `scoped_registration.candidates` and
+`scope_assignment_leases.products`, with corresponding schema usage. The first
+path does not require `certifier_authority.existing_receipts`; that belongs to the
+separately scoped existing-receipt transport. No runtime identity receives schema
+mutation, table writes, DDL, owner membership, PUBLIC grants or broad roles.
+The existing `codestra` installation/bootstrap role is a **CANDIDATE only** for its
+separate administrative purpose; no accepted OID, authentication or runtime reuse
+is inferred from its name or existence.
+
+The proposed operational sequence remains entirely unapproved:
+
+1. Accept independent App identities, exact pilot permissions, the three proposed
+   database identities and their separate private authentication/custody evidence.
+2. In a separately confirmed window, apply the exact approved 011/012/013 source
+   digests under the independent operator owner; explicitly provision only the
+   table SELECT, schema usage and function execution listed above. Keep runtime
+   accounts outside every authority-writer/owner capability.
+3. Accept the actual registered product/scope mapping and one exact builder-owned
+   assignment. Ralph's separately authenticated builder claims it once; the
+   independent certifier reader verifies its actual current token/epoch/binding.
+4. Accept an exact `certifier_authority.pending_bindings` delegation, including
+   `certificate=None`, the genuine current lease, protected capability/custody and
+   the **complete canonical** dependency inventory, bounded to five minutes and
+   every earlier authority expiry. A declaration of an empty policy cannot hide
+   actual children; no operator override can waive them.
+5. The separately approved root custodian reads its `root:root 0600` certifier
+   DSN/key and composes the actual first-issuance factory with the protected
+   accepted policy and private root-owned certifier ledger. Fresh online checks
+   must establish the exact registered PR/head/base, protected target, current
+   merge-result, independent eligible reviews/conversations and every child
+   receipt. Only a separately approved effect emits **one** scope check, followed
+   by independent readback of App/name/SHA/binding and success.
+6. After that actual receipt is accepted, a separate operator action may register
+   it in the publisher binding stage. The publisher still performs its own fresh
+   authority, scope, protection and receipt checks; approval for the certifier's
+   one check grants no authority for either of the two controller status POSTs.
+   Those status effects require their own acceptance, with partial/uncertain
+   intents retained and no automatic retry.
+
+Canonical inventory includes all registered subsections for a section, all
+registered sections for development, and the immediate predecessor for
+testing/staging/production. Cross-subsection dependencies must match registered
+workstation dependencies. **SUBSECTION first issuance currently supports only a
+workstation with zero actual atomic tasks and zero registered candidates**;
+nonempty atomic child inventories remain unsupported and deny. No fabricated
+atomic receipt, hotfix exception or reduced inventory can close that gap.
+All role creation, grants, schema application, claims, runtime composition, first
+check, publisher registration and paired statuses remain false in the packet.
+Phase B remains postponed, and secret values belong only in the private handoff.
