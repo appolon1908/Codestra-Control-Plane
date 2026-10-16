@@ -1,0 +1,61 @@
+{
+  "schema": "codestra.publisher-certifier-action-time-proposal.v1",
+  "state": "PROPOSED",
+  "approval_ref": "",
+  "approved_by": "",
+  "approved_at": "",
+  "expires_at": "",
+  "source_commit": "",
+  "source_manifest_sha256": "",
+  "installation_packet_manifest_sha256": "",
+  "host": "dev-desktop",
+  "maintenance_window": {"start": "", "end": "", "state": "UNCONFIRMED"},
+  "publisher": {
+    "proposed_new_app_name": "Codestra Controller Publisher",
+    "app_created": false,
+    "app_id": 0,
+    "installation_id": 0,
+    "permissions": {"statuses": "write", "checks": "read", "contents": "read", "pull_requests": "read", "administration": "read", "metadata": "read"},
+    "credential_custody_acceptance_ref": ""
+  },
+  "certifier": {
+    "proposed_new_app_name": "Codestra Scope Certifier",
+    "app_created": false,
+    "app_id": 0,
+    "installation_id": 0,
+    "permissions": {"checks": "write", "contents": "read", "pull_requests": "read", "administration": "read", "metadata": "read"},
+    "credential_custody_acceptance_ref": "",
+    "capability_acceptance_ref": ""
+  },
+  "repositories": [{"repository": "appolon1908/codestra", "repository_id": 0}],
+  "controller_contexts": ["codestra-control-plane", "codestra/control-plane"],
+  "certificate_name": "scope-certification",
+  "acceptance_max_age_seconds": 86400,
+  "online_receipt_max_age_seconds": 300,
+  "source_preparation_authorized": true,
+  "app_creation_approved": false,
+  "credential_provisioning_approved": false,
+  "runtime_install_approved": false,
+  "cutover_approved": false,
+  "activation_approved": false,
+  "database_setup_approved": false,
+  "phase_b": "POSTPONED",
+  "private_handoff": {
+    "operator_acceptance_ref": "",
+    "publisher_key_custody_ref": "",
+    "certifier_key_custody_ref": "",
+    "database_authentication_ref": "",
+    "rollback_capture_ref": "",
+    "recovery_access_ref": "",
+    "all_competing_writers_quiescence_ref": "",
+    "trusted_runtime_and_dependencies_ref": "",
+    "protected_target_and_merge_result_ref": ""
+  },
+  "residual_risks_requiring_acceptance": [
+    "already-issued installation tokens may remain usable until their issuer expiry",
+    "two GitHub statuses and concurrent ref movement cannot form an atomic transaction"
+  ],
+  "PRODUCTION_GO": "NO",
+  "LIVE_CAPABILITIES_ENABLED": "NO",
+  "EXTERNAL_EFFECTS": false
+}

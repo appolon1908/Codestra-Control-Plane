@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "configuration-and-rollback",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--configuration-and-rollback",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "2d312d3a63adcb06694aa66e1b72601f11e7dac3",
+  "owner": "Ralph-authorized source preparation /root/configuration_and_rollback",
+  "authorization": "Parent-relayed Ralph source and helper implementation authorization; prepare reviewable action-time packet, committed templates and offline proposal packaging only.",
+  "scope": "New config/examples templates, publisher-certifier action-time approval/integration documents, committed-template proposal packager and focused offline tests. Proposed uncreated independent Apps and appolon1908/codestra pilot only; operational approvals remain false.",
+  "runtime_assignment": null,
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false,
+  "verification": {
+    "offline_only": true,
+    "tests": [
+      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_publisher_installation.py -v", "result": "Ran 4 tests; OK"},
+      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_publisher_release.py -v", "result": "Ran 3 tests; OK"}
+    ],
+    "template_parse": "4 proposal templates and task JSON parsed",
+    "integration_suite_owner": "/root",
+    "operational_evidence": null
+  },
+  "phase_b": "POSTPONED",
+  "database_setup_approved": false,
+  "PRODUCTION_GO": "NO",
+  "LIVE_CAPABILITIES_ENABLED": "NO",
+  "EXTERNAL_EFFECTS": false
+}
