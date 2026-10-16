@@ -119,6 +119,12 @@ class AcceptanceTests(unittest.TestCase):
         with self.assertRaises(PublicationDenied):
             acceptance.load_acceptance(raw(item), fixture.NOW)
 
+    def test_equal_publisher_and_certifier_custody_receipts_cannot_be_accepted(self):
+        item = policy()
+        item['certifier_custody_receipt'] = item['custody_receipt']
+        with self.assertRaises(PublicationDenied):
+            acceptance.load_acceptance(raw(item), fixture.NOW)
+
     def test_exact_policy_schema_rejects_authored_stage_and_unknown_fields(self):
         mutations = [('schema', 'other'), ('state', 'PROPOSED'), ('state', 'REVOKED'),
                      ('accepted_by', 'someone else'), ('acceptance_ref', ''),
