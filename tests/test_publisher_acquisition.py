@@ -7,7 +7,18 @@ from test_authenticated_publisher import Store
 from codestra_control.publisher_acquisition import GitHubVerifier, RestrictedRegistry, decode_snapshot
 from codestra_control.publisher_adapter import PublicationDenied,binding_digest
 
+class FixtureProvenance:
+    """Synthetic privileged verifier, never a deployed issuer acceptance."""
+    def verify(self,acquired,now):
+        from codestra_control.publisher_provenance import VerifiedProducerContract
+        return VerifiedProducerContract(binding_digest(acquired.snapshot.observed_binding),
+            acquired.repository_id,acquired.pr_number,acquired.authority.app_id,
+            acquired.issuer.app_id,acquired.issuer.name,
+            ('codestra-control-plane','codestra/control-plane'),
+            acquired.issuer.capability_receipt,acquired.issuer.expires_at,'STATUS_PUBLICATION')
+
 class API:
+    def effective_rules(self,repo,branch):return []
     def __init__(self):self.paths=[];self.bad=False
     def get(self,path):
         self.paths.append(path)
@@ -15,7 +26,7 @@ class API:
             return {'state':'open','draft':False,'head':{'sha':fixture.REQUEST.source_sha,'ref':fixture.REQUEST.source_ref,'repo':{'id':123}},'base':{'sha':fixture.REQUEST.target_base_sha,'ref':fixture.REQUEST.target_ref,'repo':{'id':123}},'mergeable':True,'user':{'login':'author'},'merge_commit_sha':'c'*40}
         if '/branches/' in path and not path.endswith('/protection'):return {'protected':True,'commit':{'sha':fixture.REQUEST.target_base_sha}}
         if path.endswith('/protection'):
-            return {'enforce_admins':{'enabled':True},'required_status_checks':{'strict':True,'checks':[{'context':'quality','app_id':15368}]},'required_pull_request_reviews':{'required_approving_review_count':1,'require_code_owner_reviews':True,'dismiss_stale_reviews':True,'require_last_push_approval':True},'required_conversation_resolution':{'enabled':True}}
+            return {'enforce_admins':{'enabled':True},'required_status_checks':{'strict':True,'checks':[{'context':'quality','app_id':15368},{'context':'codestra-control-plane','app_id':7},{'context':'codestra/control-plane','app_id':7}]},'required_pull_request_reviews':{'required_approving_review_count':1,'require_code_owner_reviews':True,'dismiss_stale_reviews':True,'require_last_push_approval':True,'bypass_pull_request_allowances':{'users':[],'teams':[],'apps':[]}},'required_conversation_resolution':{'enabled':True}}
         if path.endswith('/check-runs/10'):
             return {'id':10,'head_sha':fixture.REQUEST.source_sha,'app':{'id':99},'name':'scope-certification','status':'completed','conclusion':'success','external_id':binding_digest(fixture.REQUEST)}
         raise AssertionError(path)
@@ -35,7 +46,7 @@ class AcquisitionTests(unittest.TestCase):
         patch.start();self.addCleanup(patch.stop)
         self.api=API();self.acquired=Store().acquire(fixture.REQUEST)
         self.acquired=replace(self.acquired,snapshot=replace(fixture.ready(),certificate=replace(fixture.ready().certificate,receipt_id='check:10')))
-        self.verifier=GitHubVerifier(self.api,certificate_name='scope-certification',certificate_app_id=99)
+        self.verifier=GitHubVerifier(self.api,certificate_name='scope-certification',certificate_app_id=99,provenance_verifier=FixtureProvenance())
     def test_online_receipt_and_merge_result_and_protection_are_observed(self):
         self.verifier.verify(self.acquired,fixture.NOW)
         self.assertTrue(any('/protection' in p for p in self.api.paths))
@@ -132,6 +143,62 @@ class AcquisitionTests(unittest.TestCase):
             return value
         self.api.get=changed
         with self.assertRaises(PublicationDenied):self.verifier.verify(self.acquired,fixture.NOW)
+    def test_conflicting_publisher_context_app_binding_denies(self):
+        original=self.api.get
+        for context in ('codestra-control-plane','codestra/control-plane'):
+            def changed(path):
+                value=original(path)
+                if path.endswith('/protection'):
+                    value['required_status_checks']['checks'].append({'context':context,'app_id':999})
+                return value
+            self.api.get=changed
+            with self.subTest(context=context),self.assertRaisesRegex(PublicationDenied,'CONTROLLER_CHECK_PRODUCER_MISMATCH|UNBOUND_REQUIRED_CHECK_PRODUCER'):
+                self.verifier.verify(self.acquired,fixture.NOW)
+    def test_matching_publisher_contexts_do_not_require_circular_success(self):
+        original=self.api.get
+        def changed(path):
+            value=original(path)
+            if path.endswith('/protection'):
+                value['required_status_checks']['checks']=[v for v in value['required_status_checks']['checks'] if v['context'] not in ('codestra-control-plane','codestra/control-plane')]
+                value['required_status_checks']['checks'].extend(
+                    {'context':context,'app_id':self.acquired.authority.app_id}
+                    for context in ('codestra-control-plane','codestra/control-plane'))
+            return value
+        self.api.get=changed
+        self.verifier.verify(self.acquired,fixture.NOW)
+    def test_unbound_contexts_cannot_satisfy_explicit_provenance_contract(self):
+        original=self.api.get
+        for app_id in (None,-1):
+            def changed(path):
+                value=original(path)
+                if path.endswith('/protection'):
+                    value['required_status_checks']['checks'].extend(
+                        {'context':context,'app_id':app_id}
+                        for context in ('codestra-control-plane','codestra/control-plane'))
+                return value
+            self.api.get=changed
+            with self.subTest(app_id=app_id),self.assertRaises(PublicationDenied):self.verifier.verify(self.acquired,fixture.NOW)
+    def test_invalid_publisher_context_app_binding_denies(self):
+        original=self.api.get
+        for context in ('codestra-control-plane','codestra/control-plane'):
+            for app_id in (0,-2,True,'7'):
+                def changed(path):
+                    value=original(path)
+                    if path.endswith('/protection'):
+                        value['required_status_checks']['checks'].append({'context':context,'app_id':app_id})
+                    return value
+                self.api.get=changed
+                with self.subTest(context=context,app_id=app_id),self.assertRaisesRegex(PublicationDenied,'CONTROLLER_CHECK_PRODUCER_MISMATCH|UNBOUND_REQUIRED_CHECK_PRODUCER'):
+                    self.verifier.verify(self.acquired,fixture.NOW)
+    def test_other_control_context_does_not_acquire_publisher_app_binding(self):
+        original=self.api.get
+        def changed(path):
+            value=original(path)
+            if path.endswith('/protection'):
+                value['required_status_checks']['checks'].append({'context':'promotion-gate','app_id':999})
+            return value
+        self.api.get=changed
+        self.verifier.verify(self.acquired,fixture.NOW)
     def test_encrypted_but_unverified_database_transport_denies(self):
         for mode in ('require','verify-ca','prefer'):
             connection=mock.MagicMock();connection.get_dsn_parameters.return_value={'sslmode':mode,'host':'authority.example','sslrootcert':'/fixture/ca.pem'}
@@ -158,6 +225,36 @@ class AcquisitionTests(unittest.TestCase):
         issuer=self.acquired.issuer
         for value in (None,replace(issuer,expires_at=fixture.NOW),replace(issuer,binding_hash='0'*64),replace(issuer,name='quality'),replace(issuer,name='codestra-control-plane')):
             with self.subTest(value=value),self.assertRaises(PublicationDenied):self.verifier.verify(replace(self.acquired,issuer=value),fixture.NOW)
+
+
+    def test_ruleset_only_flows_through_full_online_publisher_verification(self):
+        from test_effective_protection import API as NativeAPI
+        native=NativeAPI()
+        for rule in native.rules:rule['ruleset_source']=fixture.REQUEST.repository
+        native.detail['source']=fixture.REQUEST.repository
+        checks=[{'context':'quality','integration_id':15368},
+                {'context':'codestra-control-plane','integration_id':7},
+                {'context':'codestra/control-plane','integration_id':7}]
+        native.rules[1]['parameters']['required_status_checks']=checks
+        native.detail['rules'][1]['parameters']['required_status_checks']=checks
+        original=self.api.get
+        def get(path):
+            if path.endswith('/protection') or '/rulesets/' in path:return native.get(path)
+            return original(path)
+        self.api.get=get
+        self.api.effective_rules=native.effective_rules
+        self.verifier.verify(self.acquired,fixture.NOW)
+        self.assertEqual(sum(isinstance(v,tuple) and v[0]=='effective' for v in native.calls),2)
+
+    def test_ruleset_bypass_added_during_online_review_denies(self):
+        from test_effective_protection import API as NativeAPI
+        native=NativeAPI()
+        # Classic protection is sufficient initially; a new effective native
+        # restriction at final readback must never be silently ignored.
+        self.api.effective_rules=lambda *args:[] if not native.detail.get('changed') else native.rules
+        def threads(*args):native.detail['changed']=True;return True
+        self.api.threads_resolved=threads
+        with self.assertRaises(PublicationDenied):self.verifier.verify(self.acquired,fixture.NOW)
 
 
 class AuthenticatedSessionPredicateTests(unittest.TestCase):

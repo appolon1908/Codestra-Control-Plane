@@ -1,4 +1,4 @@
-> Historical PR24 preparation. The successor source implementation and updated operational prerequisites are documented in [authenticated-publisher-source.md](authenticated-publisher-source.md). Runtime remains unactivated.
+> Historical PR24 preparation. The successor source implementation is documented in [authenticated-publisher-source.md](authenticated-publisher-source.md), and its operational acceptance gates in [publisher-operational-acceptance.md](publisher-operational-acceptance.md). The historical implementation and review statements below are not a current runtime or release acceptance record.
 
 # Approved source design; runtime cutover remains prohibited
 

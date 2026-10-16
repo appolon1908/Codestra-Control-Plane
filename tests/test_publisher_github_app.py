@@ -97,3 +97,32 @@ class GitHubAppTests(unittest.TestCase):
         self.client.request=request
         with self.assertRaisesRegex(PublicationDenied,'READONLY_INSTALLATION_REQUIRED'):self.client.authorize_readonly(7,8,123,fixture.NOW)
         self.assertFalse(any(path.endswith('/access_tokens') for _,path,_ in self.calls))
+
+    def test_effective_rule_pagination_has_no_synthetic_item_ids(self):
+        calls=[]
+        def get(path):
+            calls.append(path)
+            from urllib.parse import parse_qs,urlsplit
+            return [{'type':'pull_request','ruleset_id':n} for n in range(1,101)] if parse_qs(urlsplit(path).query)['page']==['1'] else []
+        self.client.get=get
+        self.assertEqual(len(self.client.effective_rules('owner/repo','section/one')),100)
+        self.assertEqual(len(calls),2)
+        self.assertIn('section%2Fone',calls[0])
+        self.assertIn('page=2',calls[-1])
+    def test_effective_rule_pagination_never_accepts_incomplete_or_malformed_inventory(self):
+        self.client.get=lambda path:[{'type':'pull_request','ruleset_id':1}]*100
+        with self.assertRaisesRegex(PublicationDenied,'PAGINATION_INCOMPLETE'):
+            self.client.effective_rules('owner/repo','main')
+        self.client.get=lambda path:{'rules':[]}
+        with self.assertRaises(PublicationDenied):self.client.effective_rules('owner/repo','main')
+    def test_transport_retains_only_safe_http_status_for_absence_classification(self):
+        from io import BytesIO
+        from urllib.error import HTTPError
+        from unittest.mock import patch,Mock
+        from codestra_control.publisher_github import request_json,APIUnavailable
+        for code in (403,404):
+            opener=Mock();opener.open.side_effect=HTTPError('https://api.github.com/private',code,'synthetic-secret',{},BytesIO(b'synthetic-secret'))
+            with patch('codestra_control.publisher_github.build_opener',return_value=opener):
+                with self.assertRaises(APIUnavailable) as caught:request_json('GET','/private','synthetic-token')
+            self.assertEqual(caught.exception.status,code)
+            self.assertNotIn('synthetic-secret',str(caught.exception))
