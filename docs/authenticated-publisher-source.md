@@ -145,6 +145,10 @@ merge executor must independently enforce current target and merge-result gates.
 
 ## Operational gates remaining
 
+Use [publisher-operational-acceptance.md](publisher-operational-acceptance.md)
+for the source-to-runtime handoff. Merged source, an offline candidate package,
+installed bytes and accepted publication authority require separate evidence.
+
 Startup/signing source code is now implemented. Actual configuration, App keys, authenticated connections, authority rows, IDs, grants, leases, trusted root-owned code installation and a private ledger location remain unprovisioned. The restricted reader does not
 create a lease, compute codeowner authority, infer last pusher, or issue certificates.
 Source tests use synthetic privileged fixtures and are not issuer acceptance.

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "publisher-acceptance-handoff",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--publisher-acceptance-handoff",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "137887525e75c466c7d3fc1a0243e0d36ce3b909",
+  "owner": "Toolkit controller-status source-publication session /root",
+  "authorization": "User requested continue push pr and update; publish the current source-to-runtime documentation handoff through an atomic PR.",
+  "scope": "Document separate source, candidate, installation, operational-authority and certification checkpoints; link current operational prerequisites while preserving the historical PR24 body. Documentation and source assignment only.",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false
+}
