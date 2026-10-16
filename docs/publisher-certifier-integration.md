@@ -22,7 +22,9 @@ two distinct independently accepted custody references (`custody_receipt` for
 publisher only and `certifier_custody_receipt` for certifier only), the independent
 certifier-capability reference, both controller contexts,
 `scope-certification`, bounded timestamps and the 300-second receipt age limit.
-Its template remains `PROPOSED` with zero IDs and empty acceptance references.
+Its template remains `PROPOSED` with zero App/installation IDs and empty acceptance
+references. Pilot repository ID `1319808791` uses the existing authenticated
+2026-10-16 17:37:38 UTC metadata; recording that known identity accepts no grant.
 Root-owned metadata alone does not convert a proposal into an accepted record.
 An authenticated acceptance process must accept the actual private evidence.
 Missing, empty or equal custody references deny; no joint receipt substitutes for
@@ -40,10 +42,12 @@ there is no cached-valid fallback.
 
 The publisher must never possess the certifier private key. The separately
 protected certifier observer accepts only its reviewed public-metadata operations
-over a root-owned Unix socket with verified root server peer and verified
-`sentinelx` caller peer. The fixed
+over a root-owned Unix socket with verified root server peer and a verified
+dedicated publisher caller peer. The proposed caller is the new, uncreated
+`codestra-publisher` OS account; provision and accept its isolation separately.
+The fixed
 `/etc/codestra/control-plane/certifier-observer.toml` has exactly `app_key_file`,
-`producer_acceptance_file`, `socket_file` and `publisher_user="sentinelx"`;
+`producer_acceptance_file`, `socket_file` and `publisher_user="codestra-publisher"`;
 actual identities come from the same protected accepted policy. The certifier
 key is `root:root 0600` for the separate root custodian. It performs
 whitelisted identity, installation and repository-installation GETs using the
@@ -54,6 +58,14 @@ The source server creates only the socket after its directory is approved and
 preprovisioned; it never starts automatically. Installing that process, socket
 and isolated custody requires separate approval.
 
+The runtime proposal installs only exact manifest files into the immutable,
+root-owned `/opt/codestra-control-plane/releases/<SOURCE_SHA>` tree. The separate
+approved unit drop-in would run the existing designated service as
+`codestra-publisher:codestra-publisher` with
+`/usr/bin/python3 -I -B /opt/codestra-control-plane/releases/<SOURCE_SHA>/bin/codestra-github-statusd`.
+No user/group, release directory or unit change is installed by source preparation;
+the placeholder must resolve to the approved exact commit before execution.
+
 The independent certifier adapter is a separate source composition point for
 issuing a genuine scope-certification check receipt. Its own restricted trusted
 authority acquisition must independently establish the exact request, actual
@@ -62,6 +74,21 @@ publisher cannot certify itself or relabel ordinary CI as the issuer. The adapte
 must not consume its own existing scope receipt as evidence for initial issuance;
 the first-issuance authority path needs independent acceptance and must refuse
 when unavailable. A helper port or synthetic test alone is not a deployed issuer.
+
+`012-scope-assignment-leases.sql` adds a separate source protocol for genuine
+operator-assigned scope/environment leases, leaving atomic assignment semantics
+unchanged. The builder's `claim(uuid,uuid)` requires actual SCRAM/TLS provenance,
+session-role/OID ownership and an accepted product claim grant. Assignments bind
+current registered scope or environment edges, repository ID and exact SHAs;
+atomic/hotfix shortcuts deny. A claim is exclusive, one-shot and bounded to five
+minutes or the earlier operator authority expiration. An independent restricted
+product reader calls `scope_assignment_leases.inspect_binding(uuid)` in a
+read-only `READ COMMITTED` transaction, requires its actual OID grant, and receives the current
+`ONLINE_DATABASE_RECEIPT`. The first-issuance acquisition port must match that
+receipt's `ACTIVE` state, lease ID, positive epoch, owner and every binding field.
+Expired/revoked or changed bindings never automatically renew or reseal.
+Operator-only schema/grants/assignment provisioning and first scope check issuance
+remain separately unapproved Phase B actions, not effects of source integration.
 
 After issuance, the publisher independently reads the actual check-run by ID and
 requires the expected independent App, check name, successful completed state,

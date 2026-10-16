@@ -9,6 +9,16 @@
   "source_manifest_sha256": "",
   "installation_packet_manifest_sha256": "",
   "host": "dev-desktop",
+  "publisher_process": {
+    "proposed_new_user": "codestra-publisher",
+    "proposed_new_group": "codestra-publisher",
+    "account_created": false,
+    "account_provisioning_approved": false,
+    "unit": "codestra-control-plane-status.service",
+    "unit_identity_change_approved": false,
+    "immutable_release_root": "/opt/codestra-control-plane/releases/<SOURCE_SHA>",
+    "proposed_exec_start": "/usr/bin/python3 -I -B /opt/codestra-control-plane/releases/<SOURCE_SHA>/bin/codestra-github-statusd"
+  },
   "maintenance_window": {"start": "", "end": "", "state": "UNCONFIRMED"},
   "publisher": {
     "proposed_new_app_name": "Codestra Controller Publisher",
@@ -27,7 +37,8 @@
     "credential_custody_acceptance_ref": "",
     "capability_acceptance_ref": ""
   },
-  "repositories": [{"repository": "appolon1908/codestra", "repository_id": 0}],
+  "repositories": [{"repository": "appolon1908/codestra", "repository_id": 1319808791}],
+  "repository_identity_observation": "Existing authenticated GitHub metadata at 2026-10-16T17:37:38Z; pull.json base.repo.id. Known identity only, not accepted grant or a new audit.",
   "controller_contexts": ["codestra-control-plane", "codestra/control-plane"],
   "certificate_name": "scope-certification",
   "acceptance_max_age_seconds": 86400,
@@ -39,6 +50,16 @@
   "cutover_approved": false,
   "activation_approved": false,
   "database_setup_approved": false,
+  "scope_lease_proposal": {
+    "schema_source": "012-scope-assignment-leases.sql",
+    "schema": "scope_assignment_leases",
+    "claim": "claim(uuid,uuid)",
+    "independent_receipt": "inspect_binding(uuid)",
+    "schema_install_approved": false,
+    "scope_grants_and_assignments_approved": false,
+    "claim_execution_approved": false,
+    "first_scope_check_approved": false
+  },
   "phase_b": "POSTPONED",
   "private_handoff": {
     "operator_acceptance_ref": "",
