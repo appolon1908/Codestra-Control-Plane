@@ -77,11 +77,50 @@ class DependencyObserverTests(unittest.TestCase):
         digest=dependency_digest(self.binding,prerequisite)
         self.value={'dependency_key':'section:sec','repository':'appolon1908/A','repository_id':123,'binding':asdict(self.binding),'prerequisite':prerequisite,'binding_hash':digest,'issuer_app_id':99,'issuer_name':'scope-certification','capability_receipt':'synthetic','approved_by':'Ralph L. Appolon','purpose':'SCOPE_CERTIFICATION','check_id':10}
         self.receipt={'id':10,'app':{'id':99},'name':'scope-certification','external_id':digest,'head_sha':'a'*40,'status':'completed','conclusion':'success'}
-        self.client.get.side_effect=lambda path: {'id':123,'full_name':'appolon1908/A'} if path=='/repos/appolon1908/A' else dict(self.receipt)
+        self.refs={'section/sec':'a'*40,'development':'b'*40}
+        self.client.get.side_effect=self.response
         self.observer=GitHubLeaseObserver(self.client,7,8)
+    def response(self,path):
+        from urllib.parse import unquote
+        if path=='/repos/appolon1908/A':
+            return {'id':123,'full_name':'appolon1908/A'}
+        prefix='/repos/appolon1908/A/git/ref/heads/'
+        if path.startswith(prefix):
+            ref=unquote(path[len(prefix):])
+            return {'ref':'refs/heads/'+ref,'object':{'type':'commit','sha':self.refs[ref]}}
+        if path=='/repos/appolon1908/A/check-runs/10':
+            return dict(self.receipt)
+        raise AssertionError('Unexpected synthetic dependency request: '+path)
     def test_online_exact_issuer_receipt_is_observed(self):
         self.assertEqual(self.observer.dependency(self.value),self.value)
-        self.client.authorize_readonly.assert_called_once();self.client.get.assert_called_with('/repos/appolon1908/A/check-runs/10')
+        self.client.authorize_readonly.assert_called_once()
+        self.assertEqual([call.args[0] for call in self.client.get.call_args_list],[
+            '/repos/appolon1908/A',
+            '/repos/appolon1908/A/git/ref/heads/section%2Fsec',
+            '/repos/appolon1908/A/git/ref/heads/development',
+            '/repos/appolon1908/A/check-runs/10',
+            '/repos/appolon1908/A/git/ref/heads/section%2Fsec',
+            '/repos/appolon1908/A/git/ref/heads/development'])
+    def test_old_successful_certificate_denies_when_either_remote_ref_has_moved(self):
+        for ref in ('section/sec','development'):
+            self.refs={'section/sec':'a'*40,'development':'b'*40}
+            self.refs[ref]='c'*40
+            self.client.reset_mock()
+            with self.subTest(ref=ref),self.assertRaisesRegex(MaterializationDenied,'DEPENDENCY_REF_MOVED'):
+                self.observer.dependency(self.value)
+            self.assertFalse(any('/check-runs/' in call.args[0] for call in self.client.get.call_args_list))
+    def test_remote_ref_movement_during_successful_receipt_observation_denies(self):
+        for ref in ('section/sec','development'):
+            self.refs={'section/sec':'a'*40,'development':'b'*40}
+            self.client.reset_mock()
+            def response(path):
+                value=self.response(path)
+                if path=='/repos/appolon1908/A/check-runs/10':
+                    self.refs[ref]='c'*40
+                return value
+            self.client.get.side_effect=response
+            with self.subTest(ref=ref),self.assertRaisesRegex(MaterializationDenied,'DEPENDENCY_REF_MOVED'):
+                self.observer.dependency(self.value)
     def test_wrong_scope_ci_issuer_or_forged_receipt_denies(self):
         for change in ({'issuer_app_id':15368},{'issuer_app_id':7},{'issuer_name':'codestra-control-plane'},{'prerequisite':dict(self.value['prerequisite'],scope_name='other')}):
             with self.subTest(change=change),self.assertRaises(MaterializationDenied):self.observer.dependency(dict(self.value,**change))

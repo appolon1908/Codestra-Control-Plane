@@ -76,15 +76,7 @@ class InspectionLeaseObserver(GitHubLeaseObserver):
         require(value['prerequisite']['scope_type'] == 'SUBSECTION'
                 and value['prerequisite']['scope_name'] == binding.source_ref,
                 'DEPENDENCY_SCOPE_MISMATCH')
-        self._authorize(value['repository'], value['repository_id'])
-        def current_refs():
-            require(self.ref(binding.repository, binding.source_ref) == binding.source_sha
-                    and self.ref(binding.repository, binding.target_ref) == binding.target_base_sha,
-                    'DEPENDENCY_REF_MOVED')
-        current_refs()
-        result = super().dependency(value)
-        current_refs()
-        return result
+        return super().dependency(value)
 
 
 class AtomicInspector:
