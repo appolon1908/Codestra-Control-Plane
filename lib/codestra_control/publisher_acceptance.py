@@ -91,6 +91,8 @@ def load_acceptance(raw: bytes, now: datetime) -> AcceptedProducerPolicy:
     for name in ('acceptance_ref', 'custody_receipt', 'certifier_custody_receipt',
                  'certifier_capability_receipt', 'certificate_name'):
         require(_text(value[name]), 'PRODUCER_ACCEPTANCE_PIN_INVALID')
+    require(value['custody_receipt'] != value['certifier_custody_receipt'],
+            'PRODUCER_ACCEPTANCE_INDEPENDENT_CUSTODY_REQUIRED')
     require(value['certificate_name'] not in CONTEXTS, 'PRODUCER_ACCEPTANCE_CERTIFICATE_ALIAS')
     require(type(value['controller_contexts']) is list
             and value['controller_contexts'] == list(CONTEXTS),
