@@ -55,9 +55,15 @@ CREATE TABLE scope_assignment_leases.assignments (
  ('development','testing'),('testing','staging'),('staging','production'),('production','main'))),
  CHECK(source_ref<>target_ref)
 );
+-- Expiry alone never frees a scope: the operator must explicitly deactivate the
+-- previous assignment before assigning the same source scope to another task.
+CREATE UNIQUE INDEX one_active_scope_assignment
+ ON scope_assignment_leases.assignments(product,source_ref) WHERE active;
 CREATE TABLE scope_assignment_leases.leases (
  lease_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  assignment_id uuid NOT NULL UNIQUE REFERENCES scope_assignment_leases.assignments(assignment_id),
+ product text NOT NULL REFERENCES scope_assignment_leases.products(product),
+ source_ref text NOT NULL CHECK(scope_assignment_leases._ref(source_ref)),
  principal name NOT NULL,principal_oid oid NOT NULL,
  request_id uuid NOT NULL UNIQUE,epoch bigint GENERATED ALWAYS AS IDENTITY CHECK(epoch>0),
  binding_snapshot jsonb NOT NULL,assignment_snapshot jsonb NOT NULL,
@@ -65,6 +71,10 @@ CREATE TABLE scope_assignment_leases.leases (
  started_at timestamptz NOT NULL,expires_at timestamptz NOT NULL,
  CHECK(expires_at>started_at AND expires_at<=started_at+interval '5 minutes')
 );
+-- Retain the scope fence even after expiry or assignment deactivation. Only an
+-- explicit operator revocation of the old row permits a new assignment's claim.
+CREATE UNIQUE INDEX one_active_scope_lease
+ ON scope_assignment_leases.leases(product,source_ref) WHERE state='ACTIVE';
 CREATE TABLE scope_assignment_leases.audit (
  audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
  assignment_id uuid NOT NULL REFERENCES scope_assignment_leases.assignments(assignment_id),
@@ -184,6 +194,7 @@ BEGIN
  IF NOT FOUND OR NOT a.active OR a.expires_at<=clock_timestamp()
  THEN RAISE EXCEPTION 'SCOPE_ASSIGNMENT_UNAVAILABLE'; END IF;
  IF a.principal<>session_user OR a.principal_oid<>actor_oid THEN RAISE EXCEPTION 'SCOPE_ASSIGNMENT_OWNER_MISMATCH'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended('scope:'||a.product||':'||a.source_ref,1212));
  PERFORM scope_assignment_leases._permission(actor_oid,a.product,'claim');
  SELECT * INTO actor FROM scope_assignment_leases.principals WHERE principal=session_user FOR SHARE;
  SELECT * INTO g FROM scope_assignment_leases.grants WHERE principal=session_user AND product=a.product AND capability='claim' FOR SHARE;
@@ -200,11 +211,13 @@ BEGIN
  IF scope_assignment_leases._actor() IS DISTINCT FROM actor_oid THEN RAISE EXCEPTION 'SCOPE_LEASE_DENIED'; END IF;
  IF EXISTS(SELECT 1 FROM scope_assignment_leases.leases WHERE assignment_id=assignment_uuid OR request_id=request_uuid)
  THEN RAISE EXCEPTION 'SCOPE_REQUEST_OR_ASSIGNMENT_CONSUMED'; END IF;
+ IF EXISTS(SELECT 1 FROM scope_assignment_leases.leases WHERE product=a.product AND source_ref=a.source_ref AND state='ACTIVE')
+ THEN RAISE EXCEPTION 'SCOPE_SCOPE_ALREADY_LEASED'; END IF;
  stamp:=clock_timestamp();expiry:=least(stamp+interval '5 minutes',a.expires_at,p.expires_at,actor.expires_at,g.expires_at);
  IF expiry<=stamp THEN RAISE EXCEPTION 'SCOPE_ASSIGNMENT_UNAVAILABLE'; END IF;
- INSERT INTO scope_assignment_leases.leases(assignment_id,principal,principal_oid,request_id,
+ INSERT INTO scope_assignment_leases.leases(assignment_id,product,source_ref,principal,principal_oid,request_id,
  binding_snapshot,assignment_snapshot,started_at,expires_at)
- VALUES(a.assignment_id,session_user,actor_oid,request_uuid,scope_assignment_leases._binding(a),
+ VALUES(a.assignment_id,a.product,a.source_ref,session_user,actor_oid,request_uuid,scope_assignment_leases._binding(a),
  to_jsonb(a)-ARRAY['active','expires_at'],stamp,expiry) RETURNING * INTO l;
  receipt:=scope_assignment_leases._receipt(l,'ACTIVE',expiry);
  INSERT INTO scope_assignment_leases.audit(assignment_id,lease_id,principal,principal_oid,authentication,request_id,receipt)
@@ -227,7 +240,7 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'SCOPE_LEASE_UNAVAILABLE'; END IF;
  IF l.binding_snapshot IS DISTINCT FROM scope_assignment_leases._binding(a)
  OR l.assignment_snapshot IS DISTINCT FROM to_jsonb(a)-ARRAY['active','expires_at']
- OR l.principal<>a.principal OR l.principal_oid<>a.principal_oid
+ OR l.principal<>a.principal OR l.principal_oid<>a.principal_oid OR l.product<>a.product OR l.source_ref<>a.source_ref
  THEN RAISE EXCEPTION 'SCOPE_BINDING_CHANGED'; END IF;
  PERFORM scope_assignment_leases._registered(a);
  SELECT * INTO p FROM scope_assignment_leases.products WHERE product=a.product;

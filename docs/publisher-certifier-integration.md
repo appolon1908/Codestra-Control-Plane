@@ -87,6 +87,11 @@ read-only `READ COMMITTED` transaction, requires its actual OID grant, and recei
 `ONLINE_DATABASE_RECEIPT`. The first-issuance acquisition port must match that
 receipt's `ACTIVE` state, lease ID, positive epoch, owner and every binding field.
 Expired/revoked or changed bindings never automatically renew or reseal.
+Only one assignment may be active per product/source ref, and only one `ACTIVE`
+lease may fence that source scope across all assignment IDs and owners. Expiry
+does not release either static fence. An operator must explicitly deactivate the
+old assignment and revoke its retained lease before a newly assigned task can
+claim the same scope. Old receipts then remain non-`ACTIVE`; history is preserved.
 Operator-only schema/grants/assignment provisioning and first scope check issuance
 remain separately unapproved Phase B actions, not effects of source integration.
 

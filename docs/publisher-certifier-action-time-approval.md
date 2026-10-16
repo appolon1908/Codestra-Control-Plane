@@ -274,6 +274,15 @@ epoch. Expiration is at most five minutes and never exceeds the current
 assignment, principal, product or grant expiration. There is no renewal,
 automatic replacement or epoch reseal after expiry/revocation. A fresh lease
 needs a separately assigned new task; the caller cannot write authority tables.
+Active assignments are unique for each `(product, source_ref)`, regardless of
+owner, task ID or assignment UUID. A second active assignment for that source
+scope is rejected. An independent unique `ACTIVE` lease fence covers the same
+scope, including expired lease rows: expiry never silently frees it.
+Before a replacement task may claim that scope, the operator must explicitly
+deactivate the old assignment and mark its old lease `REVOKED`, preserving both
+rows and their audit history. Deactivation immediately makes the old receipt
+non-`ACTIVE`; until explicit lease revocation the replacement claim still denies.
+There is no automatic scope handover or revival of a consumed assignment.
 
 The independent verifier receives only schema usage and exact execution of
 `scope_assignment_leases.inspect_binding(uuid)`, together with its operator-owned

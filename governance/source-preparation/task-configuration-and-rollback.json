@@ -18,9 +18,9 @@
   "verification": {
     "offline_only": true,
     "tests": [
-      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_publisher_installation.py -v", "result": "Ran 4 tests; OK"},
-      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_scope_assignment_leases.py -v", "result": "Ran 14 tests in 125.656s; OK; no skips; disposable PostgreSQL16/SCRAM/TLS only"},
-      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_publisher_release.py -v", "result": "Ran 3 tests; OK"}
+      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_publisher_installation.py -v", "result": "Ran 5 tests in 1.136s; OK; includes commit/blob replacement regressions"},
+      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_scope_assignment_leases.py -v", "result": "Ran 16 tests in 4.982s; OK; no skips; disposable PostgreSQL16/SCRAM/TLS in private /dev/shm TMPDIR; includes concurrent cross-owner scope exclusivity and explicit operator handover"},
+      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_publisher_release.py -v", "result": "Ran 4 tests in 1.039s; OK; includes commit/blob replacement regressions"}
     ],
     "template_parse": "4 proposal templates and task JSON parsed",
     "integration_suite_owner": "/root",
