@@ -301,7 +301,7 @@ class AtomicRegistryTests(unittest.TestCase):
 class DependencyFreshnessTests(unittest.TestCase):
     def test_subsection_digest_and_current_dependency_refs_are_required(self):
         from codestra_control.evidence import PromotionRequest
-        from codestra_control.lease_materialization import dependency_digest
+        from codestra_control.lease_materialization import dependency_digest, MaterializationDenied
         from dataclasses import asdict
         b = PromotionRequest(REPO, 'Example', 'subsection/sec--other', 'section/sec', HEAD, BASE)
         prerequisite = dict(product='Example', scope_type='SUBSECTION',
@@ -331,9 +331,9 @@ class DependencyFreshnessTests(unittest.TestCase):
         observer = InspectionLeaseObserver(api, 88, 99, clock=lambda: NOW)
         self.assertEqual(observer.dependency(d), d)
         api.moved = True
-        with self.assertRaisesRegex(InspectionDenied, 'DEPENDENCY_REF_MOVED'): observer.dependency(d)
+        with self.assertRaisesRegex(MaterializationDenied, 'DEPENDENCY_REF_MOVED'): observer.dependency(d)
         api.moved = False; api.target_moved = True
-        with self.assertRaisesRegex(InspectionDenied, 'DEPENDENCY_REF_MOVED'): observer.dependency(d)
+        with self.assertRaisesRegex(MaterializationDenied, 'DEPENDENCY_REF_MOVED'): observer.dependency(d)
 
 
 class AtomicCliTests(unittest.TestCase):

@@ -206,8 +206,12 @@ class GitHubLeaseObserver:
                 and value['binding_hash']==dependency_digest(binding,prerequisite),'DEPENDENCY_BINDING_MISMATCH')
         require(value['approved_by']=='Ralph L. Appolon' and value['purpose']=='SCOPE_CERTIFICATION' and bool(value['capability_receipt']),'DEPENDENCY_CAPABILITY_UNAVAILABLE')
         require(value['issuer_app_id'] not in (15368,self.app_id) and value['issuer_name'] not in ('codestra-control-plane','codestra/control-plane','promotion-gate'),'DEPENDENCY_ISSUER_UNAVAILABLE')
+        require(self.ref(binding.repository,binding.source_ref)==binding.source_sha
+                and self.ref(binding.repository,binding.target_ref)==binding.target_base_sha,'DEPENDENCY_REF_MOVED')
         receipt=self.client.get('/repos/'+value['repository']+'/check-runs/'+str(value['check_id']))
         require(receipt['id']==value['check_id'] and receipt['app']['id']==value['issuer_app_id'] and receipt['name']==value['issuer_name']
                 and receipt['external_id']==value['binding_hash'] and receipt['head_sha']==binding.source_sha
                 and receipt['status']=='completed' and receipt['conclusion']=='success','DEPENDENCY_RECEIPT_UNAVAILABLE')
+        require(self.ref(binding.repository,binding.source_ref)==binding.source_sha
+                and self.ref(binding.repository,binding.target_ref)==binding.target_base_sha,'DEPENDENCY_REF_MOVED')
         return dict(value)

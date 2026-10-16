@@ -37,6 +37,45 @@ class CoordinatorCLITests(unittest.TestCase):
             self.assertEqual(cli.main(self.args), 1)
         self.assertEqual(output.getvalue().strip(), 'COORDINATOR_OPERATION_UNAVAILABLE')
 
+    def test_success_is_printed_only_after_connection_close(self):
+        connection = mock.MagicMock()
+        output = io.StringIO()
+        def close():
+            self.assertEqual(output.getvalue(), '')
+        connection.close.side_effect = close
+        with mock.patch.object(cli, 'verify_code_custody'), mock.patch.object(cli, 'connect_protected', return_value=connection), mock.patch.object(cli, 'coordinate', return_value={'state': 'DRY_RUN', 'usable': False}), contextlib.redirect_stdout(output):
+            self.assertEqual(cli.main(self.args), 0)
+        self.assertIn('"usable": false', output.getvalue())
+        connection.close.assert_called_once()
+
+    def test_close_failure_after_coordinate_does_not_print_success_or_escape(self):
+        connection = mock.MagicMock()
+        connection.close.side_effect = RuntimeError('synthetic-private-close-diagnostic')
+        with mock.patch.object(cli, 'verify_code_custody'), mock.patch.object(cli, 'connect_protected', return_value=connection), mock.patch.object(cli, 'coordinate', return_value={'state': 'ADMITTED', 'usable': True}), contextlib.redirect_stdout(io.StringIO()) as output, contextlib.redirect_stderr(io.StringIO()) as error_output:
+            try:
+                result = cli.main(self.args)
+            except Exception:
+                result = 'exception-escaped'
+        self.assertEqual(result, 1)
+        self.assertEqual(output.getvalue(), 'COORDINATOR_OPERATION_UNAVAILABLE\n')
+        self.assertEqual(error_output.getvalue(), '')
+
+    def test_cleanup_failure_preserves_original_safe_error_marker(self):
+        for error, expected in ((RuntimeError('synthetic-private-operation-diagnostic'), 'COORDINATOR_OPERATION_UNAVAILABLE'),
+                                (cli.AdmissionOutcomeUnknown('synthetic-private-operation-diagnostic'), 'ADMISSION_OUTCOME_UNKNOWN_USE_RECOVER')):
+            with self.subTest(error=type(error).__name__):
+                connection = mock.MagicMock()
+                connection.close.side_effect = RuntimeError('synthetic-private-close-diagnostic')
+                with mock.patch.object(cli, 'verify_code_custody'), mock.patch.object(cli, 'connect_protected', return_value=connection), mock.patch.object(cli, 'coordinate', side_effect=error), contextlib.redirect_stdout(io.StringIO()) as output, contextlib.redirect_stderr(io.StringIO()) as error_output:
+                    try:
+                        result = cli.main(self.args)
+                    except Exception:
+                        result = 'exception-escaped'
+                self.assertEqual(result, 1)
+                self.assertEqual(output.getvalue(), expected + '\n')
+                self.assertEqual(error_output.getvalue(), '')
+                connection.close.assert_called_once()
+
     def test_writable_coordinator_entrypoint_fails_custody(self):
         original = Path.lstat
         def metadata(path):
