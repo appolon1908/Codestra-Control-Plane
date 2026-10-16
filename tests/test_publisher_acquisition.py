@@ -132,6 +132,61 @@ class AcquisitionTests(unittest.TestCase):
             return value
         self.api.get=changed
         with self.assertRaises(PublicationDenied):self.verifier.verify(self.acquired,fixture.NOW)
+    def test_conflicting_publisher_context_app_binding_denies(self):
+        original=self.api.get
+        for context in ('codestra-control-plane','codestra/control-plane'):
+            def changed(path):
+                value=original(path)
+                if path.endswith('/protection'):
+                    value['required_status_checks']['checks'].append({'context':context,'app_id':999})
+                return value
+            self.api.get=changed
+            with self.subTest(context=context),self.assertRaisesRegex(PublicationDenied,'CONTROLLER_CHECK_PRODUCER_MISMATCH'):
+                self.verifier.verify(self.acquired,fixture.NOW)
+    def test_matching_publisher_contexts_do_not_require_circular_success(self):
+        original=self.api.get
+        def changed(path):
+            value=original(path)
+            if path.endswith('/protection'):
+                value['required_status_checks']['checks'].extend(
+                    {'context':context,'app_id':self.acquired.authority.app_id}
+                    for context in ('codestra-control-plane','codestra/control-plane'))
+            return value
+        self.api.get=changed
+        self.verifier.verify(self.acquired,fixture.NOW)
+    def test_unbound_publisher_contexts_preserve_protection_compatibility(self):
+        original=self.api.get
+        for app_id in (None,-1):
+            def changed(path):
+                value=original(path)
+                if path.endswith('/protection'):
+                    value['required_status_checks']['checks'].extend(
+                        {'context':context,'app_id':app_id}
+                        for context in ('codestra-control-plane','codestra/control-plane'))
+                return value
+            self.api.get=changed
+            with self.subTest(app_id=app_id):self.verifier.verify(self.acquired,fixture.NOW)
+    def test_invalid_publisher_context_app_binding_denies(self):
+        original=self.api.get
+        for context in ('codestra-control-plane','codestra/control-plane'):
+            for app_id in (0,-2,True,'7'):
+                def changed(path):
+                    value=original(path)
+                    if path.endswith('/protection'):
+                        value['required_status_checks']['checks'].append({'context':context,'app_id':app_id})
+                    return value
+                self.api.get=changed
+                with self.subTest(context=context,app_id=app_id),self.assertRaisesRegex(PublicationDenied,'CONTROLLER_CHECK_PRODUCER_MISMATCH'):
+                    self.verifier.verify(self.acquired,fixture.NOW)
+    def test_other_control_context_does_not_acquire_publisher_app_binding(self):
+        original=self.api.get
+        def changed(path):
+            value=original(path)
+            if path.endswith('/protection'):
+                value['required_status_checks']['checks'].append({'context':'promotion-gate','app_id':999})
+            return value
+        self.api.get=changed
+        self.verifier.verify(self.acquired,fixture.NOW)
     def test_encrypted_but_unverified_database_transport_denies(self):
         for mode in ('require','verify-ca','prefer'):
             connection=mock.MagicMock();connection.get_dsn_parameters.return_value={'sslmode':mode,'host':'authority.example','sslrootcert':'/fixture/ca.pem'}

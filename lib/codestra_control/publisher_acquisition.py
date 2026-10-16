@@ -11,7 +11,7 @@ from . import evidence as e
 from .policy import ProductMapping,ScopeEdge
 from .publisher_startup import protected_read
 from .publisher_ownership import PublisherUnavailable
-from .publisher_adapter import Acquired,Authority,CertificateIssuer,verify_issuer,require,binding_digest
+from .publisher_adapter import Acquired,Authority,CertificateIssuer,CONTEXTS,verify_issuer,require,binding_digest
 
 
 def decode_snapshot(raw):
@@ -141,6 +141,13 @@ class GitHubVerifier:
                 and reviews['require_last_push_approval'] is True
                 and protection['required_conversation_resolution']['enabled'] is True,'PROTECTION_CONTRACT_UNENFORCED')
         required={(v.name,v.producer) for v in s.required_checks}
+        # Excluding our own success prevents circularity, but a conflicting App
+        # binding would make the emitted status unable to satisfy protection.
+        for check in checks['checks']:
+            if check['context'] in CONTEXTS:
+                app_id=check['app_id']
+                require(app_id is None or type(app_id) is int and app_id in (-1,a.app_id),
+                        'CONTROLLER_CHECK_PRODUCER_MISMATCH')
         actual={(v['context'],'github-actions:'+str(v['app_id'])) for v in checks['checks']}
         from .decision import CONTROL_PLANE_CONTEXTS
         actual={v for v in actual if v[0] not in CONTROL_PLANE_CONTEXTS}

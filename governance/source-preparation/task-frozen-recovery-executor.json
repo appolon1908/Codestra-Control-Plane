@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "frozen-recovery-executor",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--frozen-recovery-executor",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "137887525e75c466c7d3fc1a0243e0d36ce3b909",
+  "owner_thread": "01a13c31-799c-7d72-8fe5-dd1fcd92c279",
+  "worktree": "/tmp/cp-frozen-executor-01a13c31",
+  "authorization_basis": "User explicitly requested completion of executable controller recovery and continuation of the four-prerequisite, assignment and canonical-promotion sequence; prior automatic source-work authorization persists.",
+  "scope": "Source-only versioned authenticated frozen recovery SQL API, independent repair materializer composition, rollback-default CLI and disposable regression tests. Preserve PR21 inactive interface and all existing lease, publication, owner and certification boundaries.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}
