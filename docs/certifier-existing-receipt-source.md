@@ -42,7 +42,12 @@ every registered subsection under its section plus every current cross-section
 `sections.depends_on` prerequisite certificate. Section prerequisites resolve
 through canonical section IDs or keys only when unambiguous; invalid arrays,
 unknown/self/duplicate references and dependency cycles deny for all scopes.
-The product graph is bounded to 1,000 sections and checked without recursion.
+Both section and subsection dependency graphs are validated on every acquisition,
+including acquisitions for other scope levels. Subsection references must be
+unique canonical workstation IDs in the same product; unknown IDs, self-links,
+duplicate references, name/ref aliases and cycles deny. Fresh historical checks
+cannot override a newly cyclic registered graph. Each graph is bounded to 1,000
+registered scopes and checked without recursion.
 DEVELOPMENT requires every
 configured section; TESTING, STAGING and PRODUCTION require the immediate
 registered predecessor certificate binding. Missing or extra declared bindings
