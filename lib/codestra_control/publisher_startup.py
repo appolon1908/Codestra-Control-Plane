@@ -106,6 +106,7 @@ def verify_code_custody():
     paths=[root/'bin/codestra-github-statusd',root/'runtime-publisher-tools.json',*root.joinpath('lib').rglob('*.py')]
     if (root/'bin/codestra-lease').exists():paths.append(root/'bin/codestra-lease')
     if (root/'bin/codestra-coordinate').exists():paths.append(root/'bin/codestra-coordinate')
+    if (root/'bin/codestra-admission').exists():paths.append(root/'bin/codestra-admission')
     for path in paths:
         info=path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=0 or info.st_mode&0o022:
