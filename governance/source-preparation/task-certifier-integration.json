@@ -22,13 +22,14 @@
     "011/012/013 source schemas are unapplied and empty. Authenticated principals/OID-bound product grants, actual scoped assignments/leases, and independently accepted exact pending delegations require separate operator provisioning.",
     "Protected producer acceptance, independent certifier custody/capability, strict TLS/SCRAM database connection and private durable ledger are unprovisioned.",
     "No public CLI, installed production composition or certifier service is enabled. Default privileged dependencies remain unset and deny.",
-    "Final local expiry fences cannot be atomic with remote network acceptance; residual cross-system timing must be operationally accepted."
+    "Final local expiry fences cannot be atomic with remote network acceptance; residual cross-system timing must be operationally accepted.",
+    "SUBSECTION first certification with any configured atomic task/candidate remains denied: the shared certificate contract has no authentic registered atomic dependency binding. No atomic/hotfix route exception is added."
   ],
   "first_issuance_status": "SOURCE_ONLY_UNPROVISIONED",
   "validation": {
-    "targeted_result": "51 tests passed; 0 skipped; 3.579 seconds",
-    "scope": "Final certifier source, factory, expiry and installation guards, 011/013 constraints, and combined real TLS/SCRAM PostgreSQL012/013 registry/first-issuer with synthetic GitHub only.",
-    "fixture_dependencies": "Actual 012 fixture loaded from configuration-and-rollback worktree and actual protected acceptance parser loaded from publisher-receipt-integration worktree for this isolated branch; assembled checkout resolves both locally.",
+    "targeted_result": "59 tests passed; 0 skipped; 5.451 seconds",
+    "scope": "Final certifier source, factory, expiry and installation guards, 011/013 constraints, and combined real TLS/SCRAM PostgreSQL012/013 registry/first-issuer with synthetic GitHub only. Real registered-child omission, extra dependency, hidden snapshot mapping, final-read child additions and actual atomic inventory regressions; all environment predecessor policy; independent suite/time freshness and deadline expiry regressions.",
+    "fixture_dependencies": "Actual 012 fixture and protected acceptance parser were loaded from their sibling source worktrees for the isolated target run. Final assembled tests now import these required modules directly and fail if missing.",
     "storage": "New private 0700 /dev/shm temporary directory; default PostgreSQL/fsync flags preserved; fixture database removed on teardown.",
     "full_suite": "No second full suite launched; integration lead owns final assembled full-suite validation."
   }

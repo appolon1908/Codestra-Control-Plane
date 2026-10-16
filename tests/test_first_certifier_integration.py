@@ -21,16 +21,12 @@ from codestra_control.publisher_adapter import Authority, PublicationDenied, bin
 from codestra_control.publisher_effect import IntentLedger
 from codestra_control.policy import ScopeEdge
 
-try:
-    import test_scope_assignment_leases as scope_fixture
-    from codestra_control import publisher_acceptance
-except ImportError:
-    scope_fixture = None
+import test_scope_assignment_leases as scope_fixture
+from codestra_control import publisher_acceptance
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipUnless(scope_fixture is not None, 'Assembled source 012 fixture and shared acceptance parser required')
 class FirstCertificationSQLIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -39,9 +35,11 @@ class FirstCertificationSQLIntegrationTests(unittest.TestCase):
         try:
             for migration in ('011-certifier-authority.sql', '013-first-certification-pending.sql'):
                 cls.harness.admin((ROOT / migration).read_text())
-            cls.harness.admin('GRANT USAGE ON SCHEMA certifier_authority TO verifier')
+            cls.harness.admin('GRANT USAGE ON SCHEMA certifier_authority,scoped_registration TO verifier')
             cls.harness.admin('GRANT SELECT ON ALL TABLES IN SCHEMA certifier_authority TO verifier')
-            cls.harness.admin('GRANT SELECT ON public.products TO verifier')
+            cls.harness.admin('GRANT SELECT ON public.products,public.sections,public.workstations,public.atomic_tasks TO verifier')
+            cls.harness.admin('GRANT SELECT ON scoped_registration.products,scoped_registration.workstations,scoped_registration.lanes,scoped_registration.candidates TO verifier')
+            cls.harness.admin('GRANT SELECT ON scope_assignment_leases.products TO verifier')
             for schema in ('scope_assignment_leases', 'assignment_leases', 'scoped_registration', 'frozen_recovery'):
                 cls.harness.admin('REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA ' + schema + ' FROM verifier')
             cls.harness.admin('GRANT EXECUTE ON FUNCTION scope_assignment_leases.inspect_binding(uuid) TO verifier')
@@ -68,7 +66,8 @@ class FirstCertificationSQLIntegrationTests(unittest.TestCase):
         self.now = datetime.now(timezone.utc)
         self.binding = replace(fixture.REQUEST, product='ScopeFixture', source_ref='section/sec', target_ref='development')
         mapping = replace(fixture.ready().mapping, product='ScopeFixture', production_ref='production',
-                          scope_edges=(ScopeEdge('section', 'section/sec', 'development', 'development'),))
+                          scope_edges=(ScopeEdge('section', 'section/sec', 'development', 'development'),
+                                       ScopeEdge('subsection', 'subsection/sec--sub', 'section', 'section/sec')))
         snapshot = fixture.ready()
         snapshot = replace(snapshot, mapping=mapping, observed_binding=self.binding, certificate=None,
             observed_at=self.now, evaluated_at=self.now,
@@ -76,6 +75,11 @@ class FirstCertificationSQLIntegrationTests(unittest.TestCase):
             reviews=tuple(replace(value, binding=self.binding) for value in snapshot.reviews),
             lease=replace(snapshot.lease, binding=self.binding, owner='alice', expected_owner='alice',
                           assignment_id=self.harness.assignment, expires_at=datetime.fromisoformat(lease['expires_at'])))
+        self.child_binding = replace(self.binding, source_ref='subsection/sec--sub', target_ref='section/sec',
+                                     source_sha='e' * 40, target_base_sha=self.binding.source_sha)
+        self.dependencies = [dict(binding=asdict(self.child_binding), repository_id=123, check_id=88,
+                                  issuer_app_id=99, name='scope-certification',
+                                  expires_at=(self.now + timedelta(minutes=2)).isoformat())]
         authority = Authority('Ralph L. Appolon', 'dev-desktop', 99, 100, 1,
                               self.now + timedelta(minutes=4), 'certifier-custody:fixture', (repository,))
         encode = lambda value: json.loads(json.dumps(asdict(value), default=lambda dt: dt.isoformat()))
@@ -85,10 +89,10 @@ class FirstCertificationSQLIntegrationTests(unittest.TestCase):
           scope_type,scope_name,assignment_id,lease_id,lease_epoch,lease_principal,delegation_ref,
           capability_receipt,dependency_policy,accepted_by,purpose,issued_at,expires_at,active)
           SELECT %s,rolname,oid,'ScopeFixture',%s,123,9,%s,%s,'SECTION','section/sec',%s,%s,%s,'alice',
-          'operator:integration-delegation','scope-capability:fixture','[]','Ralph L. Appolon',
+          'operator:integration-delegation','scope-capability:fixture',%s,'Ralph L. Appolon',
           'FIRST_SCOPE_CERTIFICATION',%s,%s,true FROM pg_roles WHERE rolname='verifier'""",
           (binding_digest(self.binding), repository, Json(encode(authority)), Json(encode(snapshot)),
-           self.harness.assignment, lease['lease_id'], lease['epoch'], self.now, self.now + timedelta(minutes=2)))
+           self.harness.assignment, lease['lease_id'], lease['epoch'], Json(self.dependencies), self.now, self.now + timedelta(minutes=2)))
         policy = dict(schema='codestra.producer-acceptance.v1', state='ACCEPTED', accepted_by='Ralph L. Appolon',
             acceptance_ref='operator:integration-policy', publisher_app_id=7, publisher_installation_id=8,
             certificate_app_id=99, certificate_installation_id=100, certificate_name='scope-certification',
@@ -101,6 +105,16 @@ class FirstCertificationSQLIntegrationTests(unittest.TestCase):
         self.api = CertifierAPI()
         original = self.api.get
         def get(path):
+            if path.endswith('/branches/subsection%2Fsec--sub'): return {'commit': {'sha': self.child_binding.source_sha}}
+            if path.endswith('/branches/section%2Fsec'): return {'commit': {'sha': self.binding.source_sha}}
+            if path.endswith('/check-runs/88'):
+                return {'id': 88, 'app': {'id': 99}, 'name': 'scope-certification',
+                        'head_sha': self.child_binding.source_sha, 'external_id': binding_digest(self.child_binding),
+                        'status': 'completed', 'conclusion': 'success',
+                        'completed_at': self.now.isoformat(), 'check_suite': {'id': 188}}
+            if path.endswith('/check-suites/188'):
+                return {'id': 188, 'app': {'id': 99}, 'head_sha': self.child_binding.source_sha,
+                        'status': 'completed', 'conclusion': 'success'}
             value = original(path)
             if path.endswith('/pulls/9'):
                 value['head'].update(ref=self.binding.source_ref, sha=self.binding.source_sha)
@@ -148,4 +162,57 @@ class FirstCertificationSQLIntegrationTests(unittest.TestCase):
                 return value
             self.api.get = get
             with self.subTest(field=field), self.assertRaises(PublicationDenied): self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_omitted_configured_child_cannot_be_hidden_by_empty_policy_or_snapshot_mapping(self):
+        self.harness.admin("UPDATE certifier_authority.pending_bindings SET dependency_policy='[]', snapshot=jsonb_set(snapshot,'{mapping,scope_edges}',(snapshot->'mapping'->'scope_edges')-1)")
+        with self.assertRaises(PublicationDenied): self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_new_configured_child_during_final_registry_read_denies_before_effect(self):
+        original = self.certifier.registry.acquire
+        calls = [0]
+        def changed(binding, now):
+            calls[0] += 1
+            if calls[0] == 2:
+                self.harness.admin("INSERT INTO public.workstations(workstation_id,product,section,subsection,branch,parent_branch,worktree,order_index) VALUES('scope-new-child','ScopeFixture','sec','new','subsection/sec--new','section/sec','/fixture/scope/new',2)")
+                self.harness.admin("INSERT INTO scoped_registration.workstations SELECT product,workstation_id,branch,worktree,jsonb_build_object('product',product,'workstation_id',workstation_id,'section',section,'subsection',subsection,'branch',branch,'parent_branch',parent_branch,'worktree',worktree,'order_index',order_index) FROM public.workstations WHERE workstation_id='scope-new-child'")
+                self.harness.admin("INSERT INTO scoped_registration.lanes VALUES('/fixture/scope/new','ScopeFixture','workstation','scope-new-child','subsection/sec--new')")
+            return original(binding, now)
+        self.certifier.registry.acquire = changed
+        with self.assertRaises(PublicationDenied): self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_empty_declared_policy_denies_even_with_complete_snapshot_mapping(self):
+        self.harness.admin("UPDATE certifier_authority.pending_bindings SET dependency_policy='[]'")
+        with self.assertRaisesRegex(PublicationDenied, 'CURRENT_DEPENDENCY_INVENTORY_MISMATCH'):
+            self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_extra_declared_dependency_denies_before_online_receipt_read(self):
+        from psycopg2.extras import Json
+        extra = dict(self.dependencies[0], binding=asdict(replace(self.binding,
+            source_ref='testing', target_ref='staging', source_sha='f' * 40, target_base_sha='e' * 40)), check_id=89)
+        self.harness.admin('UPDATE certifier_authority.pending_bindings SET dependency_policy=%s', (Json([*self.dependencies, extra]),))
+        with self.assertRaisesRegex(PublicationDenied, 'CURRENT_DEPENDENCY_INVENTORY_MISMATCH'):
+            self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_subsection_with_actual_atomic_task_cannot_claim_empty_dependencies(self):
+        from psycopg2.extras import Json
+        assignment = self.harness.assign('subsection', 'section', 'subsection/sec--sub', 'section/sec')
+        self.harness.admin('UPDATE scope_assignment_leases.assignments SET repository=%s WHERE assignment_id=%s',
+                           (self.binding.repository, assignment))
+        lease = self.harness.claim(assignment=assignment)
+        binding = replace(self.binding, source_ref='subsection/sec--sub', target_ref='section/sec')
+        raw = self.harness.admin('SELECT snapshot FROM certifier_authority.pending_bindings')[0][0]
+        raw['observed_binding'] = asdict(binding)
+        for value in raw['checks']: value['binding'] = asdict(binding)
+        for value in raw['reviews']: value['binding'] = asdict(binding)
+        raw['lease'].update(binding=asdict(binding), assignment_id=assignment, expires_at=lease['expires_at'])
+        self.harness.admin("UPDATE certifier_authority.pending_bindings SET binding_hash=%s,snapshot=%s,scope_type='SUBSECTION',scope_name='subsection/sec--sub',assignment_id=%s,lease_id=%s,lease_epoch=%s,dependency_policy='[]'",
+            (binding_digest(binding), Json(raw), assignment, lease['lease_id'], lease['epoch']))
+        self.harness.admin("INSERT INTO public.atomic_tasks(task_id,workstation_id,title,owner) VALUES('configured-atomic','scope-fixture-ws','configured task','alice')")
+        with self.assertRaisesRegex(PublicationDenied, 'ATOMIC_DEPENDENCY_CERTIFICATE_UNSUPPORTED'):
+            self.certifier.publish(binding)
         self.assertEqual(self.api.effects, [])

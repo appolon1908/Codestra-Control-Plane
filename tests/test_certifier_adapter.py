@@ -322,7 +322,7 @@ class AcceptedCertifierContractTests(unittest.TestCase):
             custody_receipt='publisher-custody:1', certifier_custody_receipt='custody:1',
             certifier_capability_receipt='accepted:scope-capability',
             acceptance_ref='accepted:operator:1', revision='e' * 64,
-            expires_at=fixture.NOW + timedelta(minutes=3))
+            expires_at=fixture.NOW + timedelta(minutes=3), max_receipt_age_seconds=300)
         self.loader = mock.Mock(return_value=self.policy)
         # The shared publisher acceptance parser is maintained independently.
         # This synthetic port isolates certifier wiring; integration uses its
@@ -477,7 +477,7 @@ class FirstContractVerifier:
             'scope-certification', ('codestra-control-plane', 'codestra/control-plane'),
             'operator:accepted-first-scope-delegation', fixture.NOW + timedelta(minutes=2),
             'FIRST_SCOPE_CERTIFICATION', acquired.scope_type, acquired.scope_name,
-            acquired.delegation_ref, acquired.capability_receipt)
+            acquired.delegation_ref, acquired.capability_receipt, 300)
 
 
 class FirstCertifierTests(unittest.TestCase):
@@ -581,7 +581,10 @@ class FirstCertifierTests(unittest.TestCase):
             if path.endswith('/branches/staging'): return {'commit': {'sha': fixture.REQUEST.source_sha}}
             if path.endswith('/check-runs/88'):
                 return {'id': 88, 'app': {'id': 99}, 'name': 'scope-certification', 'head_sha': 'e' * 40,
-                        'external_id': binding_digest(dependency_binding), 'status': 'completed', 'conclusion': 'success'}
+                        'external_id': binding_digest(dependency_binding), 'status': 'completed', 'conclusion': 'success',
+                        'completed_at': fixture.NOW.isoformat(), 'check_suite': {'id': 188}}
+            if path.endswith('/check-suites/188'):
+                return {'id': 188, 'app': {'id': 99}, 'head_sha': 'e' * 40, 'status': 'completed', 'conclusion': 'success'}
             return original(path)
         self.api.get = dependency_api
         self.assertEqual(self.certifier.publish(fixture.REQUEST).state, 'COMPLETE')
@@ -622,15 +625,27 @@ class RestrictedFirstCertificationRegistryTests(RestrictedCertificationRegistryT
             self.pending.lease_id, 1, 'owner', self.pending.delegation_ref,
             self.pending.capability_receipt, self.pending.issued_at, self.pending.expires_at, [], 'Ralph L. Appolon')
         self.lease['binding'].update(source_level='staging', target_level='production')
-        self.cursor.fetchall.return_value = [self.pending_row]
-        self.cursor.fetchone.side_effect = [(True, True), (self.lease,)]
+        from codestra_control.certifier_adapter import CertificationDependency
+        dependency = CertificationDependency(replace(fixture.REQUEST, source_ref='testing', target_ref='staging',
+            source_sha='e' * 40, target_base_sha=fixture.REQUEST.source_sha), 123, 88, 99,
+            'scope-certification', fixture.NOW + timedelta(minutes=2))
+        self.pending = replace(self.pending, dependencies=(dependency,))
+        raw_dependency = encode(dependency)
+        self.pending_row = self.pending_row[:14] + ([raw_dependency],) + self.pending_row[15:]
+        mapping = self.pending.snapshot.mapping
+        chain = [mapping.development_ref,mapping.testing_ref,mapping.staging_ref,mapping.production_ref]
+        self.product_row = (fixture.REQUEST.repository,mapping.testing_ref,chain,
+            dict(product=fixture.REQUEST.product,repository=fixture.REQUEST.repository,
+                 test_branch=mapping.testing_ref,promotion_chain=chain),123,*chain,mapping.release_ref,True)
+        self.cursor.fetchall.side_effect = [[self.pending_row], [], []]
+        self.cursor.fetchone.side_effect = [(True, True), self.product_row, (self.lease,)]
 
     def test_authenticated_source_reader_checks_grant_scope_existing_certification_and_online_lease(self):
         from codestra_control.certifier_adapter import RestrictedFirstCertificationRegistry
         value = RestrictedFirstCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
         self.assertEqual(value, self.pending)
         statements = [call.args[0] for call in self.cursor.execute.call_args_list]
-        self.assertEqual(len(statements), 3)
+        self.assertEqual(len(statements), 6)
         self.assertIn('certifier_authority.pending_bindings', statements[1])
         self.assertIn('certifier_authority.product_grants', statements[1])
         self.assertEqual(self.cursor.execute.call_args.args,
@@ -639,7 +654,7 @@ class RestrictedFirstCertificationRegistryTests(RestrictedCertificationRegistryT
 
     def test_grant_or_existing_scope_registration_missing_denies(self):
         from codestra_control.certifier_adapter import RestrictedFirstCertificationRegistry
-        self.cursor.fetchall.return_value = []
+        self.cursor.fetchall.side_effect = [[]]
         with self.assertRaises(PublicationDenied):
             RestrictedFirstCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
 
@@ -656,7 +671,8 @@ class RestrictedFirstCertificationRegistryTests(RestrictedCertificationRegistryT
                        {'expires_at': fixture.NOW.isoformat()},
                        {'binding': dict(self.lease['binding'], base_sha='d' * 40)},
                        {'binding': dict(self.lease['binding'], source_level='atomic_task')}):
-            self.cursor.fetchone.side_effect = [(True, True), (dict(self.lease, **change),)]
+            self.cursor.fetchall.side_effect = [[self.pending_row], [], []]
+            self.cursor.fetchone.side_effect = [(True, True), self.product_row, (dict(self.lease, **change),)]
             with self.subTest(change=change), self.assertRaises(PublicationDenied):
                 RestrictedFirstCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
 
@@ -792,3 +808,101 @@ class FirstCertifierFactoryTests(unittest.TestCase):
             self.assertIsInstance(service.github.api, CertifierGitHubClient)
             self.assertIs(service.registry.connection, connection)
             signer.assert_not_called(); policy_reader.assert_not_called()
+
+
+class DependencyFreshnessTests(unittest.TestCase):
+    def test_stale_missing_future_time_or_wrong_independent_suite_denies_first_effect(self):
+        from codestra_control.certifier_adapter import CertificationDependency
+        original_registry = PendingRegistry()
+        binding = replace(fixture.REQUEST, source_ref='testing', target_ref='staging', source_sha='e' * 40,
+                          target_base_sha=fixture.REQUEST.source_sha)
+        dependency = CertificationDependency(binding, 123, 88, 99, 'scope-certification', fixture.NOW + timedelta(minutes=2))
+        for kind in ('stale', 'missing', 'future', 'suite-app', 'suite-sha', 'suite-missing'):
+            registry = PendingRegistry(); registry.value = replace(original_registry.value, dependencies=(dependency,))
+            api = CertifierAPI(); original = api.get
+            def get(path):
+                if path.endswith('/branches/testing'): return {'commit': {'sha': 'e' * 40}}
+                if path.endswith('/branches/staging'): return {'commit': {'sha': fixture.REQUEST.source_sha}}
+                if path.endswith('/check-runs/88'):
+                    value = {'id': 88, 'app': {'id': 99}, 'name': 'scope-certification', 'head_sha': 'e' * 40,
+                        'external_id': binding_digest(binding), 'status': 'completed', 'conclusion': 'success',
+                        'completed_at': fixture.NOW.isoformat(), 'check_suite': {'id': 188}}
+                    if kind == 'missing': value.pop('completed_at')
+                    if kind == 'suite-missing': value.pop('check_suite')
+                    if kind == 'stale': value['completed_at'] = (fixture.NOW - timedelta(minutes=6)).isoformat()
+                    if kind == 'future': value['completed_at'] = (fixture.NOW + timedelta(seconds=1)).isoformat()
+                    return value
+                if path.endswith('/check-suites/188'):
+                    return {'id': 188, 'app': {'id': 7 if kind == 'suite-app' else 99},
+                        'head_sha': 'd' * 40 if kind == 'suite-sha' else 'e' * 40,
+                        'status': 'completed', 'conclusion': 'success'}
+                return original(path)
+            api.get = get
+            with tempfile.TemporaryDirectory() as directory:
+                from codestra_control.certifier_adapter import AuthenticatedFirstCertifier
+                issuer = AuthenticatedFirstCertifier(registry, CertifierGitHubVerifier(api),
+                    IntentLedger(Path(directory) / 'intent.sqlite'), contract_verifier=FirstContractVerifier(),
+                    host='dev-desktop', clock=lambda: fixture.NOW)
+                with self.subTest(kind=kind), self.assertRaises(PublicationDenied): issuer.publish(fixture.REQUEST)
+                self.assertEqual(api.effects, [])
+
+    def test_final_registry_read_exhausting_github_dependency_freshness_denies_before_intent(self):
+        from codestra_control.certifier_adapter import AuthenticatedFirstCertifier, CertificationDependency
+        from unittest import mock
+        registry = PendingRegistry(); now = [fixture.NOW]
+        binding = replace(fixture.REQUEST, source_ref='testing', target_ref='staging', source_sha='e' * 40,
+                          target_base_sha=fixture.REQUEST.source_sha)
+        registry.value = replace(registry.value, dependencies=(CertificationDependency(binding, 123, 88, 99,
+            'scope-certification', fixture.NOW + timedelta(minutes=2)),))
+        api = CertifierAPI(); original_get = api.get
+        def get(path):
+            if path.endswith('/branches/testing'): return {'commit': {'sha': 'e' * 40}}
+            if path.endswith('/branches/staging'): return {'commit': {'sha': fixture.REQUEST.source_sha}}
+            if path.endswith('/check-runs/88'):
+                return {'id': 88, 'app': {'id': 99}, 'name': 'scope-certification', 'head_sha': 'e' * 40,
+                    'external_id': binding_digest(binding), 'status': 'completed', 'conclusion': 'success',
+                    'completed_at': (fixture.NOW - timedelta(seconds=299)).isoformat(), 'check_suite': {'id': 188}}
+            if path.endswith('/check-suites/188'):
+                return {'id': 188, 'app': {'id': 99}, 'head_sha': 'e' * 40, 'status': 'completed', 'conclusion': 'success'}
+            return original_get(path)
+        api.get = get
+        original_acquire = registry.acquire
+        def slow(binding, observed_at):
+            result = original_acquire(binding, observed_at)
+            if registry.calls == 2: now[0] += timedelta(seconds=2)
+            return result
+        registry.acquire = slow
+        ledger = mock.Mock()
+        issuer = AuthenticatedFirstCertifier(registry, CertifierGitHubVerifier(api), ledger,
+            contract_verifier=FirstContractVerifier(), host='dev-desktop', clock=lambda: now[0])
+        with self.assertRaises(PublicationDenied): issuer.publish(fixture.REQUEST)
+        self.assertEqual(api.effects, []); ledger.reserve.assert_not_called()
+
+
+class ConfiguredDependencyInventoryTests(unittest.TestCase):
+    def test_every_environment_scope_requires_its_actual_registered_predecessor_inventory(self):
+        from unittest import mock
+        from codestra_control.certifier_adapter import CertificationDependency, RestrictedFirstCertificationRegistry
+        from codestra_control.policy import ScopeEdge
+        pending = PendingRegistry().value
+        mapping = replace(pending.snapshot.mapping, scope_edges=(
+            ScopeEdge('section', 'section/sec', 'development', 'development'),))
+        chain = [mapping.development_ref,mapping.testing_ref,mapping.staging_ref,mapping.production_ref]
+        product = (fixture.REQUEST.repository,mapping.testing_ref,chain,
+            dict(product=fixture.REQUEST.product,repository=fixture.REQUEST.repository,test_branch=mapping.testing_ref,promotion_chain=chain),
+            123,*chain,mapping.release_ref,True)
+        for scope, current, expected in (
+            ('DEVELOPMENT', ('development','testing'), ('section/sec','development')),
+            ('TESTING', ('testing','staging'), ('development','testing')),
+            ('STAGING', ('staging','production/environment'), ('testing','staging')),
+            ('PRODUCTION', ('production/environment','main'), ('staging','production/environment'))):
+            binding = replace(fixture.REQUEST, source_ref=current[0], target_ref=current[1])
+            dependency = CertificationDependency(replace(fixture.REQUEST, source_ref=expected[0], target_ref=expected[1]),
+                123,88,99,'scope-certification',fixture.NOW+timedelta(minutes=2))
+            acquired = replace(pending, scope_type=scope, scope_name=binding.source_ref,
+                snapshot=replace(pending.snapshot, mapping=mapping, observed_binding=binding), dependencies=())
+            cursor = mock.Mock(); cursor.fetchone.return_value = product; cursor.fetchall.side_effect = [[('sec','section/sec')],[]]
+            with self.subTest(scope=scope), self.assertRaisesRegex(PublicationDenied, 'CURRENT_DEPENDENCY_INVENTORY_MISMATCH'):
+                RestrictedFirstCertificationRegistry._registered_dependencies(cursor, acquired)
+            cursor.fetchall.side_effect = [[('sec','section/sec')],[]]
+            RestrictedFirstCertificationRegistry._registered_dependencies(cursor, replace(acquired, dependencies=(dependency,)))
