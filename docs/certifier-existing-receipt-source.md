@@ -38,7 +38,12 @@ checked against the current registry on every acquisition. Product/environment
 refs, registered product mirrors, all configured sections and all subsections
 with their registered mirrors and lanes must agree with the snapshot mapping.
 A snapshot or operator delegation cannot hide a current child. SECTION requires
-every registered subsection under its section; DEVELOPMENT requires every
+every registered subsection under its section plus every current cross-section
+`sections.depends_on` prerequisite certificate. Section prerequisites resolve
+through canonical section IDs or keys only when unambiguous; invalid arrays,
+unknown/self/duplicate references and dependency cycles deny for all scopes.
+The product graph is bounded to 1,000 sections and checked without recursion.
+DEVELOPMENT requires every
 configured section; TESTING, STAGING and PRODUCTION require the immediate
 registered predecessor certificate binding. Missing or extra declared bindings
 deny. SUBSECTION requires its registered workstation dependencies and denies

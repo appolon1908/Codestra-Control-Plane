@@ -216,3 +216,72 @@ class FirstCertificationSQLIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(PublicationDenied, 'ATOMIC_DEPENDENCY_CERTIFICATE_UNSUPPORTED'):
             self.certifier.publish(binding)
         self.assertEqual(self.api.effects, [])
+
+    def _configure_section_prerequisite(self, identifier='pre', section_id='scope-prerequisite-section', include_receipt=False):
+        from psycopg2.extras import Json
+        self.harness.admin("INSERT INTO public.sections(section_id,product,section_key,branch,order_index) VALUES(%s,'ScopeFixture','pre','section/pre',2)", (section_id,))
+        self.harness.admin("UPDATE public.sections SET depends_on=%s WHERE section_key='sec' AND product='ScopeFixture'", (Json([identifier]),))
+        raw = self.harness.admin('SELECT snapshot FROM certifier_authority.pending_bindings')[0][0]
+        raw['mapping']['scope_edges'].append(dict(source_level='section', source_ref='section/pre', target_level='development', target_ref='development'))
+        dependencies = list(self.dependencies)
+        dependency_binding = replace(self.binding, source_ref='section/pre', target_ref='development', source_sha='f' * 40)
+        if include_receipt:
+            dependencies.append(dict(binding=asdict(dependency_binding),repository_id=123,check_id=89,issuer_app_id=99,
+                name='scope-certification',expires_at=(self.now+timedelta(minutes=2)).isoformat()))
+        self.harness.admin('UPDATE certifier_authority.pending_bindings SET snapshot=%s,dependency_policy=%s', (Json(raw),Json(dependencies)))
+        original = self.api.get
+        def get(path):
+            if path.endswith('/branches/section%2Fpre'): return {'commit': {'sha': 'f' * 40}}
+            if path.endswith('/check-runs/89'):
+                return {'id':89,'app':{'id':99},'name':'scope-certification','head_sha':'f'*40,
+                    'external_id':binding_digest(dependency_binding),'status':'completed','conclusion':'success',
+                    'completed_at':self.now.isoformat(),'check_suite':{'id':189}}
+            if path.endswith('/check-suites/189'):
+                return {'id':189,'app':{'id':99},'head_sha':'f'*40,'status':'completed','conclusion':'success'}
+            return original(path)
+        self.api.get = get
+
+    def test_configured_section_prerequisite_omitted_from_policy_denies(self):
+        self._configure_section_prerequisite()
+        with self.assertRaisesRegex(PublicationDenied, 'CURRENT_DEPENDENCY_INVENTORY_MISMATCH'):
+            self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_section_prerequisite_key_with_exact_live_receipt_can_certify(self):
+        self._configure_section_prerequisite(include_receipt=True)
+        self.assertEqual(self.certifier.publish(self.binding).state, 'COMPLETE')
+        self.assertEqual(len(self.api.effects), 1)
+
+    def test_section_prerequisite_id_with_exact_live_receipt_can_certify(self):
+        self._configure_section_prerequisite(identifier='scope-prerequisite-section', include_receipt=True)
+        self.assertEqual(self.certifier.publish(self.binding).state, 'COMPLETE')
+        self.assertEqual(len(self.api.effects), 1)
+
+    def test_section_prerequisite_cycle_is_denied(self):
+        self._configure_section_prerequisite(include_receipt=True)
+        self.harness.admin("UPDATE public.sections SET depends_on='[\"sec\"]' WHERE section_key='pre' AND product='ScopeFixture'")
+        with self.assertRaisesRegex(PublicationDenied, 'SECTION_DEPENDENCY_CYCLE'):
+            self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_ambiguous_section_id_key_reference_is_denied(self):
+        self._configure_section_prerequisite(identifier='sec', section_id='sec', include_receipt=True)
+        with self.assertRaisesRegex(PublicationDenied, 'SECTION_DEPENDENCY_REFERENCE_INVALID'):
+            self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_invalid_section_prerequisite_shapes_unknown_self_and_duplicate_references_deny(self):
+        from psycopg2.extras import Json
+        for declaration in (None, {}, 'sec', ['unknown'], ['sec'], ['scope-fixture-section'], ['sec','sec']):
+            self.harness.admin("UPDATE public.sections SET depends_on=%s WHERE product='ScopeFixture' AND section_key='sec'", (Json(declaration),))
+            with self.subTest(declaration=declaration), self.assertRaisesRegex(PublicationDenied, 'SECTION_DEPENDENCY_'):
+                self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_distinct_id_and_key_aliases_cannot_repeat_the_same_section_dependency(self):
+        from psycopg2.extras import Json
+        self._configure_section_prerequisite(include_receipt=True)
+        self.harness.admin("UPDATE public.sections SET depends_on=%s WHERE product='ScopeFixture' AND section_key='sec'", (Json(['pre','scope-prerequisite-section']),))
+        with self.assertRaisesRegex(PublicationDenied, 'SECTION_DEPENDENCY_REFERENCE_INVALID'):
+            self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
