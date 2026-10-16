@@ -8,22 +8,22 @@
   "date": "2026-10-16",
   "full_suites": [
     {
-      "command": "TMPDIR=/dev/shm PYTHONPATH=lib python3 -m unittest discover -s tests -v",
+      "command": "env -u PYTHONPATH TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v",
       "exit_code": 0,
       "tests": 575,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
-      "seconds": 83.865
+      "seconds": 89.602
     },
     {
-      "command": "TMPDIR=/dev/shm PYTHONPATH=lib:/usr/lib/python3/dist-packages python3 -S -m unittest discover -s tests -v",
+      "command": "TMPDIR=/dev/shm PYTHONPATH=/usr/lib/python3/dist-packages PYTHONDONTWRITEBYTECODE=1 python3 -S -m unittest discover -s tests -v",
       "exit_code": 0,
       "tests": 575,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
-      "seconds": 84.559
+      "seconds": 84.724
     }
   ],
   "targeted": {
@@ -64,5 +64,19 @@
   "promotion_authorized": false,
   "PRODUCTION_GO": "NO",
   "LIVE_CAPABILITIES_ENABLED": "NO",
-  "EXTERNAL_EFFECTS": false
+  "EXTERNAL_EFFECTS": false,
+  "hosted_import_regression": {
+    "initial_head": "d890c6c3bb72f2860cb68a9855dc220afa55f68d",
+    "failing_runs": [
+      38907351734,
+      38907460749,
+      38907460422
+    ],
+    "observed_failure": "ModuleNotFoundError: codestra_control during test_admission_materialization discovery; 552 tests, one import error.",
+    "reproduction": "env -u PYTHONPATH TMPDIR=/dev/shm python3 -m unittest discover -s tests -p test_admission_materialization.py -v",
+    "before_exit_code": 1,
+    "after_exit_code": 0,
+    "after_tests": 24,
+    "correction": "Each new test module explicitly bootstraps the resolved repository lib directory before Codestra imports; no dependency-path, assertions, workflow or authorization changes."
+  }
 }

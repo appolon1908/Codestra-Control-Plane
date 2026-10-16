@@ -6,8 +6,12 @@ They exercise SQL authority, not filesystem/Git verification or live admission.
 import concurrent.futures
 from datetime import datetime, timedelta, timezone
 import json
+from pathlib import Path
+import sys
 import unittest
 import uuid
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 
 import psycopg2
 from psycopg2.extras import Json

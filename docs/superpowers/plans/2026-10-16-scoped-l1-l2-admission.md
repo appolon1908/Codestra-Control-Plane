@@ -71,7 +71,9 @@ README.md; docs/scoped-operation-admission.md; source-preparation record.
 - [x] Integrate Tasks 1/2 interfaces and document online consumer obligations/limits.
 - [x] Run affected tests and full normal/python3 -S suites with PostgreSQL 16 available.
 - [x] Independent whole-branch review; fix actionable findings and rerun affected checks.
-- [ ] Commit exact source, ordinary push and draft atomic-to-subsection PR.
+- [x] Commit exact source, ordinary push and draft atomic-to-subsection PR.
 - [ ] Attach PR and record exact validation and unresolved deployment/admission gates.
 
 Executed source validation is recorded in docs/verification/2026-10-16-scoped-operation-admission.json. Publication checkpoints are recorded by the source PR; none grant runtime authority.
+
+PR #46 initially exposed a hosted test-discovery import error masked by the local library PYTHONPATH. The test modules now bootstrap their own resolved repository lib path. Both CI-equivalent full commands pass 575 tests without a library PYTHONPATH override; executed commands are in the validation record.

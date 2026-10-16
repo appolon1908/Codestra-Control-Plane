@@ -1,7 +1,11 @@
 """Real disposable object stores and inert local transport-execution markers."""
+from pathlib import Path
+import sys
 import unittest
 from unittest import mock
 import zlib
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 
 from codestra_control.lease_materialization import GitMaterializer, MaterializationDenied
 import test_admission_materialization as staged

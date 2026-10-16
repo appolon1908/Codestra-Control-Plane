@@ -168,10 +168,11 @@ selection and commit-response loss; they do not stand in for authorization.
 Nothing connects to the installed controller database or publishes statuses.
 
 ```sh
-TMPDIR=/dev/shm PYTHONPATH=lib python3 -m unittest discover -s tests -v
-TMPDIR=/dev/shm PYTHONPATH=lib:/usr/lib/python3/dist-packages python3 -S -m unittest discover -s tests -v
+TMPDIR=/dev/shm python3 -m unittest discover -s tests -v
+TMPDIR=/dev/shm PYTHONPATH=/usr/lib/python3/dist-packages python3 -S -m unittest discover -s tests -v
 ```
 
+Test modules bootstrap the repository library independently of discovery order.
 The second command explicitly exposes the installed psycopg2 dependency while
 skipping Python site initialization. Adjust that dependency path for another
 distribution. The temporary-memory directory is an optional test-fixture location; it is not

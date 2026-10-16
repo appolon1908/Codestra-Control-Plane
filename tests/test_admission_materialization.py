@@ -4,10 +4,13 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import uuid
 from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 
 from codestra_control.lease_materialization import MaterializationDenied
 try:
