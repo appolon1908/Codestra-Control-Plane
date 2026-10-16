@@ -64,7 +64,9 @@ class StartupTests(unittest.TestCase):
         import stat
         p=self.root/'config';p.write_text('synthetic');p.chmod(0o600)
         def metadata(path):
-            if str(path)=='/tmp':return SimpleNamespace(st_mode=stat.S_IFDIR|0o1777,st_uid=0)
+            # TMPDIR may place the fixture outside /tmp. Exercise its actual
+            # ancestor so refusal happens before touching a real directory.
+            if path==self.root.parent:return SimpleNamespace(st_mode=stat.S_IFDIR|0o1777,st_uid=0)
             return SimpleNamespace(st_mode=stat.S_IFDIR|0o755,st_uid=0)
         with mock.patch.object(Path,'lstat',metadata):
             with self.assertRaisesRegex(PublisherUnavailable,'UNTRUSTED_OPERATOR_ANCESTOR'):protected_read(p)

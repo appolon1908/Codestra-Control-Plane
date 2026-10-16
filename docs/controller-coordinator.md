@@ -9,6 +9,16 @@ branches, or publish successful GitHub checks.
 
 ## Authority and registration
 
+When composing this coordinator with atomic inspection, apply
+`010-controller-coordinator-integration.sql` after both
+`009-atomic-inspection.sql` and `009-controller-coordinator.sql`. The two 009
+source migrations remain unchanged. The forward fix supports the inspector's
+SUBSECTION prerequisite scope, binds SCRAM authentication to the exact session
+principal, checks stored verifier provenance and pins the five coordinator
+functions to UTC. It creates no identities, grants or populated authority.
+Historical proofs and leases remain unchanged; unknown or mismatched provenance
+denies rather than being rewritten into accepted evidence.
+
 `009-controller-coordinator.sql` follows migrations 005 and 007. It adds no roles,
 grants or populated authority records. An operator must separately accept and
 provision the existing product/workstation registrations, section, principal
@@ -23,6 +33,22 @@ dependency rows deny resolution. Legacy scope `CERTIFIED` values satisfy only
 the registration metadata check. The independent verifier still checks actual
 online issuer/check/capability evidence with `GitMaterializer`.
 
+With 010, the approved inventory must cover every unique configured
+`public.workstations.depends_on` workstation. Each requires a same-product
+registered subsection and matching parent section, current CERTIFIED exact
+remote SHA and matching active independent SUBSECTION capability/receipt.
+The coordinator never fills in missing metadata or authorizes an empty inventory
+over a nonempty configured graph. Approved additional SECTION/environment
+prerequisites remain supported by the builder; atomic inspection v1 still denies
+those extra scopes. No recursive dependency policy is inferred.
+
+The shared independent GitHub dependency observer reads both the dependency
+source and target refs before and after its check-run receipt. Cached database
+SHAs or a historical successful check cannot hide remote ref movement. Proof age
+and lease lifetime still bound the external observation; a historical recovery
+lookup does not perform fresh HTTP/Git verification. Every later publication or
+promotion must reacquire current evidence at its own effect boundary.
+
 `resolve_task(task, repository)` authenticates the credential-backed TLS session
 and registered role OID, requires exact repository spelling and approved ownership,
 and validates policy, hierarchy, product/workstation metadata and lane health.
@@ -31,6 +57,20 @@ manifest. Existing candidate metadata must match exactly. Frozen/blocked lanes
 remain blocked. Resolution locks in the issuer's workstation/worktree order and
 rechecks the binding after locking; registration and final admission revalidate
 current authority in their own transactions.
+
+Coordinator SQL requires READ COMMITTED transactions, including for direct API
+callers. The final receipt re-resolves the complete approved mapping and
+configured dependency graph after claim. A long-lived REPEATABLE READ snapshot
+could hide a concurrent dependency revocation, so unsupported isolation modes
+deny admission. This does not change the separate read-only atomic inspector's
+snapshot contract or add cross-workstation locks.
+
+The composed contract accepts PostgreSQL 16 SCRAM identity exactly
+`system_user='scram-sha-256:'||session_user`, over verified TLS, with SET ROLE
+disabled. An elevated login followed by SET SESSION AUTHORIZATION cannot stand
+in for the builder or independent verifier. Stored proof authentication must
+identify that exact verifier. Other authentication methods require separate
+future acceptance; nonnull system_user alone is insufficient.
 
 The operator may grant only schema usage and EXECUTE on `resolve_task(text,text)`,
 `lookup_task(text,text,text)` and `admit_task(text,text,text,uuid)` to the restricted

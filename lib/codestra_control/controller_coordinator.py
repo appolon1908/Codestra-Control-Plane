@@ -107,6 +107,8 @@ def main(argv=None):
         connection = connect_protected(DIRECTORY/'lease-builder.dsn')
         result = coordinate(connection, args.operation, args.task, args.repository,
                             args.request_id, proof_id=args.proof, apply=args.apply)
+        connection.close()
+        connection = None
         print(json.dumps(result, sort_keys=True))
         return 0
     except AdmissionOutcomeUnknown:
@@ -117,4 +119,7 @@ def main(argv=None):
         return 1
     finally:
         if connection is not None:
-            connection.close()
+            try:
+                connection.close()
+            except Exception:
+                pass

@@ -1,0 +1,82 @@
+{
+  "schema": "codestra.source-validation.v1",
+  "state": "SOURCE_VALIDATION_ONLY",
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--scoped-l1-l2-admission",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "source_parent": "c1890bdcc478cf40231087b57f95ba64ff0a7049",
+  "date": "2026-10-16",
+  "full_suites": [
+    {
+      "command": "env -u PYTHONPATH TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v",
+      "exit_code": 0,
+      "tests": 575,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 89.602
+    },
+    {
+      "command": "TMPDIR=/dev/shm PYTHONPATH=/usr/lib/python3/dist-packages PYTHONDONTWRITEBYTECODE=1 python3 -S -m unittest discover -s tests -v",
+      "exit_code": 0,
+      "tests": 575,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 84.724
+    }
+  ],
+  "targeted": {
+    "postgresql_tls_scram": 24,
+    "materialization_normal_and_no_site": 42,
+    "client_transaction_and_custody": 12,
+    "startup_fixture": 13
+  },
+  "regression_evidence": [
+    "Missing SQL API, staged materializer and protected client failed before implementation.",
+    "An introduced parentless Git root evaded path inventory before the root-diff correction.",
+    "Repository-configured object fetching executed an inert temporary marker before shared transport denial.",
+    "Corrupt object bytes under an authentic filename failed to deny before full integrity verification.",
+    "Session-timezone JSON formatting rejected unchanged baseline lease and dependency snapshots before instant comparison.",
+    "Historical lost-response inspection and dangerous built-in memberships failed before their corrections.",
+    "Noninherited SET-able authority-role cases failed in 22 expected subcases before reachable-role validation.",
+    "Lease host/workstation/device/inode substitutions failed in five expected subcases before binding coupling."
+  ],
+  "review": {
+    "independent_source_reviewer": "/root/verify_coverage_source",
+    "material_findings": "FIXED_AND_REVIEWED",
+    "github_codeowner_approval": false
+  },
+  "existing_migrations_changed": false,
+  "limits": [
+    "A disk-backed baseline run was interrupted for host I/O contention; it is not passing evidence.",
+    "An initial full run exposed an existing test's hardcoded /tmp ancestor; the fixture now supports TMPDIR without changing production custody checks.",
+    "All database identities, TLS material and Git repositories used for validation were disposable synthetic fixtures.",
+    "GitHub dependency observations use controlled test responses; no live issuer or production acceptance was certified.",
+    "Source review and local tests do not replace hosted exact-commit checks, independent GitHub CODEOWNER approval or protected promotion.",
+    "No source receipt is an operating-system or GitHub atomic effect fence."
+  ],
+  "runtime_installed": false,
+  "live_assignment_created": false,
+  "live_admission_issued": false,
+  "statuses_published": false,
+  "certified": false,
+  "promotion_authorized": false,
+  "PRODUCTION_GO": "NO",
+  "LIVE_CAPABILITIES_ENABLED": "NO",
+  "EXTERNAL_EFFECTS": false,
+  "hosted_import_regression": {
+    "initial_head": "d890c6c3bb72f2860cb68a9855dc220afa55f68d",
+    "failing_runs": [
+      38907351734,
+      38907460749,
+      38907460422
+    ],
+    "observed_failure": "ModuleNotFoundError: codestra_control during test_admission_materialization discovery; 552 tests, one import error.",
+    "reproduction": "env -u PYTHONPATH TMPDIR=/dev/shm python3 -m unittest discover -s tests -p test_admission_materialization.py -v",
+    "before_exit_code": 1,
+    "after_exit_code": 0,
+    "after_tests": 24,
+    "correction": "Each new test module explicitly bootstraps the resolved repository lib directory before Codestra imports; no dependency-path, assertions, workflow or authorization changes."
+  }
+}

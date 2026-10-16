@@ -43,8 +43,8 @@ class GitMaterializer:
             if self.fixture_anchor is not None and item==self.fixture_anchor:break
         return path
     def _git(self,path,*args,allowed=(0,)):
-        env={'PATH':os.defpath,'LC_ALL':'C','GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':os.devnull,'GIT_OPTIONAL_LOCKS':'0','GIT_NO_REPLACE_OBJECTS':'1','GIT_TERMINAL_PROMPT':'0','GIT_ATTR_NOSYSTEM':'1'}
-        process=subprocess.Popen(['/usr/bin/git','-C',str(path),'-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false','-c','core.untrackedCache=false','-c','submodule.recurse=false','--no-pager',*args],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+        env={'PATH':os.defpath,'LC_ALL':'C','GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':os.devnull,'GIT_OPTIONAL_LOCKS':'0','GIT_NO_REPLACE_OBJECTS':'1','GIT_TERMINAL_PROMPT':'0','GIT_ATTR_NOSYSTEM':'1','GIT_ALLOW_PROTOCOL':'','GIT_NO_LAZY_FETCH':'1'}
+        process=subprocess.Popen(['/usr/bin/git','-C',str(path),'-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false','-c','core.untrackedCache=false','-c','core.commitGraph=false','-c','submodule.recurse=false','--no-pager',*args],env=env,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
         output=bytearray();deadline=time.monotonic()+10
         try:
             os.set_blocking(process.stdout.fileno(),False)
@@ -63,7 +63,32 @@ class GitMaterializer:
         finally:
             if process.poll() is None:process.kill();process.wait(timeout=5)
             process.stdout.close()
+    def _repository_safety(self,path):
+        # Lazy-fetch suppression is not supported by every Git version. Transport
+        # denial applies even before this check; partial stores cannot establish
+        # full object integrity because fsck treats promised objects as optional.
+        require(not self._git(path,'config','--get-regexp','^(extensions\\.partialclone|remote\\..*\\.promisor)$',allowed=(0,1)),
+                'UNSUPPORTED_PROMISOR_MATERIALIZATION')
+        objects=Path(self._git(path,'rev-parse','--path-format=absolute','--git-path','objects'))
+        require(objects.is_dir() and str(objects.resolve(strict=True))==str(objects)
+                and not os.path.lexists(objects/'info'/'alternates'),'UNSUPPORTED_OBJECT_STORE')
+        pack=objects/'pack'
+        require(pack.is_dir() and str(pack.resolve(strict=True))==str(pack),'UNSUPPORTED_OBJECT_STORE')
+        deadline=time.monotonic()+10
+        with os.scandir(pack) as entries:
+            for count,entry in enumerate(entries):
+                require(count<4096 and time.monotonic()<deadline,'MATERIALIZATION_LIMIT')
+                require(not entry.name.endswith('.promisor'),'UNSUPPORTED_PROMISOR_MATERIALIZATION')
+    def _integrity(self,path,*roots):
+        require(roots and all(isinstance(oid,str) and re.fullmatch('[0-9a-f]{40}',oid)
+                and oid!='0'*40 for oid in roots),'INVALID_MATERIALIZATION_BINDING')
+        # Full fsck recomputes object IDs, rather than trusting loose filenames or
+        # pack metadata. Corrupt objects are not skip-listable. Override repository
+        # skip lists and retain the shared process deadline/output bounds.
+        self._git(path,'-c','fsck.skipList=/dev/null','fsck','--full','--strict',
+                  '--no-reflogs','--no-dangling','--no-progress',*dict.fromkeys(roots))
     def _local(self,b,path):
+        self._repository_safety(path)
         require(self._git(path,'rev-parse','--show-toplevel')==str(path),'WORKTREE_ROOT_MISMATCH')
         require(self._git(path,'rev-parse','HEAD')==b['head_sha'],'HEAD_MISMATCH')
         require(self._git(path,'symbolic-ref','--short','HEAD')==b['source_ref'],'BRANCH_MISMATCH')
@@ -75,6 +100,7 @@ class GitMaterializer:
         # A privileged observer never runs repository-configured filters, hooks,
         # fsmonitor commands, submodule programs or network transports.
         require(not self._git(path,'config','--get-regexp','^filter\\.',allowed=(0,1)),'UNSUPPORTED_REPOSITORY_FILTER')
+        self._integrity(path,b['head_sha'])
         require(not any(line.startswith('160000 ') for line in self._git(path,'ls-files','--stage').splitlines()),'UNSUPPORTED_SUBMODULE_MATERIALIZATION')
         self._clean(path)
     def _clean(self,path):
@@ -180,8 +206,12 @@ class GitHubLeaseObserver:
                 and value['binding_hash']==dependency_digest(binding,prerequisite),'DEPENDENCY_BINDING_MISMATCH')
         require(value['approved_by']=='Ralph L. Appolon' and value['purpose']=='SCOPE_CERTIFICATION' and bool(value['capability_receipt']),'DEPENDENCY_CAPABILITY_UNAVAILABLE')
         require(value['issuer_app_id'] not in (15368,self.app_id) and value['issuer_name'] not in ('codestra-control-plane','codestra/control-plane','promotion-gate'),'DEPENDENCY_ISSUER_UNAVAILABLE')
+        require(self.ref(binding.repository,binding.source_ref)==binding.source_sha
+                and self.ref(binding.repository,binding.target_ref)==binding.target_base_sha,'DEPENDENCY_REF_MOVED')
         receipt=self.client.get('/repos/'+value['repository']+'/check-runs/'+str(value['check_id']))
         require(receipt['id']==value['check_id'] and receipt['app']['id']==value['issuer_app_id'] and receipt['name']==value['issuer_name']
                 and receipt['external_id']==value['binding_hash'] and receipt['head_sha']==binding.source_sha
                 and receipt['status']=='completed' and receipt['conclusion']=='success','DEPENDENCY_RECEIPT_UNAVAILABLE')
+        require(self.ref(binding.repository,binding.source_ref)==binding.source_sha
+                and self.ref(binding.repository,binding.target_ref)==binding.target_base_sha,'DEPENDENCY_REF_MOVED')
         return dict(value)
