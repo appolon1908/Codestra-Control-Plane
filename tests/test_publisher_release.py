@@ -63,6 +63,32 @@ class PublisherReleaseTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             prepare_release(self.root, self.sha, self.output, self.wheel)
 
+    def test_commit_and_blob_replacements_cannot_substitute_approved_runtime_bytes(self):
+        source_path='lib/codestra_control/routes.py'
+        runtime_file=self.root/source_path
+        approved=self.sha
+        approved_bytes=runtime_file.read_bytes()
+        runtime_file.write_bytes(b'unreviewed replacement runtime\n')
+        self.run_git('add','.')
+        self.run_git('commit','-m','unreviewed replacement fixture')
+        replacement=self.run_git('rev-parse','HEAD').strip()
+        approved_blob=self.run_git('rev-parse',approved+':'+source_path).strip()
+        replacement_blob=self.run_git('rev-parse',replacement+':'+source_path).strip()
+        for kind,original,substitute in (('commit',approved,replacement),
+                                          ('blob',approved_blob,replacement_blob)):
+            with self.subTest(replacement=kind):
+                self.run_git('replace',original,substitute)
+                try:
+                    output=self.output/kind
+                    self.output.mkdir(exist_ok=True)
+                    manifest=prepare_release(self.root,approved,output,self.wheel)
+                    self.assertEqual(manifest['source_commit'],approved)
+                    self.assertEqual((output/source_path).read_bytes(),approved_bytes)
+                    entry=next(item for item in manifest['files'] if item['source_path']==source_path)
+                    self.assertEqual(entry['sha256'],hashlib.sha256(approved_bytes).hexdigest())
+                finally:
+                    self.run_git('replace','-d',original)
+
     def test_symlink_runtime_module_is_not_packaged(self):
         p = self.root / 'lib/codestra_control/routes.py'
         p.unlink();p.symlink_to('/etc/passwd')

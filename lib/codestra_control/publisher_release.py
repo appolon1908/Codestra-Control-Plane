@@ -11,7 +11,7 @@ ENTRYPOINTS = ('bin/codestra-github-statusd', 'bin/codestra-github-check',
 
 
 def git(root, *args):
-    return subprocess.run(['git', '-C', str(root), *args], check=True,
+    return subprocess.run(['git', '--no-replace-objects', '-C', str(root), *args], check=True,
                           capture_output=True).stdout
 
 
