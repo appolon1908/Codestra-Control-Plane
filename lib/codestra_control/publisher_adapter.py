@@ -103,8 +103,15 @@ class AuthenticatedPublisher:
         fresh=self.clock()
         require(authority.expires_at>fresh,'AUTHORITY_EXPIRED')
         verify_issuer(acquired,fresh)
-        self.github.revalidate(acquired,fresh)
-        snapshot=replace(snapshot,evaluated_at=fresh)
+        deadline=self.github.revalidate(acquired,fresh)
+        # Online revalidation can take time. Use a clock sampled after it, and
+        # retain a bounded permit rather than the pre-network timestamp.
+        final=self.clock()
+        require(type(deadline) is datetime and deadline.tzinfo is not None
+                and deadline>final,'PUBLICATION_PERMIT_EXPIRED')
+        require(authority.expires_at>final,'AUTHORITY_EXPIRED')
+        verify_issuer(acquired,final)
+        snapshot=replace(snapshot,evaluated_at=final)
         decision=evaluate_promotion(binding,snapshot)
         require(decision.allowed,'FINAL_PROMOTION_DENIED:'+','.join(decision.reasons))
         return replace(acquired,snapshot=snapshot)
