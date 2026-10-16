@@ -41,10 +41,12 @@ class Transport:
     def __init__(self):
         owner = {'id': 456, 'login': 'appolon1908'}
         self.publisher = {'id': 8, 'app_id': 7, 'suspended_at': None,
-                          'account': owner, 'repository_selection': 'selected'}
+                          'account': owner, 'repository_selection': 'selected',
+                          'permissions': dict(GitHubAppClient.PERMISSIONS)}
         self.certifier = {'id': 100, 'app_id': 99, 'suspended_at': None,
                           'account': owner, 'repository_selection': 'selected',
-                          'permissions': {'checks': 'write', 'metadata': 'read'}}
+                          'permissions': {'checks': 'write', 'contents': 'read', 'pull_requests': 'read',
+                                          'administration': 'read', 'metadata': 'read'}}
         self.repository = {'id': 123, 'full_name': fixture.REQUEST.repository, 'owner': owner}
         self.check = {'id': 10, 'app': {'id': 99}, 'name': 'scope-certification',
                       'head_sha': 'a'*40, 'external_id': binding_digest(fixture.REQUEST),
@@ -276,6 +278,21 @@ class AcceptanceTests(unittest.TestCase):
         self.transport.certifier_repository_installation = dict(self.transport.certifier, id=101)
         with self.assertRaises(PublicationDenied):
             self.verify()
+
+    def test_overbroad_installed_app_grants_are_rejected_despite_downscoped_publisher_token(self):
+        certifier_permissions = {'checks': 'write', 'contents': 'read', 'pull_requests': 'read',
+                                 'administration': 'read', 'metadata': 'read'}
+        for target in ('publisher', 'certifier', 'certifier_repository_installation'):
+            extra_grants = ({'workflows': 'write'}, {'contents': 'write'}) if target == 'publisher' else (
+                {'workflows': 'write'}, {'contents': 'write'}, {'statuses': 'write'}, {'administration': 'write'})
+            for change in extra_grants:
+                self.transport = Transport(); self.api.request = self.transport; self.certifier.request = self.transport
+                permissions = dict(GitHubAppClient.PERMISSIONS if target == 'publisher' else certifier_permissions)
+                permissions.update(change)
+                installation = dict(getattr(self.transport, target), permissions=permissions)
+                setattr(self.transport, target, installation)
+                with self.subTest(target=target, change=change), self.assertRaises(PublicationDenied):
+                    self.verify()
 
     def test_certificate_receipt_matches_online_id_app_name_sha_binding_and_completed_success(self):
         for key, value in [('id', 11), ('app', {'id': 7}), ('name', 'quality'),

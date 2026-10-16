@@ -15,6 +15,13 @@ import re
 from .publisher_adapter import (Acquired, Authority, CONTEXTS, PublicationDenied,
                                 binding_digest, require, verify_issuer)
 from .publisher_provenance import VerifiedProducerContract
+from .publisher_github import GitHubAppClient
+
+
+CERTIFIER_INSTALLATION_PERMISSIONS = {
+    'checks': 'write', 'contents': 'read', 'pull_requests': 'read',
+    'administration': 'read', 'metadata': 'read',
+}
 
 
 @dataclass(frozen=True)
@@ -193,6 +200,8 @@ class AcceptedProducerVerifier:
             f'/app/installations/{policy.publisher_installation_id}', self.api.jwt_provider())
         self._installation(publisher_installation, policy.publisher_installation_id,
                            policy.publisher_app_id, owner)
+        require(publisher_installation.get('permissions') == GitHubAppClient.PERMISSIONS,
+                'PUBLISHER_INSTALLED_PERMISSIONS_MISMATCH')
         # A separate signer/custodian is essential: publisher App JWTs cannot
         # authenticate the installation of a different App.
         handle = self.certifier_api.jwt_provider()
@@ -204,9 +213,9 @@ class AcceptedProducerVerifier:
         self._installation(installation, policy.certificate_installation_id, policy.certificate_app_id, owner)
         coverage = self.certifier_api.request('GET', f'/repos/{repo}/installation', handle)
         self._installation(coverage, policy.certificate_installation_id, policy.certificate_app_id, owner)
-        require(installation.get('permissions', {}).get('checks') == 'write'
-                and coverage.get('permissions', {}).get('checks') == 'write',
-                'CERTIFIER_CHECKS_CAPABILITY_UNAVAILABLE')
+        require(installation.get('permissions') == CERTIFIER_INSTALLATION_PERMISSIONS
+                and coverage.get('permissions') == CERTIFIER_INSTALLATION_PERMISSIONS,
+                'CERTIFIER_INSTALLED_PERMISSIONS_MISMATCH')
 
         check = self.api.get(f'/repos/{repo}/check-runs/{acquired.certificate_check_id}')
         require(type(check['id']) is int and check['id'] == acquired.certificate_check_id
