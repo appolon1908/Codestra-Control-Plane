@@ -61,6 +61,32 @@ class PublisherInstallationTests(unittest.TestCase):
             prepare_installation_packet(self.root, self.sha, self.output)
         self.assertEqual((self.output / 'preserve').read_text(), 'existing bytes')
 
+    def test_commit_and_blob_replacements_cannot_substitute_approved_template_bytes(self):
+        from codestra_control.publisher_installation import prepare_installation_packet
+        source_path='config/examples/authenticated-publisher.toml'
+        startup=self.root/source_path
+        approved=self.sha
+        approved_bytes=startup.read_bytes()
+        startup.write_bytes(b'unreviewed replacement template\n')
+        self.commit()
+        replacement=self.sha
+        approved_blob=self.git('rev-parse',approved+':'+source_path)
+        replacement_blob=self.git('rev-parse',replacement+':'+source_path)
+        for kind,original,substitute in (('commit',approved,replacement),
+                                          ('blob',approved_blob,replacement_blob)):
+            with self.subTest(replacement=kind):
+                self.git('replace',original,substitute)
+                try:
+                    output=self.output/kind
+                    self.output.mkdir(exist_ok=True)
+                    manifest=prepare_installation_packet(self.root,approved,output)
+                    self.assertEqual(manifest['source_commit'],approved)
+                    self.assertEqual((output/source_path).read_bytes(),approved_bytes)
+                    entry=next(item for item in manifest['files'] if item['path']==source_path)
+                    self.assertEqual(entry['sha256'],hashlib.sha256(approved_bytes).hexdigest())
+                finally:
+                    self.git('replace','-d',original)
+
     def test_rejects_committed_symlink_before_creating_output(self):
         from codestra_control.publisher_installation import prepare_installation_packet
         path = self.root / 'config/examples/authenticated-publisher.toml'
