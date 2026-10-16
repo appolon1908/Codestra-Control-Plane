@@ -173,11 +173,42 @@ class ScopeAssignmentLeaseTests(unittest.TestCase):
             self.claim(request=request)
         with self.assertRaisesRegex(psycopg2.Error,'SCOPE_'):
             self.claim(request=str(uuid.uuid4()))
-        another=self.assign()
+        another=self.assign('development','testing','development','testing')
         with self.assertRaisesRegex(psycopg2.Error,'SCOPE_'):
             self.claim(assignment=another,request=request)
 
+    def test_concurrent_different_owners_cannot_claim_the_same_registered_scope(self):
+        self.admin('UPDATE scope_assignment_leases.assignments SET active=false')
+        def attempt(principal):
+            try:
+                assignment=self.assign(principal=principal)
+                return self.claim(assignment=assignment,user=principal)
+            except psycopg2.Error:
+                return None
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results=list(pool.map(attempt,('alice','bob')))
+        self.assertEqual(sum(result is not None for result in results),1)
+        winner=next(result for result in results if result is not None)
+        receipt=self.call('inspect_binding',(winner['binding_id'],),user='verifier',readonly=True)
+        self.assertEqual(receipt['state'],'ACTIVE')
+        self.assertEqual(receipt['principal'],winner['principal'])
+
+    def test_revoked_assignment_does_not_automatically_release_its_scope_lease_fence(self):
+        old=self.claim()
+        self.admin('UPDATE scope_assignment_leases.assignments SET active=false WHERE assignment_id=%s',(self.assignment,))
+        self.assertEqual(self.call('inspect_binding',(self.assignment,),user='verifier',readonly=True)['state'],'REVOKED')
+        replacement=self.assign(principal='bob')
+        with self.assertRaisesRegex(psycopg2.Error,'SCOPE_SCOPE_ALREADY_LEASED'):
+            self.claim(assignment=replacement,user='bob')
+        self.admin("UPDATE scope_assignment_leases.leases SET state='REVOKED' WHERE lease_id=%s",(old['lease_id'],))
+        new=self.claim(assignment=replacement,user='bob')
+        self.assertEqual(new['state'],'ACTIVE')
+        self.assertNotEqual(new['lease_id'],old['lease_id'])
+        self.assertGreater(new['epoch'],old['epoch'])
+        self.assertEqual(self.call('inspect_binding',(self.assignment,),user='verifier',readonly=True)['state'],'REVOKED')
+
     def test_every_allowed_scope_edge_uses_actual_registered_refs(self):
+        self.admin('UPDATE scope_assignment_leases.assignments SET active=false')
         for source,target,source_ref,target_ref in (
             ('subsection','section','subsection/sec--sub','section/sec'),
             ('section','development','section/sec','development'),
@@ -219,6 +250,7 @@ class ScopeAssignmentLeaseTests(unittest.TestCase):
                     self.claim()
 
     def test_assignment_expiry_bounds_lease_and_binding_edits_cannot_reseal(self):
+        self.admin('UPDATE scope_assignment_leases.assignments SET active=false')
         assignment=self.assign(expires_seconds=20)
         lease=self.claim(assignment=assignment)
         self.assertLessEqual((datetime.fromisoformat(lease['expires_at'])-datetime.fromisoformat(lease['started_at'])).total_seconds(),20)
@@ -257,6 +289,7 @@ class ScopeAssignmentLeaseTests(unittest.TestCase):
                     cursor.execute('SELECT scope_assignment_leases.inspect_binding(%s)',(self.assignment,))
 
     def test_actual_recreated_login_does_not_inherit_original_role_oid(self):
+        self.admin('UPDATE scope_assignment_leases.assignments SET active=false')
         assignment=self.assign(principal='bob')
         self.admin('DROP OWNED BY bob; DROP ROLE bob; CREATE ROLE bob LOGIN')
         self.admin(sql.SQL('ALTER ROLE bob PASSWORD {}').format(sql.Literal(harness.FrozenRecoveryExecutorTests.password('bob'))))
