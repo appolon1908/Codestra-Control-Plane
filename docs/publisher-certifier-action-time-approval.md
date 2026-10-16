@@ -384,10 +384,14 @@ The proposed operational sequence remains entirely unapproved:
 Canonical inventory includes all registered subsections for a section, all
 registered sections for development, and the immediate predecessor for
 testing/staging/production. Cross-subsection dependencies must match registered
-workstation dependencies. **SUBSECTION first issuance currently supports only a
-workstation with zero actual atomic tasks and zero registered candidates**;
-nonempty atomic child inventories remain unsupported and deny. No fabricated
-atomic receipt, hotfix exception or reduced inventory can close that gap.
+workstation dependencies. **This publisher-only action-time proposal supports
+only a workstation with zero actual atomic tasks and zero registered candidates.**
+The distinct complete source candidate adds014's authenticated atomic inclusion
+contract, explicit canonical task graph and every sealed child receipt. Its
+additional inactive authority proposal is `config/examples/atomic-authority.proposed.json`;
+this packet does not accept those roles, grants, schema or runtime composition.
+Without them, nonempty atomic inventories still deny. No fabricated atomic
+receipt, hotfix exception or reduced inventory can close that gate.
 All role creation, grants, schema application, claims, runtime composition, first
 check, publisher registration and paired statuses remain false in the packet.
 Phase B remains postponed, and secret values belong only in the private handoff.
