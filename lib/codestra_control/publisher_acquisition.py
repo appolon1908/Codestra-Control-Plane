@@ -106,8 +106,10 @@ class RestrictedRegistry:
                 return tuple(e.PromotionRequest(**row[0]) for row in rows)
 
 class GitHubVerifier:
-    def __init__(self,api,*,certificate_name,certificate_app_id=None):
+    def __init__(self,api,*,certificate_name,certificate_app_id=None,provenance_verifier=None):
         self.api=api;self.certificate_name=certificate_name;self.certificate_app_id=certificate_app_id
+        self.provenance_verifier=provenance_verifier
+        self._last_provenance=None
     @staticmethod
     def _producer(check):return 'github-actions:'+str(check['app']['id'])
     def _checks(self,repo,sha,requirements):
@@ -119,7 +121,11 @@ class GitHubVerifier:
             require(check['head_sha']==sha and check['status']=='completed' and check['conclusion']=='success','ONLINE_CHECK_NOT_SUCCESS')
         return checks
     def verify(self,acquired,now):
+        from .publisher_provenance import verify_contract
+        from .effective_protection import observe_protection,validate_protection
+        self._last_provenance=None
         verify_issuer(acquired,now)
+        provenance=verify_contract(self.provenance_verifier,acquired,now)
         require(acquired.issuer.app_id==self.certificate_app_id and acquired.issuer.name==self.certificate_name,'CERTIFIER_CONFIG_CAPABILITY_MISMATCH')
         s=acquired.snapshot;b=s.observed_binding;a=acquired.authority;repo=b.repository
         self.api.assert_identity(a,acquired.repository_id,now)
@@ -133,25 +139,11 @@ class GitHubVerifier:
         require(pr['mergeable'] is True and type(pr['merge_commit_sha']) is str and len(pr['merge_commit_sha'])==40,'MERGE_RESULT_UNAVAILABLE')
         branch=self.api.get(f'/repos/{repo}/branches/{quote(b.target_ref,safe="")}')
         require(branch['protected'] is True and branch['commit']['sha']==b.target_base_sha,'TARGET_NOT_PROTECTED_OR_MOVED')
-        protection=self.api.get(f'/repos/{repo}/branches/{quote(b.target_ref,safe="")}/protection')
-        reviews=protection['required_pull_request_reviews'];checks=protection['required_status_checks']
-        require(protection['enforce_admins']['enabled'] is True and checks['strict'] is True
-                and reviews['required_approving_review_count']==s.required_approvals and s.require_codeowner is True
-                and reviews['require_code_owner_reviews'] is True and reviews['dismiss_stale_reviews'] is True
-                and reviews['require_last_push_approval'] is True
-                and protection['required_conversation_resolution']['enabled'] is True,'PROTECTION_CONTRACT_UNENFORCED')
-        required={(v.name,v.producer) for v in s.required_checks}
-        # Excluding our own success prevents circularity, but a conflicting App
-        # binding would make the emitted status unable to satisfy protection.
-        for check in checks['checks']:
-            if check['context'] in CONTEXTS:
-                app_id=check['app_id']
-                require(app_id is None or type(app_id) is int and app_id in (-1,a.app_id),
-                        'CONTROLLER_CHECK_PRODUCER_MISMATCH')
-        actual={(v['context'],'github-actions:'+str(v['app_id'])) for v in checks['checks']}
-        from .decision import CONTROL_PLANE_CONTEXTS
-        actual={v for v in actual if v[0] not in CONTROL_PLANE_CONTEXTS}
-        require(required==actual,'REQUIRED_CHECK_PROTECTION_DRIFT')
+        protection=observe_protection(self.api,repo,b.target_ref)
+        require(s.require_codeowner is True,'CODEOWNER_POLICY_REQUIRED')
+        validate_protection(protection,s.required_approvals,
+                            {(v.name,v.producer) for v in s.required_checks},a.app_id,
+                            provenance.controller_contexts)
         # Require the same approved producer checks on head and current test merge.
         online=self._checks(repo,b.source_sha,s.required_checks)
         self._checks(repo,pr['merge_commit_sha'],s.required_checks)
@@ -179,7 +171,12 @@ class GitHubVerifier:
         final_pr=self.api.get(f'/repos/{repo}/pulls/{acquired.pr_number}')
         final_branch=self.api.get(f'/repos/{repo}/branches/{quote(b.target_ref,safe="")}')
         require(final_pr==pr and final_branch==branch,'REF_OR_PR_MOVED_DURING_VERIFICATION')
-        require(self.api.get(f'/repos/{repo}/branches/{quote(b.target_ref,safe="")}/protection')==protection,'PROTECTION_CHANGED_DURING_VERIFICATION')
+        require(observe_protection(self.api,repo,b.target_ref)==protection,'PROTECTION_CHANGED_DURING_VERIFICATION')
+        require(verify_contract(self.provenance_verifier,acquired,now)==provenance,'PUBLISHER_PROVENANCE_CHANGED')
+        self._last_provenance=provenance
+    def revalidate(self,acquired,now):
+        from .publisher_provenance import verify_contract
+        require(verify_contract(self.provenance_verifier,acquired,now)==self._last_provenance,'PUBLISHER_PROVENANCE_CHANGED')
     def post(self,acquired,context,state):
         from .publisher_adapter import CONTEXTS
         require(context in CONTEXTS and state=='success','INVALID_PUBLICATION_CONTEXT')

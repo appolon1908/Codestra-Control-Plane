@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "effective-protection-and-publisher-provenance",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--effective-protection-and-publisher-provenance",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "a6350c1b9e5f1cb13b0226d0ecf1dd137463e472",
+  "observed_target_commit": "fb873592004862712543366a4d14de10ec5412ec",
+  "start_basis": "Current merged section includes producer-binding fix; preserve that existing source while promoting this atomic task through the subsection.",
+  "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "worktree": "/srv/codestra/dev-platform/control-plane/worktrees/effective-protection-and-publisher-provenance-20261016",
+  "authorization": "Explicit bounded shared-source implementation relayed by existing parent/portfolio coordinators under human continue implementation Sentinel_27693f215e2c8191a8abf21f31cf69d8. Source preparation accepted under AGENTS; no operational authority inferred.",
+  "scope": "Read-only effective classic/ruleset verification and privileged issuer-provenance contract, default unset denies; strict REST parent fencing remains unsupported. Source/tests/local commits only; no actual issuer policy or App IDs selected.",
+  "runtime_assignment": null,
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false,
+  "other_source_preserved": "41ec4fb6aaf83f6664c917752012549ed7ca9a0e"
+}

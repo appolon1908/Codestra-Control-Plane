@@ -19,6 +19,7 @@ class GitHub:
     def verify(self, acquired, now):
         if self.revoked: raise PublicationDenied('REVOKED')
         if self.moved: raise PublicationDenied('TARGET_MOVED')
+    def revalidate(self, acquired, now):self.verify(acquired,now)
     def post(self, acquired, context, decision):
         self.calls.append(context)
         if self.failure: raise OSError('ambiguous transport')
