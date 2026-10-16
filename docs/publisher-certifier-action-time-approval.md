@@ -13,7 +13,7 @@ The bundled source examples are:
 | Source template | Proposed purpose |
 | --- | --- |
 | `config/examples/authenticated-publisher.toml` | Fixed protected publisher startup configuration; zero IDs deny startup. |
-| `config/examples/producer-acceptance.json` | Protected independent producer acceptance; `PROPOSED`, zero IDs and empty receipts/timestamps deny acceptance. |
+| `config/examples/producer-acceptance.json` | Protected independent producer acceptance; `PROPOSED`, zero App/installation IDs and empty receipts/timestamps deny acceptance. Known pilot repository ID is proposed metadata only. |
 | `config/examples/certifier-observer.proposed.toml` | Proposed separate root-custodian configuration; protected acceptance remains unaccepted. No service unit or installation is supplied. |
 | `config/examples/publisher-certifier-action-time-approval.json` | Action-time approval checklist with every operational approval false and Phase B postponed. |
 
@@ -48,9 +48,20 @@ purpose; it is not evidence of GitHub App-key custody.
 | Database authority | Separately accepted restricted read principal and operator-maintained authority/read model; neither App creates assignments, leases, schema or grants. |
 | Merge execution | Separate downstream authority rechecks the current protected target and merge-result checks; neither App merges or creates refs. |
 
+The proposed primary OS identity is the **new, uncreated** dedicated user/group
+`codestra-publisher`, as a non-login system account with no privileged or shared
+memberships, for the existing designated
+`codestra-control-plane-status.service`. Creating that account/group, its private
+state and changing the unit `User`/`Group` drop-in require separate action-time
+approval. No account or service configuration is changed here. Do not accept the
+shared `sentinelx` identity as publisher key custody or reuse its group membership.
+
 The only proposed installation and certification scope is
-`appolon1908/codestra`, with its positive actual GitHub repository ID acquired and
-accepted later. The 49-repository source catalog does not expand this pilot.
+`appolon1908/codestra`, repository ID **1319808791** from the existing authenticated
+GitHub metadata observed 2026-10-16 at 17:37:38 UTC (`pull.json` `base.repo.id`).
+This known identity is proposed metadata, not an accepted grant or a new audit;
+the App/installation identities remain zero and uncreated. The 49-repository
+source catalog does not expand this pilot.
 Reject extra repositories, duplicate IDs, wrong installations, suspended Apps,
 zero/guessed IDs and independent-issuer collisions.
 
@@ -82,21 +93,24 @@ no group/other write permission. Record actual identities and modes privately.
 
 | Target | Proposed ownership/mode and purpose |
 | --- | --- |
-| `/etc/codestra/control-plane/authenticated-publisher.toml` | `root:sentinelx 0640`; fixed startup path, exact reviewed schema. |
-| `/etc/codestra/control-plane/producer-acceptance.json` | `root:sentinelx 0640`; externally accepted producer record, reread every verification boundary. |
-| `/etc/codestra/control-plane/credentials/publisher-app.pem` | `root:sentinelx 0640`, or `0600` only when a separately accepted privileged reader can read it; publisher key only. |
-| `/etc/codestra/control-plane/credentials/publisher.dsn` | `root:sentinelx 0640`, or compatible `0600`; restricted authenticated database principal and verified TLS. No DSN value enters Git. |
-| `/etc/codestra/control-plane/certifier-observer.toml` | `root:root 0600`; exact four fields `app_key_file`, `producer_acceptance_file`, `socket_file`, `publisher_user="sentinelx"`. IDs come only from protected accepted policy. |
+| `/etc/codestra/control-plane/authenticated-publisher.toml` | `root:codestra-publisher 0640`; fixed startup path, exact reviewed schema. |
+| `/etc/codestra/control-plane/producer-acceptance.json` | `root:codestra-publisher 0640`; externally accepted producer record, reread every verification boundary. |
+| `/etc/codestra/control-plane/credentials/publisher-app.pem` | `root:codestra-publisher 0640`, or `0600` only when a separately accepted privileged reader can read it; publisher key only. |
+| `/etc/codestra/control-plane/credentials/publisher.dsn` | `root:codestra-publisher 0640`, or compatible `0600`; restricted authenticated database principal and verified TLS. No DSN value enters Git. |
+| `/etc/codestra/control-plane/certifier-observer.toml` | `root:root 0600`; exact four fields `app_key_file`, `producer_acceptance_file`, `socket_file`, `publisher_user="codestra-publisher"`. IDs come only from protected accepted policy. |
 | `/etc/codestra/scope-certifier/credentials/certifier-app.pem` | `root:root 0600`; independent root custodian, never readable by publisher. A separate certifier issuance service must use its independently accepted custody boundary. |
 | `/etc/codestra`, `/etc/codestra/control-plane`, credential directories and certifier configuration parents | `root:root 0750` or `0755` as required for accepted traversal; all ancestors root-owned with no group/other write. Choose `0755` where the service must traverse without membership in root. |
-| `/run/codestra-control-plane` and `publisher.lock` | Directory `root:sentinelx 0750`; precreated lock `root:sentinelx 0640`. Publisher does not create or replace it. Boot recreation needs separate accepted provisioning. |
-| `/run/codestra-certifier-observer` and `observer.sock` | Protected directory `root:sentinelx 0750`; proposed socket `root:sentinelx 0660`, client verifies server peer UID root (`0`), server verifies caller UID resolved for `sentinelx`. Socket protocol and isolated server deployment must be reviewed before use. |
+| `/run/codestra-control-plane` and `publisher.lock` | Directory `root:codestra-publisher 0750`; precreated lock `root:codestra-publisher 0640`. Publisher does not create or replace it. Boot recreation needs separate accepted provisioning. |
+| `/run/codestra-certifier-observer` and `observer.sock` | Protected directory `root:codestra-publisher 0750`; proposed socket `root:codestra-publisher 0660`, client verifies server peer UID root (`0`), server verifies caller UID resolved for the proposed `codestra-publisher` account. Socket protocol and isolated server deployment must be reviewed before use. |
 | `/var/lib/codestra-control-plane` | Root-owned non-writable ancestor, proposed `root:root 0755`. |
-| `/var/lib/codestra-control-plane/publisher` | `sentinelx:sentinelx 0700`; dedicated private ledger directory. Ledger/SQLite sidecars `sentinelx:sentinelx 0600`. Preserve intent history on rollback. |
+| `/var/lib/codestra-control-plane/publisher` | `codestra-publisher:codestra-publisher 0700`; dedicated private ledger directory. Ledger/SQLite sidecars `codestra-publisher:codestra-publisher 0600`. Preserve intent history on rollback. |
+| `/opt/codestra-control-plane/releases/<SOURCE_SHA>` | New immutable release tree, root-owned directories `0755`, root-owned non-writable files with manifest modes; replace `<SOURCE_SHA>` only with the exact approved 40-character source commit. No mutable developer-owned ancestor is trusted. |
 
 Protected-read checks validate owners, ancestry and modes; they do not prove
 exclusive key custody. The currently shared `sentinelx` identity is not accepted
-evidence of exclusive custody. Inventory every process, user and group that can
+evidence of exclusive custody. The proposed new dedicated account is also only
+a proposal until its actual isolation and credential custody are accepted.
+Inventory every process, user and group that can
 read either key, and accept actual dedicated isolation or an independently
 accepted signing custodian before issuance. Never grant publisher access to the
 certifier key. Root remains a privileged trust boundary.
@@ -137,14 +151,20 @@ separately approved window recorded before execution. Empty values prohibit it.
    reference metadata; ledger and sidecar consistency; recovery access. Keep
    secret-bearing backups under accepted private custody, outside Git. Verify the
    backup and restore procedure and record its receipt.
-4. Under separate applicable provisioning approval, prepare the exact protected
-   directories, lock, independent observer and private ledger layout above.
+4. Under separate applicable provisioning approval, create the proposed dedicated
+   `codestra-publisher` account/group without shared memberships, then prepare the
+   exact protected directories, lock, independent observer and private ledger
+   layout above.
    Install only accepted release-manifest targets: primary/checker/CLI and
-   `lib/**/*.py` paths explicitly enumerated under
-   `/srv/codestra/dev-platform/control-plane`, and the retired secondary at
+   `lib/**/*.py` paths explicitly enumerated under the new immutable
+   `/opt/codestra-control-plane/releases/<SOURCE_SHA>`, and the retired secondary at
    `/opt/codestra-dev/control-plane/bin/github-status-sync` when enumerated.
-   Secure the entire ancestry/import tree as root-owned; copying into a mutable
-   developer-owned ancestor fails custody. Install the exact pinned wheel only
+   Secure the entire new ancestry/import tree as root-owned; do not chown the
+   shared `/srv` development tree. Separately approve the designated unit drop-in
+   with `User=codestra-publisher`, `Group=codestra-publisher` and exact
+   `ExecStart=/usr/bin/python3 -I -B /opt/codestra-control-plane/releases/<SOURCE_SHA>/bin/codestra-github-statusd`.
+   The placeholder must be replaced with the manifest's approved commit before
+   any execution. Install the exact pinned wheel only
    into the accepted root-owned interpreter environment, with no network package
    resolution. Dependency and ownership changes require explicit scoped approval.
 5. Provision actual App/installation identities and key custody only under their
@@ -166,7 +186,7 @@ separately approved window recorded before execution. Empty values prohibit it.
    requires explicit approval. The legacy writer and unused alias remain paused;
    the captured timer baseline does not authorize their reactivation.
 
-App creation, key generation/distribution, socket/service provisioning, dependency
+OS account/group creation, unit identity changes, App creation, key generation/distribution, socket/service provisioning, dependency
 installation, file ownership changes, installation, activation and rollback are
 distinct approvals. No command implementing any of those actions ran here.
 
@@ -194,7 +214,9 @@ distinct approvals. No command implementing any of those actions ran here.
 5. Leave every writer and timer paused. Record the observed rollback state and
    unresolved receipts privately. Do **not** automatically restore captured active
    states, reenable a competing publisher, restart a failed writer or resume
-   publication. A subsequent resume requires a fresh explicit operator decision.
+   publication. Record the new account and remaining owned paths; do not delete
+   an account, reuse its UID or remove private state without a separately approved
+   recovery action. A subsequent resume requires a fresh explicit operator decision.
 
 ## Action-time acceptance, revocation and remaining limits
 
@@ -223,3 +245,53 @@ propose a fresh exact maintenance window and separate scoped action packet for
 operator confirmation. The unconfirmed window in this proposal grants nothing.
 Private handoff references carry the authentication, custody, backup and recovery
 evidence; no secret values or live records belong in source control.
+
+## Proposed genuine scope assignment and first issuance
+
+The isolated source migration `012-scope-assignment-leases.sql` prepares the
+missing non-atomic scope lease contract. It creates only a new
+`scope_assignment_leases` schema and definitions when separately applied; it
+neither alters the existing atomic `assignment_leases` protocol nor creates
+roles, execution grants, product/principal mappings, assignments or leases. Its
+source tests apply it only to a disposable synthetic PostgreSQL cluster using
+actual SCRAM authentication and verified TLS.
+
+The operator-only `principals`, `products`, `grants` and `assignments` tables pin
+actual role OIDs, repository owner/account mappings, product/repository/positive
+repository ID, registered promotion refs, exact head/base SHAs, task identity,
+active flags and bounded expirations. Eligible edges are only
+subsection→section→development→testing→staging→production→main, one edge per
+assignment. Current `public.products` and `scoped_registration.products` must
+match the proposed product mapping; subsection/section refs must exist in the
+registered workstation/section tables. Labeling a hotfix or atomic ref as a scope
+level cannot authorize a shortcut.
+
+`claim(assignmentUUID, requestUUID)` authenticates the actual nonprivileged SCRAM
+session over TLS, with no `SET ROLE`/session impersonation, matching registered
+role OID, product claim grant and assignment owner. It consumes the assignment
+and request UUID once, returning an exclusive UUID lease token and positive
+epoch. Expiration is at most five minutes and never exceeds the current
+assignment, principal, product or grant expiration. There is no renewal,
+automatic replacement or epoch reseal after expiry/revocation. A fresh lease
+needs a separately assigned new task; the caller cannot write authority tables.
+
+The independent verifier receives only schema usage and exact execution of
+`scope_assignment_leases.inspect_binding(uuid)`, together with its operator-owned
+product `read` grant pinned to its actual role OID. It receives no claim or
+authority-table mutation privilege. Read-only inspection returns a genuine
+`ONLINE_DATABASE_RECEIPT` with exact binding, token, epoch and current state;
+revocation/expiry returns non-`ACTIVE` or denies, and changed immutable binding,
+registry drift, missing lease or invalid credential provenance denies. The
+transaction must use `READ COMMITTED`; a repeatable snapshot cannot retain
+previously valid authority after revocation. The
+certifier must require `ACTIVE`, match every ref/SHA/identity and independently
+acquire policy/dependencies before a first GitHub scope check. Lease ownership
+alone does not certify code or permit check issuance.
+
+Any future action packet must separately approve migration ownership and exact
+digest, authenticated role/credential custody, narrow function execution grants,
+product/account mapping and task assignment, the exact one-shot claim, independent
+first-issuance policy and check effect. All are unprovisioned and unapproved here.
+Phase B remains postponed; confirm a fresh exact maintenance window only if those
+operational steps later become necessary. Do not apply these definitions or seed
+rows against the installed database from source tests or this proposal.

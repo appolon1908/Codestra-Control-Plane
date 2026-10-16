@@ -10,7 +10,7 @@
   "start_commit": "2d312d3a63adcb06694aa66e1b72601f11e7dac3",
   "owner": "Ralph-authorized source preparation /root/configuration_and_rollback",
   "authorization": "Parent-relayed Ralph source and helper implementation authorization; prepare reviewable action-time packet, committed templates and offline proposal packaging only.",
-  "scope": "New config/examples templates, publisher-certifier action-time approval/integration documents, committed-template proposal packager and focused offline tests. Proposed uncreated independent Apps and appolon1908/codestra pilot only; operational approvals remain false.",
+  "scope": "New config/examples templates, publisher-certifier action-time approval/integration documents, committed-template proposal packager and focused offline tests. Parent followup also authorizes isolated 012 scope_assignment_leases source protocol and genuine disposable PostgreSQL/SCRAM/TLS tests; existing atomic semantics unchanged. Proposed uncreated independent Apps and appolon1908/codestra pilot only; all operational approvals remain false.",
   "runtime_assignment": null,
   "database_lease": null,
   "certification": null,
@@ -19,6 +19,7 @@
     "offline_only": true,
     "tests": [
       {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_publisher_installation.py -v", "result": "Ran 4 tests; OK"},
+      {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_scope_assignment_leases.py -v", "result": "Ran 14 tests in 125.656s; OK; no skips; disposable PostgreSQL16/SCRAM/TLS only"},
       {"command": "PYTHONPATH=lib python3 -m unittest discover -s tests -p test_publisher_release.py -v", "result": "Ran 3 tests; OK"}
     ],
     "template_parse": "4 proposal templates and task JSON parsed",
