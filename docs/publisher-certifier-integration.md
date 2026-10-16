@@ -18,11 +18,15 @@ The template's zero IDs deny before database access. It contains no enable flag.
 
 The protected `codestra.producer-acceptance.v1` record names actual publisher and
 certifier App/installation IDs, actual pilot repository ID, accepted operator,
-custody and independent certifier-capability references, both controller contexts,
+two distinct independently accepted custody references (`custody_receipt` for
+publisher only and `certifier_custody_receipt` for certifier only), the independent
+certifier-capability reference, both controller contexts,
 `scope-certification`, bounded timestamps and the 300-second receipt age limit.
 Its template remains `PROPOSED` with zero IDs and empty acceptance references.
 Root-owned metadata alone does not convert a proposal into an accepted record.
 An authenticated acceptance process must accept the actual private evidence.
+Missing, empty or equal custody references deny; no joint receipt substitutes for
+separate acceptance of these independent credential custodians.
 
 The production provenance verifier must reread that protected record on each
 verification and query actual GitHub state online. Acceptance lasts at most

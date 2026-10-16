@@ -31,6 +31,10 @@ Ralph L. Appolon is the nominated accountable operator. Nomination, source
 authorization, a populated receipt field or a PKI USB designation does not accept
 GitHub App private-key custody. An authenticated operator must separately accept
 each App, every key holder, the isolation boundary and the exact installation.
+The protected acceptance record requires two distinct accepted custody references:
+`custody_receipt` is publisher-only, and `certifier_custody_receipt` is
+certifier-only. Missing, empty or equal references deny; a joint custody receipt
+cannot substitute for these two independent acceptances.
 Keep that evidence in the private handoff, with references in the protected
 acceptance record. A PKI USB may have a separately accepted database/client-PKI
 purpose; it is not evidence of GitHub App-key custody.
