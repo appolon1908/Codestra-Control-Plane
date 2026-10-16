@@ -73,7 +73,10 @@ class RestrictedRegistry:
                 require(type(lease) is e.LeaseEvidence,'AUTHENTICATED_LEASE_REQUIRED')
                 try:assignment=str(uuid.UUID(lease.assignment_id))
                 except (ValueError,TypeError,AttributeError):require(False,'AUTHENTICATED_ASSIGNMENT_REQUIRED')
-                cur.execute('SELECT assignment_leases.inspect_binding(%s)',(assignment,))
+                # This publisher handles registered scope/environment edges.
+                # Atomic candidate leases have a different, narrower authority
+                # and cannot authenticate these bindings.
+                cur.execute('SELECT scope_assignment_leases.inspect_binding(%s)',(assignment,))
                 row=cur.fetchone()
                 require(row is not None and type(row[0]) is dict,'ONLINE_LEASE_UNAVAILABLE')
                 receipt=row[0];actual=receipt.get('binding',{})
