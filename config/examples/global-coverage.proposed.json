@@ -1,0 +1,55 @@
+{
+  "schema": "codestra.global-coverage-proposal.v1",
+  "state": "PROPOSED",
+  "acceptance_ref": "",
+  "authenticated_operator_origin_receipt": "",
+  "activation_approved": false,
+  "assignment_provisioning_approved": false,
+  "repositories": [
+    {
+      "repository": "appolon1908/codestra",
+      "repository_id": 1319808791,
+      "identity_status": "PENDING",
+      "publisher_app_id": 0,
+      "publisher_installation_id": 0,
+      "certificate_app_id": 0,
+      "certificate_installation_id": 0,
+      "operator_product_acceptance_ref": "",
+      "installed_controller_manifest_sha256": "",
+      "registration_inventory_digest": "",
+      "dependency_graph_digest": "",
+      "task_assignment_and_lease_acceptance_ref": "",
+      "target_enforcement_acceptance_ref": ""
+    },
+    {
+      "repository": "appolon1908/klyrow.com",
+      "repository_id": 1334863061,
+      "identity_status": "PENDING",
+      "publisher_app_id": 0,
+      "publisher_installation_id": 0,
+      "certificate_app_id": 0,
+      "certificate_installation_id": 0,
+      "operator_product_acceptance_ref": "",
+      "installed_controller_manifest_sha256": "",
+      "registration_inventory_digest": "",
+      "dependency_graph_digest": "",
+      "task_assignment_and_lease_acceptance_ref": "",
+      "target_enforcement_acceptance_ref": ""
+    },
+    {
+      "repository": "appolon1908/WhatsApp-Frontend",
+      "repository_id": 1387813688,
+      "identity_status": "PENDING",
+      "publisher_app_id": 0,
+      "publisher_installation_id": 0,
+      "certificate_app_id": 0,
+      "certificate_installation_id": 0,
+      "operator_product_acceptance_ref": "",
+      "installed_controller_manifest_sha256": "",
+      "registration_inventory_digest": "",
+      "dependency_graph_digest": "",
+      "task_assignment_and_lease_acceptance_ref": "",
+      "target_enforcement_acceptance_ref": ""
+    }
+  ]
+}

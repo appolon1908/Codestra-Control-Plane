@@ -1,0 +1,80 @@
+{
+  "schema": "codestra.atomic-authority-proposal.v1",
+  "state": "PROPOSED",
+  "schema_install_approved": false,
+  "identity_provisioning_approved": false,
+  "activation_approved": false,
+  "issuer": {
+    "proposed_new_principal": "codestra_atomic_inclusion_issuer",
+    "created": false,
+    "accepted_role_oid": 0,
+    "credential_reference": "",
+    "custody_acceptance_ref": "",
+    "schema_usage": [
+      "atomic_receipts",
+      "assignment_leases"
+    ],
+    "function_execute": [
+      "atomic_receipts.prepare(uuid,uuid)",
+      "atomic_receipts.seal(uuid,bigint,bigint,text,text,timestamptz)",
+      "assignment_leases.inspect_binding(uuid)"
+    ],
+    "table_write": [],
+    "operator_product_capabilities": [
+      "atomic_receipts:issue",
+      "assignment_leases:read"
+    ],
+    "scoped_registration_principal_acceptance_ref": ""
+  },
+  "scope_reader": {
+    "proposed_principal": "codestra_scope_certifier_ro",
+    "created": false,
+    "accepted_role_oid": 0,
+    "additive_privileges_approved": false,
+    "operator_product_capability": "atomic_receipts:read",
+    "schema_usage": [
+      "atomic_receipts",
+      "assignment_leases",
+      "scoped_registration"
+    ],
+    "table_select": [
+      "atomic_receipts.product_grants",
+      "atomic_receipts.delegations",
+      "atomic_receipts.preparations",
+      "atomic_receipts.receipts",
+      "atomic_receipts.revocations",
+      "atomic_receipts.task_dependencies",
+      "atomic_receipts.principal_integrity",
+      "scoped_registration.task_assignments",
+      "scoped_registration.grants",
+      "scoped_registration.principals",
+      "assignment_leases.bindings",
+      "assignment_leases.coordinator_tasks",
+      "assignment_leases.leases",
+      "assignment_leases.proofs",
+      "assignment_leases.permissions"
+    ],
+    "function_execute": [],
+    "table_write": []
+  },
+  "revoker": {
+    "principal_acceptance_ref": "",
+    "accepted_role_oid": 0,
+    "credential_reference": "",
+    "product_capability": "atomic_receipts:revoke",
+    "function_execute": [
+      "atomic_receipts.revoke(uuid,text,uuid)"
+    ],
+    "table_write": []
+  },
+  "policy": {
+    "proposed_path": "/etc/codestra/control-plane/atomic-inclusion-acceptance.json",
+    "owner": "root",
+    "group": "root",
+    "mode": "0600",
+    "custody_approved": false
+  },
+  "independent_materializer_acceptance_ref": "",
+  "snapshot_reader_integration_acceptance_ref": "",
+  "note": "Additional source-only prerequisites. Existing publisher-only action-time packet does not accept these authorities. No prior write admission, deployment or promotion is conferred."
+}

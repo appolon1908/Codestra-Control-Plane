@@ -64,9 +64,9 @@ def _text(value):
     return type(value) is str and bool(value.strip())
 
 
-def _validate_snapshot(acquired, binding, now, host):
+def _validate_snapshot_data(acquired, binding, now, host):
     from .decision import MAX_SNAPSHOT_AGE, CONTROL_PLANE_CONTEXTS
-    from .policy import resolve_edge, PolicyError, valid_ref
+    from .policy import valid_ref
     require(type(binding) is PromotionRequest, 'INVALID_CERTIFICATION_BINDING')
     require(all(_text(v) for v in (binding.product, binding.repository))
             and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9_.-]*', binding.repository)
@@ -84,10 +84,6 @@ def _validate_snapshot(acquired, binding, now, host):
             'CERTIFIER_REPOSITORY_NOT_GRANTED')
     require(s.observed_binding == binding and s.mapping.repository == binding.repository
             and s.mapping.product == binding.product, 'CERTIFIER_SNAPSHOT_BINDING_MISMATCH')
-    try:
-        source_level, _ = resolve_edge(s.mapping, binding.source_ref, binding.target_ref)
-    except PolicyError:
-        require(False, 'UNREGISTERED_CERTIFICATION_SCOPE')
     require(type(s.observed_at) is datetime and s.observed_at.tzinfo is not None
             and now - MAX_SNAPSHOT_AGE <= s.observed_at <= now, 'STALE_CERTIFICATION_SNAPSHOT')
     require(all(value is False for value in (s.production_go, s.live_capabilities_enabled,
@@ -117,7 +113,12 @@ def _validate_snapshot(acquired, binding, now, host):
         if review.codeowner is True: owners.add(login)
     require(len(reviewers) >= s.required_approvals and bool(owners), 'CERTIFIER_INDEPENDENT_CODEOWNER_REQUIRED')
 
-    return source_level
+
+def _validate_snapshot(acquired, binding, now, host):
+    from .policy import resolve_edge, PolicyError
+    _validate_snapshot_data(acquired,binding,now,host)
+    try: return resolve_edge(acquired.snapshot.mapping,binding.source_ref,binding.target_ref)[0]
+    except PolicyError: require(False,'UNREGISTERED_CERTIFICATION_SCOPE')
 
 
 def _validate(acquired, binding, now, host):
@@ -271,7 +272,8 @@ class CertifierGitHubClient(GitHubAppClient):
 
 class CertifierGitHubVerifier:
     """Observe online source/base, merge checks, protection and independent reviews."""
-    def __init__(self, api): self.api = api
+    def __init__(self, api, *, atomic_policy_reader=None):
+        self.api, self.atomic_policy_reader = api, atomic_policy_reader
 
     def _checks(self, repo, sha, requirements):
         values = self.api.pages(f'/repos/{repo}/commits/{sha}/check-runs?filter=latest', 'check_runs')
@@ -353,6 +355,10 @@ class CertifierGitHubVerifier:
     def verify_dependencies(self, acquired, contract, now):
         from datetime import timedelta
         deadline = contract.expires_at
+        if getattr(acquired,'atomic_inventory',None) is not None:
+            from .atomic_receipts import verify_inclusions
+            deadline = min(deadline, verify_inclusions(self.api,self.atomic_policy_reader,
+                acquired,contract,acquired.atomic_inventory,now))
         if acquired.dependencies:
             self.api.assert_identity(acquired.authority, acquired.repository_id, now)
         for dependency in acquired.dependencies:
@@ -438,18 +444,18 @@ class RestrictedCertificationRegistry:
           AND pg_has_role(session_user,bad.oid,'MEMBER'))
          AND NOT EXISTS(SELECT 1 FROM pg_namespace n WHERE
           n.nspname IN ('certifier_authority','publisher_authority','assignment_leases','scoped_registration',
-                        'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases')
+                        'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases','atomic_receipts')
           AND (pg_has_role(session_user,n.nspowner,'MEMBER') OR has_schema_privilege(session_user,n.oid,'CREATE')))
          AND NOT EXISTS(SELECT 1 FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace
           WHERE t.relkind IN ('r','p','v','m','f')
           AND (n.nspname IN ('certifier_authority','publisher_authority','assignment_leases','scoped_registration',
-                            'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases')
+                            'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases','atomic_receipts')
                OR n.nspname='public')
           AND (pg_has_role(session_user,t.relowner,'MEMBER')
                OR has_table_privilege(session_user,t.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')))
          AND NOT EXISTS(SELECT 1 FROM pg_proc f JOIN pg_namespace n ON n.oid=f.pronamespace
           WHERE n.nspname IN ('certifier_authority','publisher_authority','assignment_leases','scoped_registration',
-                             'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases')
+                             'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases','atomic_receipts')
           AND f.oid IS DISTINCT FROM to_regprocedure('assignment_leases.inspect_binding(uuid)')
           AND f.oid IS DISTINCT FROM to_regprocedure('scope_assignment_leases.inspect_binding(uuid)')
           AND has_function_privilege(session_user,f.oid,'EXECUTE'))
@@ -587,6 +593,7 @@ class PendingCertification:
     issued_at: datetime
     expires_at: datetime
     dependencies: tuple[CertificationDependency, ...]
+    atomic_inventory: object = None  # Authenticated014 read port; never caller policy.
 
 
 @dataclass(frozen=True)
@@ -628,6 +635,10 @@ def _validate_pending(acquired, binding, now, host):
             'FIRST_CERTIFICATION_CURRENT_SCOPE_LEASE_REQUIRED')
     require(type(acquired.dependencies) is tuple and len(acquired.dependencies) <= 100,
             'FIRST_CERTIFICATION_DEPENDENCY_POLICY_UNAVAILABLE')
+    if acquired.atomic_inventory is not None:
+        from .atomic_receipts import AtomicInventory
+        require(acquired.scope_type == 'SUBSECTION' and type(acquired.atomic_inventory) is AtomicInventory
+                and bool(acquired.atomic_inventory.receipts), 'FIRST_CERTIFICATION_ATOMIC_INVENTORY_INVALID')
     seen = set()
     from .policy import resolve_edge, PolicyError
     for value in acquired.dependencies:
@@ -758,7 +769,7 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
     no fallback to legacy metadata or the incompatible atomic assignment API.
     """
     @staticmethod
-    def _registered_dependencies(cur, acquired):
+    def _registered_dependencies(cur, acquired, now=None):
         """Reconcile the entire current registered hierarchy, never snapshot claims."""
         from .policy import ScopeEdge
         b = acquired.snapshot.observed_binding; mapping = acquired.snapshot.mapping
@@ -873,10 +884,8 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
         elif scope == 'SUBSECTION':
             require(b.source_ref in scopes, 'FIRST_CERTIFICATION_SUBSECTION_REGISTRY_REQUIRED')
             parent, workstation, depends = scopes[b.source_ref]
-            cur.execute("""SELECT EXISTS(SELECT 1 FROM public.atomic_tasks WHERE workstation_id=%s)
-             OR EXISTS(SELECT 1 FROM scoped_registration.candidates WHERE product=%s AND workstation_id=%s)""",
-                        (workstation, b.product, workstation))
-            require(cur.fetchone() == (False,), 'FIRST_CERTIFICATION_ATOMIC_DEPENDENCY_CERTIFICATE_UNSUPPORTED')
+            from .atomic_receipts import read_inventory
+            atomic_inventory = read_inventory(cur,acquired,workstation,now or datetime.now(timezone.utc))
             require(all(value in identities and value != workstation for value in depends),
                     'FIRST_CERTIFICATION_SUBSECTION_PREREQUISITE_UNREGISTERED')
             required = {identities[value] for value in depends}
@@ -885,6 +894,7 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
         declared = [(value.binding.source_ref, value.binding.target_ref) for value in acquired.dependencies]
         require(len(declared) == len(required) and set(declared) == required,
                 'FIRST_CERTIFICATION_CURRENT_DEPENDENCY_INVENTORY_MISMATCH')
+        return atomic_inventory if scope == 'SUBSECTION' else None
 
     def acquire(self, binding, now):
         import uuid
@@ -931,7 +941,7 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
                     assignment_id, str(lease_id), epoch, principal, delegation_ref, capability,
                     issued_at, expires_at, tuple(dependencies))
                 _validate_pending(acquired, binding, now, authority.host)
-                self._registered_dependencies(cur, acquired)
+                acquired = replace(acquired, atomic_inventory=self._registered_dependencies(cur, acquired, now))
                 cur.execute('SELECT scope_assignment_leases.inspect_binding(%s)', (assignment_id,))
                 row = cur.fetchone()
                 require(row is not None and type(row[0]) is dict, 'FIRST_CERTIFICATION_ONLINE_SCOPE_LEASE_UNAVAILABLE')
@@ -954,7 +964,7 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
 
 
 def build_first_certifier_service(connection, jwt_provider, ledger_path, policy_reader,
-                                  *, host, clock=lambda: datetime.now(timezone.utc)):
+                                  *, host, clock=lambda: datetime.now(timezone.utc), atomic_policy_reader=None):
     """Compose administered source dependencies; no credential/config provisioning.
 
     Call only from an operator-controlled integration. connection must authenticate
@@ -966,6 +976,6 @@ def build_first_certifier_service(connection, jwt_provider, ledger_path, policy_
     from .publisher_effect import IntentLedger
     api = CertifierGitHubClient(jwt_provider, clock=clock)
     return AuthenticatedFirstCertifier(RestrictedFirstCertificationRegistry(connection),
-        CertifierGitHubVerifier(api), IntentLedger(ledger_path),
+        CertifierGitHubVerifier(api,atomic_policy_reader=atomic_policy_reader), IntentLedger(ledger_path),
         contract_verifier=AcceptedFirstCertificationContractVerifier(policy_reader),
         host=host, clock=clock)

@@ -110,8 +110,11 @@ The existing `codestra` bootstrap identity remains a separate candidate.
 An authenticated pending delegation cannot override the canonical registered
 child inventory. Sections require all subsections, development all sections, and
 later environments their immediate predecessor; registered cross-subsection
-dependencies must also match. SUBSECTION first issuance denies any actual atomic
-task or registered candidate because atomic child receipts remain unsupported.
+dependencies must also match. The publisher-only proposal lacks atomic child
+receipt support. The separate complete source candidate adds014 and its
+independent ATOMIC_INCLUSION issuer/reader; nonempty subsection issuance requires
+every canonical child to have a genuine sealed receipt and accepted purpose.
+That additional schema, identity, custody and integration remain unprovisioned.
 No eligible first binding is selected: PR/ref/head/base and delegation fields
 remain empty, and PR56 hotfix→production is explicitly ineligible. Once a valid
 binding is accepted, the separately approved first effect is one genuine scope
