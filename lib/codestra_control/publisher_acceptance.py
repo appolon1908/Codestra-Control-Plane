@@ -134,6 +134,11 @@ class AcceptedProducerVerifier:
     identity-only port with jwt_provider() and request(method,path,opaque_handle).
     It must authenticate as the accepted certifier App; a publisher JWT cannot
     establish another App's installation. Missing this port always denies.
+
+    These per-repository reads prove current target coverage, not the complete
+    selected-repository inventory. Operators must independently accept that full
+    installation inventory. Repository-scoped publisher tokens and protected
+    policy pins prevent a publication target from expanding automatically.
     """
     def __init__(self, policy_reader, api, *, certifier_api=None):
         self.policy_reader, self.api, self.certifier_api = policy_reader, api, certifier_api
@@ -152,7 +157,7 @@ class AcceptedProducerVerifier:
                 and value['app_id'] == app_id and 'suspended_at' in value
                 and value['suspended_at'] is None and value.get('account', {}).get('login') == owner['login']
                 and type(value['account'].get('id')) is int and value['account']['id'] == owner['id']
-                and value.get('repository_selection') in ('all', 'selected'),
+                and value.get('repository_selection') == 'selected',
                 'PRODUCER_INSTALLATION_IDENTITY_MISMATCH')
 
     def verify(self, acquired, now) -> VerifiedProducerContract:

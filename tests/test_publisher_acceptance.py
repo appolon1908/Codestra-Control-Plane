@@ -294,6 +294,13 @@ class AcceptanceTests(unittest.TestCase):
                 with self.subTest(target=target, change=change), self.assertRaises(PublicationDenied):
                     self.verify()
 
+    def test_all_repository_installations_cannot_expand_accepted_pilot(self):
+        for target in ('publisher', 'certifier', 'certifier_repository_installation'):
+            self.transport = Transport(); self.api.request = self.transport; self.certifier.request = self.transport
+            setattr(self.transport, target, dict(getattr(self.transport, target), repository_selection='all'))
+            with self.subTest(target=target), self.assertRaises(PublicationDenied):
+                self.verify()
+
     def test_certificate_receipt_matches_online_id_app_name_sha_binding_and_completed_success(self):
         for key, value in [('id', 11), ('app', {'id': 7}), ('name', 'quality'),
                            ('head_sha', 'b'*40), ('external_id', 'wrong-binding'),
