@@ -11,6 +11,7 @@
   "controller_contexts": ["codestra-control-plane", "codestra/control-plane"],
   "repositories": [{"repository": "appolon1908/codestra", "repository_id": 0}],
   "custody_receipt": "",
+  "certifier_custody_receipt": "",
   "certifier_capability_receipt": "",
   "accepted_at": "",
   "expires_at": "",
