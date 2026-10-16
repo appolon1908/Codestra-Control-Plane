@@ -5,6 +5,7 @@
   "branch": "atomic/cp-01-foundation--02-trusted-decisions--scoped-l1-l2-admission",
   "target": "subsection/cp-01-foundation--02-trusted-decisions",
   "source_parent": "c1890bdcc478cf40231087b57f95ba64ff0a7049",
+  "published_implementation_head": "f5d8c46270d321c247c2b57a49797ff22c857fb9",
   "date": "2026-10-16",
   "full_suites": [
     {
@@ -32,6 +33,32 @@
     "client_transaction_and_custody": 12,
     "startup_fixture": 13
   },
+  "end_of_work_validation": {
+    "date": "2026-10-16",
+    "implementation_head": "f5d8c46270d321c247c2b57a49797ff22c857fb9",
+    "pending_changes": "Only the task record, validation record and completed implementation-plan checkpoint; implementation and tests unchanged.",
+    "full_suites": [
+      {
+        "command": "env -u PYTHONPATH TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v",
+        "exit_code": 0,
+        "tests": 575,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "seconds": 84.158
+      },
+      {
+        "command": "TMPDIR=/dev/shm PYTHONPATH=/usr/lib/python3/dist-packages PYTHONDONTWRITEBYTECODE=1 python3 -S -m unittest discover -s tests -v",
+        "exit_code": 0,
+        "tests": 575,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "seconds": 87.522
+      }
+    ],
+    "record_checks": "JSON parsing, assigned-branch/contributor/source-only field consistency and git diff --check passed."
+  },
   "regression_evidence": [
     "Missing SQL API, staged materializer and protected client failed before implementation.",
     "An introduced parentless Git root evaded path inventory before the root-diff correction.",
@@ -44,10 +71,46 @@
   ],
   "review": {
     "independent_source_reviewer": "/root/verify_coverage_source",
+    "independent_review_scope": "SQL, protected client and root-authored test-bootstrap changes; this reviewer authored the materializer and did not independently review that component.",
+    "materializer_independent_reviewer": "/root",
     "material_findings": "FIXED_AND_REVIEWED",
     "github_codeowner_approval": false
   },
   "existing_migrations_changed": false,
+  "hosted_implementation_checks": {
+    "head": "f5d8c46270d321c247c2b57a49797ff22c857fb9",
+    "checks": [
+      {
+        "name": "control-plane-offline-source",
+        "event": "push",
+        "run_id": 38910367420,
+        "job_id": 117004364266,
+        "conclusion": "SUCCESS",
+        "tests": 575,
+        "skipped": 0
+      },
+      {
+        "name": "control-plane-offline-source",
+        "event": "pull_request",
+        "run_id": 38910369257,
+        "job_id": 117004371915,
+        "conclusion": "SUCCESS",
+        "tests": 575,
+        "skipped": 0
+      },
+      {
+        "name": "prepublication-offline-source",
+        "event": "pull_request",
+        "run_id": 38910369205,
+        "job_id": 117004373079,
+        "conclusion": "SUCCESS",
+        "tests": 575,
+        "skipped": 0
+      }
+    ],
+    "release_approval": false,
+    "runtime_certification": false
+  },
   "limits": [
     "A disk-backed baseline run was interrupted for host I/O contention; it is not passing evidence.",
     "An initial full run exposed an existing test's hardcoded /tmp ancestor; the fixture now supports TMPDIR without changing production custody checks.",
