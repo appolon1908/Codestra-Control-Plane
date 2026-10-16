@@ -4,6 +4,11 @@ This implements the recovery step explicitly requested by the user. It is a
 source-only extension of the existing PR21 design, not deployment or operator
 admission. PR21's version1 inspection remains inactive and unchanged.
 
+Before runtime use, follow the separate
+[operational-adoption handoff](frozen-recovery-operational-acceptance.md) for the
+accepted release, independent identities, protected configuration and per-incident
+records. That handoff supplies no acceptance or execution authority.
+
 ## Version2 action and identity
 
 The sole action is RELEASE_STALE_WORKTREE_TO_FREE. It accepts only a workstation

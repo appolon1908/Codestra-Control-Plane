@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "recovery-adoption-handoff",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--recovery-adoption-handoff",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "09ec22bb6042c5ebdeb9a0df4b21cd9beeb82b63",
+  "owner": "Current user-requested recovery source-publication session",
+  "authorization_basis": "User requested update pr and push after reviewing PR36 runtime-adoption and independent recovery-role prerequisites.",
+  "scope": "Documentation-only follow-up to merged PR36: reference-only operational-adoption handoff, existing contract link, source assignment. No runtime activation, identity appointment, code or test behavior change.",
+  "related_source_pr": 36,
+  "source_implementation_commit": "848888c609708add985b4c55a35380a68c805118",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "runtime_adoption_record": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}
