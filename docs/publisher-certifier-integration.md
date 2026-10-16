@@ -95,6 +95,31 @@ claim the same scope. Old receipts then remain non-`ACTIVE`; history is preserve
 Operator-only schema/grants/assignment provisioning and first scope check issuance
 remain separately unapproved Phase B actions, not effects of source integration.
 
+The concrete first path uses empty `013-first-certification-pending.sql` on the
+011/012 foundations and the administered `build_first_certifier_service` factory.
+Its new proposed PostgreSQL roles are `codestra_publisher_ro`,
+`codestra_scope_certifier_ro` and Ralph-private `codestra_scope_builder`, with no
+accepted OIDs or credentials. The reader roles receive only their exact table
+SELECT and scope inspection; the builder receives only claim execution and its
+operator product/assignment grant. The certifier root custodian has a separate
+`root:root 0600` DSN at `/etc/codestra/scope-certifier/credentials/certifier.dsn`
+and private `root:root 0700` ledger directory
+`/var/lib/codestra-control-plane/certifier`, with files/sidecars `0600`.
+The existing `codestra` bootstrap identity remains a separate candidate.
+
+An authenticated pending delegation cannot override the canonical registered
+child inventory. Sections require all subsections, development all sections, and
+later environments their immediate predecessor; registered cross-subsection
+dependencies must also match. SUBSECTION first issuance denies any actual atomic
+task or registered candidate because atomic child receipts remain unsupported.
+No eligible first binding is selected: PR/ref/head/base and delegation fields
+remain empty, and PR56 hotfix→production is explicitly ineligible. Once a valid
+binding is accepted, the separately approved first effect is one genuine scope
+check plus readback; publisher binding registration and each controller status
+remain separate later effects. See the packet's
+[concrete first-issuance bundle](publisher-certifier-action-time-approval.md#concrete-first-issuance-bundle-still-blocked)
+and the [six-step certifier source proposal](certifier-existing-receipt-source.md#concrete-first-issuance-operational-proposal).
+
 After issuance, the publisher independently reads the actual check-run by ID and
 requires the expected independent App, check name, successful completed state,
 head SHA and exact binding digest. It reacquires authority and leases and checks
