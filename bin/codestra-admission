@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+"""Source-only protected scoped admission entry point; no product effects."""
+import pathlib
+import sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]/'lib'))
+from codestra_control.scoped_admission import main
+if __name__ == '__main__':
+    raise SystemExit(main())
