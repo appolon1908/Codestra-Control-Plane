@@ -1,0 +1,151 @@
+"""Actual 012/013 + TLS/SCRAM registry + first issuer; GitHub alone is synthetic.
+
+Only the fixture's fresh local PostgreSQL cluster is used; no environment DSN,
+installed database, actual credentials or external service can be selected.
+"""
+from dataclasses import asdict, replace
+from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+
+import test_decision as fixture
+from test_certifier_adapter import CertifierAPI
+from codestra_control.certifier_adapter import (
+    AcceptedFirstCertificationContractVerifier, AuthenticatedFirstCertifier,
+    CertifierGitHubVerifier, RestrictedFirstCertificationRegistry,
+)
+from codestra_control.publisher_adapter import Authority, PublicationDenied, binding_digest
+from codestra_control.publisher_effect import IntentLedger
+from codestra_control.policy import ScopeEdge
+
+try:
+    import test_scope_assignment_leases as scope_fixture
+    from codestra_control import publisher_acceptance
+except ImportError:
+    scope_fixture = None
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@unittest.skipUnless(scope_fixture is not None, 'Assembled source 012 fixture and shared acceptance parser required')
+class FirstCertificationSQLIntegrationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        scope_fixture.ScopeAssignmentLeaseTests.setUpClass()
+        cls.harness = scope_fixture.ScopeAssignmentLeaseTests()
+        try:
+            for migration in ('011-certifier-authority.sql', '013-first-certification-pending.sql'):
+                cls.harness.admin((ROOT / migration).read_text())
+            cls.harness.admin('GRANT USAGE ON SCHEMA certifier_authority TO verifier')
+            cls.harness.admin('GRANT SELECT ON ALL TABLES IN SCHEMA certifier_authority TO verifier')
+            cls.harness.admin('GRANT SELECT ON public.products TO verifier')
+            for schema in ('scope_assignment_leases', 'assignment_leases', 'scoped_registration', 'frozen_recovery'):
+                cls.harness.admin('REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA ' + schema + ' FROM verifier')
+            cls.harness.admin('GRANT EXECUTE ON FUNCTION scope_assignment_leases.inspect_binding(uuid) TO verifier')
+        except BaseException:
+            cls.tearDownClass(); raise
+
+    @classmethod
+    def tearDownClass(cls):
+        scope_fixture.ScopeAssignmentLeaseTests.tearDownClass()
+
+    def setUp(self):
+        from psycopg2.extras import Json
+        self.harness.admin('TRUNCATE certifier_authority.pending_bindings,certifier_authority.existing_receipts,certifier_authority.product_grants')
+        self.harness.setUp()
+        # The shared source catalog is real; move the disposable product mapping
+        # to an approved repository before claiming its scope assignment.
+        repository = fixture.REQUEST.repository
+        self.harness.admin("UPDATE public.products SET repository=%s WHERE product='ScopeFixture'", (repository,))
+        self.harness.admin("UPDATE scoped_registration.products SET payload=jsonb_set(payload,'{repository}',to_jsonb(%s::text)) WHERE product='ScopeFixture'", (repository,))
+        self.harness.admin('UPDATE scope_assignment_leases.products SET repository=%s', (repository,))
+        self.harness.admin('UPDATE scope_assignment_leases.assignments SET repository=%s', (repository,))
+        lease = self.harness.claim()
+        self.lease = lease
+        self.now = datetime.now(timezone.utc)
+        self.binding = replace(fixture.REQUEST, product='ScopeFixture', source_ref='section/sec', target_ref='development')
+        mapping = replace(fixture.ready().mapping, product='ScopeFixture', production_ref='production',
+                          scope_edges=(ScopeEdge('section', 'section/sec', 'development', 'development'),))
+        snapshot = fixture.ready()
+        snapshot = replace(snapshot, mapping=mapping, observed_binding=self.binding, certificate=None,
+            observed_at=self.now, evaluated_at=self.now,
+            checks=tuple(replace(value, binding=self.binding) for value in snapshot.checks),
+            reviews=tuple(replace(value, binding=self.binding) for value in snapshot.reviews),
+            lease=replace(snapshot.lease, binding=self.binding, owner='alice', expected_owner='alice',
+                          assignment_id=self.harness.assignment, expires_at=datetime.fromisoformat(lease['expires_at'])))
+        authority = Authority('Ralph L. Appolon', 'dev-desktop', 99, 100, 1,
+                              self.now + timedelta(minutes=4), 'certifier-custody:fixture', (repository,))
+        encode = lambda value: json.loads(json.dumps(asdict(value), default=lambda dt: dt.isoformat()))
+        self.harness.admin("INSERT INTO certifier_authority.product_grants SELECT rolname,oid,'ScopeFixture',%s,123,true,clock_timestamp()+interval '4 minutes' FROM pg_roles WHERE rolname='verifier'", (repository,))
+        self.harness.admin("""INSERT INTO certifier_authority.pending_bindings(
+          binding_hash,principal,role_oid,product,repository,repository_id,pr_number,authority,snapshot,
+          scope_type,scope_name,assignment_id,lease_id,lease_epoch,lease_principal,delegation_ref,
+          capability_receipt,dependency_policy,accepted_by,purpose,issued_at,expires_at,active)
+          SELECT %s,rolname,oid,'ScopeFixture',%s,123,9,%s,%s,'SECTION','section/sec',%s,%s,%s,'alice',
+          'operator:integration-delegation','scope-capability:fixture','[]','Ralph L. Appolon',
+          'FIRST_SCOPE_CERTIFICATION',%s,%s,true FROM pg_roles WHERE rolname='verifier'""",
+          (binding_digest(self.binding), repository, Json(encode(authority)), Json(encode(snapshot)),
+           self.harness.assignment, lease['lease_id'], lease['epoch'], self.now, self.now + timedelta(minutes=2)))
+        policy = dict(schema='codestra.producer-acceptance.v1', state='ACCEPTED', accepted_by='Ralph L. Appolon',
+            acceptance_ref='operator:integration-policy', publisher_app_id=7, publisher_installation_id=8,
+            certificate_app_id=99, certificate_installation_id=100, certificate_name='scope-certification',
+            controller_contexts=['codestra-control-plane', 'codestra/control-plane'],
+            repositories=[{'repository': repository, 'repository_id': 123}], custody_receipt='publisher-custody:fixture',
+            certifier_custody_receipt='certifier-custody:fixture', certifier_capability_receipt='scope-capability:fixture',
+            accepted_at=self.now.isoformat(), expires_at=(self.now + timedelta(minutes=4)).isoformat(), max_receipt_age_seconds=300)
+        self.policy_bytes = json.dumps(policy).encode()
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.api = CertifierAPI()
+        original = self.api.get
+        def get(path):
+            value = original(path)
+            if path.endswith('/pulls/9'):
+                value['head'].update(ref=self.binding.source_ref, sha=self.binding.source_sha)
+                value['base'].update(ref=self.binding.target_ref, sha=self.binding.target_base_sha)
+            return value
+        self.api.get = get
+        self.connection = self.harness.connect('verifier'); self.addCleanup(self.connection.close)
+        # The fixture CA is in a private temporary directory; TLS validation and
+        # SCRAM are actual. Operator path-ownership validation is tested separately.
+        patcher = mock.patch('codestra_control.publisher_startup.protected_read', return_value=b'synthetic-protected-reader')
+        patcher.start(); self.addCleanup(patcher.stop)
+        self.certifier = AuthenticatedFirstCertifier(RestrictedFirstCertificationRegistry(self.connection),
+            CertifierGitHubVerifier(self.api), IntentLedger(Path(self.temp.name) / 'intents.sqlite'),
+            contract_verifier=AcceptedFirstCertificationContractVerifier(lambda: self.policy_bytes), host='dev-desktop')
+
+    def test_actual_authenticated_pending_scope_lease_and_protected_policy_issue_first_check(self):
+        with self.connection.cursor() as cursor:
+            cursor.execute('SELECT session_user,current_user,system_user')
+            self.assertEqual(cursor.fetchone(), ('verifier', 'verifier', 'scram-sha-256:verifier'))
+        self.connection.rollback()
+        with mock.patch('codestra_control.decision.evaluate_promotion', side_effect=AssertionError('not certification')):
+            result = self.certifier.publish(self.binding)
+        self.assertEqual(result.state, 'COMPLETE')
+        self.assertEqual(len(self.api.effects), 1)
+        self.assertEqual(self.api.effects[0][1]['external_id'], binding_digest(self.binding))
+        self.assertEqual(self.api.result['app']['id'], 99)
+        self.assertFalse(any('/check-runs/10' in path for path in self.api.paths))
+
+    def test_live_scope_lease_revocation_denies_before_first_effect(self):
+        self.harness.admin('UPDATE scope_assignment_leases.assignments SET active=false')
+        with self.assertRaises(PublicationDenied): self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_actual_pending_product_grant_revocation_denies_before_first_effect(self):
+        self.harness.admin('UPDATE certifier_authority.product_grants SET active=false')
+        with self.assertRaises(PublicationDenied): self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_online_changed_head_or_base_denies_with_actual_pending_authority(self):
+        original = self.api.get
+        for field in ('head', 'base'):
+            def get(path):
+                value = original(path)
+                if path.endswith('/pulls/9'): value[field]['sha'] = 'd' * 40
+                return value
+            self.api.get = get
+            with self.subTest(field=field), self.assertRaises(PublicationDenied): self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])

@@ -9,19 +9,27 @@
   "target": "subsection/cp-01-foundation--02-trusted-decisions",
   "start_commit": "2d312d3a63adcb06694aa66e1b72601f11e7dac3",
   "authority": "Ralph L. Appolon",
-  "authorization": "Ralph source implementation and CPhelper coordination: implement source-only independent certifier transport and existing authenticated scope receipt integration. Lead additionally authorized an empty forward source read model and bounded restricted reader; no live application.",
-  "scope": "Independent App check-run transport of existing authoritative SCOPE_CERTIFICATION receipts, read-only exact binding registry source, protected accepted-contract policy integration, offline tests and boundary documentation.",
+  "authorization": "Ralph source implementation and CPhelper coordination: implement source-only independent certifier transport and existing authenticated scope receipt integration. Lead additionally authorized an empty forward source read model and bounded restricted reader; no live application. Lead subsequently selected a source first-issuance path with exact scoped delegation, new scope-level lease source API and empty pending read model; no runtime activation or live writes.",
+  "scope": "Independent App transport and separate exact-scope delegated first certification source; authenticated read-only pending/existing registries; source scope lease API integration; protected accepted contracts; offline tests and operational proposal.",
   "database_lease": null,
   "certification": null,
   "live_effects_authorized": false,
   "production_go": false,
   "live_capabilities_enabled": false,
   "external_effects": false,
-  "first_issuance_implemented": false,
+  "first_issuance_implemented": true,
   "unresolved_gates": [
-    "No authoritative first-certification decision/issuer API was supplied; no certification can be synthesized from CI, promotion.allowed or legacy PASS.",
-    "011-certifier-authority.sql is an empty unapplied source read model. Independently authenticated pre-existing scope receipts and OID-bound product grants require separate operator acceptance.",
-    "Accepted producer policy, independent certifier credential custody, verified TLS database access, private durable ledger and live online protection evidence are not provisioned by this change.",
-    "No public CLI or installed production certifier factory is enabled. Default privileged dependencies remain unset and deny."
-  ]
+    "011/012/013 source schemas are unapplied and empty. Authenticated principals/OID-bound product grants, actual scoped assignments/leases, and independently accepted exact pending delegations require separate operator provisioning.",
+    "Protected producer acceptance, independent certifier custody/capability, strict TLS/SCRAM database connection and private durable ledger are unprovisioned.",
+    "No public CLI, installed production composition or certifier service is enabled. Default privileged dependencies remain unset and deny.",
+    "Final local expiry fences cannot be atomic with remote network acceptance; residual cross-system timing must be operationally accepted."
+  ],
+  "first_issuance_status": "SOURCE_ONLY_UNPROVISIONED",
+  "validation": {
+    "targeted_result": "51 tests passed; 0 skipped; 3.579 seconds",
+    "scope": "Final certifier source, factory, expiry and installation guards, 011/013 constraints, and combined real TLS/SCRAM PostgreSQL012/013 registry/first-issuer with synthetic GitHub only.",
+    "fixture_dependencies": "Actual 012 fixture loaded from configuration-and-rollback worktree and actual protected acceptance parser loaded from publisher-receipt-integration worktree for this isolated branch; assembled checkout resolves both locally.",
+    "storage": "New private 0700 /dev/shm temporary directory; default PostgreSQL/fsync flags preserved; fixture database removed on teardown.",
+    "full_suite": "No second full suite launched; integration lead owns final assembled full-suite validation."
+  }
 }
