@@ -104,6 +104,15 @@ implemented and fails closed. Required producer checks must succeed on both head
 and current test merge. Complete latest check/review inventories, current reviewer
 WRITE eligibility and all resolved threads are queried independently.
 
+An already-required `codestra-control-plane` or `codestra/control-plane` context
+must not name a conflicting publisher App. A positive App binding must match the
+accepted publisher; malformed IDs deny with `CONTROLLER_CHECK_PRODUCER_MISMATCH`.
+Unbound (`null`/`-1`) contexts retain their existing compatibility behavior. The
+publisher still excludes its own success requirement from preflight to avoid a
+circular dependency; this check does not add contexts or change branch protection.
+GitHub's [branch-protection contract](https://docs.github.com/en/rest/branches/branch-protection#update-branch-protection)
+defines the required check's App binding and the explicit any-App value.
+
 The `issuer` read-model field is an explicit CertificateIssuer capability: exact
 App ID/name, complete binding digest, capability receipt reference, aware expiry,
 Ralph L. Appolon approval and purpose SCOPE_CERTIFICATION. Its provenance comes

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "controller-producer-binding",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--controller-producer-binding",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "8824a5cac48c0cabcfd72c07c1837648d133e7e5",
+  "owner": "Toolkit controller-status implementation session /root",
+  "authorization": "User requested continuation with implementation after merging the source-to-runtime handoff; prior source push and PR publication authorization persists.",
+  "scope": "Reject incompatible explicit App bindings on already-present controller contexts before excluding circular success requirements. Preserve wildcard compatibility, context presence policy and all existing authentication, review, issuer, lease and protection gates.",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false
+}
