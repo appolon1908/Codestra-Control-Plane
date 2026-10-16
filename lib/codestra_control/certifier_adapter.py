@@ -837,10 +837,27 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
                     and registered_ref == ref == lane_ref and registered_tree == worktree == lane_tree
                     and lane_id == wid and wid not in identities and ref not in scopes,
                     'FIRST_CERTIFICATION_SUBSECTION_REGISTRY_DRIFT')
-            require(type(depends) is list and all(_text(v) for v in depends)
+            require(type(depends) is list and len(depends) <= 1000 and all(_text(v) for v in depends)
                     and len(set(depends)) == len(depends), 'FIRST_CERTIFICATION_SUBSECTION_DEPENDENCY_DRIFT')
             scopes[ref] = (parent, wid, tuple(depends)); identities[wid] = (ref, parent)
             edges.add(ScopeEdge('subsection', ref, 'section', parent))
+        # depends_on uses canonical workstation IDs only. Do not guess aliases
+        # from subsection names or branch refs; identity uniqueness is checked above.
+        subsection_dependents = {identity: set() for identity in identities}
+        subsection_outstanding = {}
+        for _, identity, dependencies in scopes.values():
+            require(all(value in identities and value != identity for value in dependencies),
+                    'FIRST_CERTIFICATION_SUBSECTION_DEPENDENCY_REFERENCE_INVALID')
+            subsection_outstanding[identity] = len(dependencies)
+            for dependency in dependencies: subsection_dependents[dependency].add(identity)
+        subsection_ready = [identity for identity, count in subsection_outstanding.items() if count == 0]
+        subsection_visited = 0
+        while subsection_ready:
+            identity = subsection_ready.pop(); subsection_visited += 1
+            for dependent in subsection_dependents[identity]:
+                subsection_outstanding[dependent] -= 1
+                if subsection_outstanding[dependent] == 0: subsection_ready.append(dependent)
+        require(subsection_visited == len(identities), 'FIRST_CERTIFICATION_SUBSECTION_DEPENDENCY_CYCLE')
         require(len(mapping.scope_edges) == len(edges) and set(mapping.scope_edges) == edges,
                 'FIRST_CERTIFICATION_SCOPE_MAPPING_HIDES_CURRENT_REGISTRY')
         scope = acquired.scope_type

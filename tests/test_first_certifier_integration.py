@@ -285,3 +285,47 @@ class FirstCertificationSQLIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(PublicationDenied, 'SECTION_DEPENDENCY_REFERENCE_INVALID'):
             self.certifier.publish(self.binding)
         self.assertEqual(self.api.effects, [])
+
+    def _configure_subsection_graph(self, cycle=False):
+        from psycopg2.extras import Json
+        self.harness.admin("INSERT INTO public.workstations(workstation_id,product,section,subsection,branch,parent_branch,worktree,order_index,depends_on) VALUES('scope-fixture-ws-b','ScopeFixture','sec','sub-b','subsection/sec--sub-b','section/sec','/fixture/scope/sub-b',2,%s)",
+            (Json(['scope-fixture-ws'] if cycle else []),))
+        self.harness.admin("INSERT INTO scoped_registration.workstations SELECT product,workstation_id,branch,worktree,jsonb_build_object('product',product,'workstation_id',workstation_id,'section',section,'subsection',subsection,'branch',branch,'parent_branch',parent_branch,'worktree',worktree,'order_index',order_index) FROM public.workstations WHERE workstation_id='scope-fixture-ws-b'")
+        self.harness.admin("INSERT INTO scoped_registration.lanes VALUES('/fixture/scope/sub-b','ScopeFixture','workstation','scope-fixture-ws-b','subsection/sec--sub-b')")
+        self.harness.admin("UPDATE public.workstations SET depends_on='[\"scope-fixture-ws-b\"]' WHERE workstation_id='scope-fixture-ws'")
+        raw = self.harness.admin('SELECT snapshot FROM certifier_authority.pending_bindings')[0][0]
+        raw['mapping']['scope_edges'].append(dict(source_level='subsection',source_ref='subsection/sec--sub-b',target_level='section',target_ref='section/sec'))
+        binding = replace(self.child_binding,source_ref='subsection/sec--sub-b',source_sha='f'*40)
+        dependencies = [*self.dependencies,dict(binding=asdict(binding),repository_id=123,check_id=89,issuer_app_id=99,
+            name='scope-certification',expires_at=(self.now+timedelta(minutes=2)).isoformat())]
+        self.harness.admin('UPDATE certifier_authority.pending_bindings SET snapshot=%s,dependency_policy=%s', (Json(raw),Json(dependencies)))
+        original = self.api.get
+        def get(path):
+            if path.endswith('/branches/subsection%2Fsec--sub-b'): return {'commit':{'sha':'f'*40}}
+            if path.endswith('/check-runs/89'):
+                return {'id':89,'app':{'id':99},'name':'scope-certification','head_sha':'f'*40,
+                    'external_id':binding_digest(binding),'status':'completed','conclusion':'success',
+                    'completed_at':self.now.isoformat(),'check_suite':{'id':189}}
+            if path.endswith('/check-suites/189'):
+                return {'id':189,'app':{'id':99},'head_sha':'f'*40,'status':'completed','conclusion':'success'}
+            return original(path)
+        self.api.get = get
+
+    def test_cyclic_current_subsections_deny_section_issuance_despite_fresh_child_receipts(self):
+        self._configure_subsection_graph(cycle=True)
+        with self.assertRaisesRegex(PublicationDenied, 'SUBSECTION_DEPENDENCY_CYCLE'):
+            self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_acyclic_current_subsections_with_complete_fresh_receipts_can_certify(self):
+        self._configure_subsection_graph()
+        self.assertEqual(self.certifier.publish(self.binding).state, 'COMPLETE')
+        self.assertEqual(len(self.api.effects), 1)
+
+    def test_unknown_self_alias_and_duplicate_subsection_references_deny_all_scopes(self):
+        from psycopg2.extras import Json
+        for declaration in (['unknown'],['scope-fixture-ws'],['sub'],['subsection/sec--sub'],['scope-fixture-ws','scope-fixture-ws']):
+            self.harness.admin('UPDATE public.workstations SET depends_on=%s WHERE workstation_id=%s', (Json(declaration),'scope-fixture-ws'))
+            with self.subTest(declaration=declaration), self.assertRaisesRegex(PublicationDenied, 'SUBSECTION_DEPENDENCY_'):
+                self.certifier.publish(self.binding)
+        self.assertEqual(self.api.effects, [])
