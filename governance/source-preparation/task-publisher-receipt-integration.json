@@ -13,12 +13,12 @@
   "authorization": "Ralph explicitly authorized source implementation helpers. Root lead owns startup and integration. No source publication or installed-runtime changes are authorized for this helper.",
   "scope": "Add the protected exact-schema producer acceptance loader and online publisher/certifier receipt verifier with offline tests. Independent certifier identity is observed through an administered narrow read-only API port; no certifier signer is obtained by the publisher. No selected live identities, credentials, grants, leases or acceptance records are provisioned.",
   "reviewed_source_sha256": {
-    "lib/codestra_control/publisher_acceptance.py": "51225e1baaeb46921f0411052b466f61e75b3aa2e7547fdfc8b4a462abdba433",
-    "tests/test_publisher_acceptance.py": "0c470e44fd5bd76c3e226e79abc6b9ce9f0ad7a398141291f1c1e823b06b811c"
+    "lib/codestra_control/publisher_acceptance.py": "b289611acaa5e0362715fd24e5ce433860010498c5f67ae3e7ded7216ac9f7fb",
+    "tests/test_publisher_acceptance.py": "270d5c4ede7bdaa0184dfda610932c2995bd3c7dfab4fe7fe5a3783193715af5"
   },
   "validation": {
     "command": "python3 -m unittest discover -s tests -p test_publisher_acceptance.py -v",
-    "result": "Ran 20 tests in 0.410s; OK",
+    "result": "Ran 21 tests in 0.309s; OK",
     "test_effects": "Synthetic HTTP responses and a temporary SQLite intent ledger only. Rejected protected acceptance leaves no publication intents and no status effects. The repository-wide unittest command was separately started; its result is reported by the integration lead after completion."
   },
   "unresolved_gates": [

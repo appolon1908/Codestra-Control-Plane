@@ -25,6 +25,7 @@ def policy():
             'controller_contexts': ['codestra-control-plane', 'codestra/control-plane'],
             'repositories': [{'repository': 'appolon1908/Breero.com', 'repository_id': 123}],
             'custody_receipt': 'custody:1',
+            'certifier_custody_receipt': 'synthetic-certifier-custody:1',
             'certifier_capability_receipt': 'synthetic-issuer-capability',
             'accepted_at': (fixture.NOW-timedelta(minutes=1)).isoformat(),
             'expires_at': (fixture.NOW+timedelta(minutes=4)).isoformat(),
@@ -112,6 +113,12 @@ class AcceptanceTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             accepted.publisher_app_id = 999
 
+    def test_missing_independent_certifier_custody_cannot_be_accepted(self):
+        item = policy()
+        item.pop('certifier_custody_receipt', None)
+        with self.assertRaises(PublicationDenied):
+            acceptance.load_acceptance(raw(item), fixture.NOW)
+
     def test_exact_policy_schema_rejects_authored_stage_and_unknown_fields(self):
         mutations = [('schema', 'other'), ('state', 'PROPOSED'), ('state', 'REVOKED'),
                      ('accepted_by', 'someone else'), ('acceptance_ref', ''),
@@ -137,7 +144,8 @@ class AcceptanceTests(unittest.TestCase):
             for value in (True, 0, -1, '7', None):
                 with self.subTest(key=key, value=value), self.assertRaises(PublicationDenied):
                     acceptance.load_acceptance(raw(dict(policy(), **{key: value})), fixture.NOW)
-        for key in ('acceptance_ref', 'custody_receipt', 'certifier_capability_receipt', 'certificate_name'):
+        for key in ('acceptance_ref', 'custody_receipt', 'certifier_custody_receipt',
+                    'certifier_capability_receipt', 'certificate_name'):
             for value in ('', ' ', True, None):
                 with self.subTest(key=key, value=value), self.assertRaises(PublicationDenied):
                     acceptance.load_acceptance(raw(dict(policy(), **{key: value})), fixture.NOW)

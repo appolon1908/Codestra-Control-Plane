@@ -31,6 +31,7 @@ class AcceptedProducerPolicy:
     controller_contexts: tuple[str, ...]
     repositories: tuple[tuple[str, int], ...]
     custody_receipt: str
+    certifier_custody_receipt: str
     certifier_capability_receipt: str
     accepted_at: datetime
     expires_at: datetime
@@ -87,7 +88,8 @@ def load_acceptance(raw: bytes, now: datetime) -> AcceptedProducerPolicy:
             and 15368 not in (value['publisher_app_id'], value['certificate_app_id'])
             and value['publisher_installation_id'] != value['certificate_installation_id'],
             'PRODUCER_ACCEPTANCE_INDEPENDENT_APPS_REQUIRED')
-    for name in ('acceptance_ref', 'custody_receipt', 'certifier_capability_receipt', 'certificate_name'):
+    for name in ('acceptance_ref', 'custody_receipt', 'certifier_custody_receipt',
+                 'certifier_capability_receipt', 'certificate_name'):
         require(_text(value[name]), 'PRODUCER_ACCEPTANCE_PIN_INVALID')
     require(value['certificate_name'] not in CONTEXTS, 'PRODUCER_ACCEPTANCE_CERTIFICATE_ALIAS')
     require(type(value['controller_contexts']) is list
