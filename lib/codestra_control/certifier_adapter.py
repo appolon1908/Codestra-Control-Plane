@@ -1,11 +1,12 @@
-"""Transport independently authenticated, EXISTING scope certifications only.
+"""Independent scope certification SOURCE, default-deny and never author input.
 
-No first-certification decision, ScopeCertificate constructor, public CLI, issuer
-bootstrap, production factory or credential installation lives here. Privileged
-registry and accepted-contract ports are mandatory and unset by default. Their
-return types are contracts, never authentication by themselves. An operator must
-independently authenticate an existing certification before registering it in
-any source read model. CI, promotion decisions and legacy PASS rows cannot do so.
+Existing-receipt transport and separate scoped first issuance have distinct
+privileged registry and accepted-contract ports. First issuance requires an
+operator-authenticated exact-scope pending delegation, no historical certificate,
+and fresh independent online checks/reviews/protection/dependencies/scope lease.
+No public CLI, production factory, trust bootstrap or credential installation is
+provided. Promotion.allowed, ordinary CI and legacy PASS do not confer authority.
+Python types never authenticate themselves; all registry acquisition is privileged.
 """
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -63,7 +64,7 @@ def _text(value):
     return type(value) is str and bool(value.strip())
 
 
-def _validate(acquired, binding, now, host):
+def _validate_snapshot(acquired, binding, now, host):
     from .decision import MAX_SNAPSHOT_AGE, CONTROL_PLANE_CONTEXTS
     from .policy import resolve_edge, PolicyError, valid_ref
     require(type(binding) is PromotionRequest, 'INVALID_CERTIFICATION_BINDING')
@@ -72,8 +73,7 @@ def _validate(acquired, binding, now, host):
             and valid_ref(binding.source_ref) and valid_ref(binding.target_ref)
             and all(type(v) is str and re.fullmatch('[0-9a-f]{40}', v)
                     for v in (binding.source_sha, binding.target_base_sha)), 'INVALID_CERTIFICATION_BINDING')
-    require(type(acquired) is AcquiredCertification, 'AUTHENTICATED_EXISTING_CERTIFICATION_REQUIRED')
-    a, s, receipt = acquired.authority, acquired.snapshot, acquired.receipt
+    a, s = acquired.authority, acquired.snapshot
     require(type(a) is Authority and type(s) is TrustedSnapshot, 'CERTIFIER_AUTHORITY_UNAVAILABLE')
     require(a.authority_name == 'Ralph L. Appolon' and a.host == host and _text(a.custody_receipt)
             and _future(a.expires_at, now), 'CERTIFIER_AUTHORITY_INVALID')
@@ -94,18 +94,6 @@ def _validate(acquired, binding, now, host):
                                             s.external_effects_enabled)), 'CERTIFIER_POLICY_NOT_SAFE')
     require(s.dependencies_complete is True and s.dependencies_certified is True,
             'CERTIFIER_DEPENDENCIES_UNVERIFIED')
-    require(type(receipt) is ExistingScopeReceipt and receipt.binding == binding
-            and receipt.purpose == 'SCOPE_CERTIFICATION' and _text(receipt.receipt_ref)
-            and receipt.scope_type == source_level.upper() and receipt.scope_name == binding.source_ref
-            and receipt.certified_sha == binding.source_sha and _future(receipt.expires_at, now),
-            'AUTHENTICATED_EXISTING_CERTIFICATION_REQUIRED')
-    lease = s.lease
-    require(type(lease) is LeaseEvidence and lease.binding == binding and lease.state == 'ACTIVE'
-            and _future(lease.expires_at, now) and _text(lease.owner)
-            and lease.owner == lease.expected_owner == receipt.principal
-            and lease.assignment_id == receipt.assignment_id and _text(receipt.assignment_id)
-            and _text(receipt.lease_id) and type(receipt.lease_epoch) is int and receipt.lease_epoch > 0,
-            'CERTIFIER_LEASE_UNVERIFIED')
     require(s.check_inventory_complete is True and s.review_inventory_complete is True
             and s.unresolved_threads == 0 and s.require_codeowner is True
             and type(s.required_approvals) is int and s.required_approvals > 0,
@@ -129,11 +117,34 @@ def _validate(acquired, binding, now, host):
         if review.codeowner is True: owners.add(login)
     require(len(reviewers) >= s.required_approvals and bool(owners), 'CERTIFIER_INDEPENDENT_CODEOWNER_REQUIRED')
 
+    return source_level
+
+
+def _validate(acquired, binding, now, host):
+    require(type(acquired) is AcquiredCertification, 'AUTHENTICATED_EXISTING_CERTIFICATION_REQUIRED')
+    source_level = _validate_snapshot(acquired, binding, now, host)
+    receipt = acquired.receipt; s = acquired.snapshot
+    require(type(receipt) is ExistingScopeReceipt and receipt.binding == binding
+            and receipt.purpose == 'SCOPE_CERTIFICATION' and _text(receipt.receipt_ref)
+            and receipt.scope_type == source_level.upper() and receipt.scope_name == binding.source_ref
+            and receipt.certified_sha == binding.source_sha and _future(receipt.expires_at, now),
+            'AUTHENTICATED_EXISTING_CERTIFICATION_REQUIRED')
+    lease = s.lease
+    require(type(lease) is LeaseEvidence and lease.binding == binding and lease.state == 'ACTIVE'
+            and _future(lease.expires_at, now) and _text(lease.owner)
+            and lease.owner == lease.expected_owner == receipt.principal
+            and lease.assignment_id == receipt.assignment_id and _text(receipt.assignment_id)
+            and _text(receipt.lease_id) and type(receipt.lease_epoch) is int and receipt.lease_epoch > 0,
+            'CERTIFIER_LEASE_UNVERIFIED')
+
 
 def _contract(verifier, acquired, now):
-    from .decision import CONTROL_PLANE_CONTEXTS
     require(verifier is not None, 'CERTIFIER_ACCEPTED_CONTRACT_UNCONFIGURED')
-    value = verifier.verify(acquired, now)
+    return _validate_contract(verifier.verify(acquired, now), acquired, now)
+
+
+def _validate_contract(value, acquired, now):
+    from .decision import CONTROL_PLANE_CONTEXTS
     require(type(value) is AcceptedCertificationContract, 'CERTIFIER_ACCEPTED_CONTRACT_UNVERIFIED')
     require(all(type(v) is int and v > 0 for v in
                 (value.repository_id, value.pr_number, value.certifier_app_id, value.publisher_app_id)),
@@ -153,7 +164,7 @@ def _contract(verifier, acquired, now):
             and set(value.controller_contexts) <= set(CONTEXTS), 'CERTIFIER_CONTROLLER_CONTRACT_INVALID')
     require(value.purpose == 'SCOPE_CERTIFICATION' and _text(value.receipt_ref)
             and _future(value.expires_at, now)
-            and value.expires_at <= min(acquired.authority.expires_at, acquired.receipt.expires_at),
+            and value.expires_at <= min(acquired.authority.expires_at, acquired.receipt.expires_at, acquired.snapshot.lease.expires_at),
             'CERTIFIER_ACCEPTED_CONTRACT_INVALID')
     return value
 
@@ -176,8 +187,10 @@ class AuthenticatedCertifier:
         self.github.verify(acquired, contract, now)
         fresh = self.clock()
         require(self.registry.acquire(binding, fresh) == acquired, 'CERTIFICATION_REVOKED_OR_CHANGED')
-        _validate(acquired, binding, fresh, self.host)
-        require(_contract(self.contract_verifier, acquired, fresh) == contract, 'CERTIFIER_CONTRACT_CHANGED')
+        require(_contract(self.contract_verifier, acquired, self.clock()) == contract, 'CERTIFIER_CONTRACT_CHANGED')
+        final = self.clock()
+        _validate(acquired, binding, final, self.host)
+        _validate_contract(contract, acquired, final)
         return acquired, contract
 
     def publish(self, binding):
@@ -189,6 +202,9 @@ class AuthenticatedCertifier:
         try:
             fresh, fresh_contract = self._acquire(binding)
             require(fresh == acquired and fresh_contract == contract, 'CERTIFICATION_REVOKED_OR_CHANGED')
+            effect_time = self.clock()
+            _validate(fresh, binding, effect_time, self.host)
+            _validate_contract(contract, fresh, effect_time)
             attempted = True
             check_id = self.github.emit(fresh, contract)
             require(self.github.readback(fresh, contract, check_id), 'CERTIFIER_READBACK_MISMATCH')
@@ -218,6 +234,10 @@ class CertifierGitHubClient(GitHubAppClient):
         require(installation.get('id') == authority.installation_id and installation.get('app_id') == authority.app_id
                 and installation.get('suspended_at') is None, 'CERTIFIER_INSTALLATION_REVOKED_OR_MISMATCHED')
         require(installation.get('permissions') == self.PERMISSIONS, 'CERTIFIER_MINIMAL_INSTALLATION_REQUIRED')
+        require(installation.get('repository_selection') == 'selected'
+                and installation.get('account', {}).get('login') == 'appolon1908'
+                and type(installation['account'].get('id')) is int and installation['account']['id'] > 0,
+                'CERTIFIER_SELECTED_INSTALLATION_OWNER_REQUIRED')
         token = self.request('POST', f'/app/installations/{authority.installation_id}/access_tokens', jwt,
                              {'repository_ids': [repository_id], 'permissions': dict(self.PERMISSIONS)})
         require(token['permissions'] == self.PERMISSIONS and len(token['repositories']) == 1
@@ -225,6 +245,22 @@ class CertifierGitHubClient(GitHubAppClient):
         expiry = datetime.fromisoformat(token['expires_at'].replace('Z', '+00:00'))
         require(_future(expiry, now) and _text(token['token']), 'CERTIFIER_TOKEN_UNAVAILABLE')
         self._token, self._expires = token['token'], min(expiry, authority.expires_at)
+        repository = self.get(f'/repositories/{repository_id}')
+        require(type(repository.get('id')) is int and repository['id'] == repository_id
+                and repository.get('full_name') in authority.repositories
+                and repository.get('owner', {}).get('login') == installation['account']['login']
+                and type(repository['owner'].get('id')) is int
+                and repository['owner']['id'] == installation['account']['id'], 'CERTIFIER_REPOSITORY_OWNER_OR_ID_MISMATCH')
+        coverage = self.request('GET', f'/repos/{repository["full_name"]}/installation', jwt)
+        require(all(coverage.get(k) == installation.get(k) for k in
+                    ('id', 'app_id', 'suspended_at', 'repository_selection', 'permissions'))
+                and coverage.get('account', {}).get('id') == installation['account']['id']
+                and coverage.get('account', {}).get('login') == installation['account']['login'],
+                'CERTIFIER_INSTALLATION_REPOSITORY_COVERAGE_MISMATCH')
+
+    def bind_effect_expiry(self, expires_at):
+        require(self._token is not None and _future(expires_at, self.clock()), 'CERTIFIER_EFFECT_AUTHORITY_EXPIRED')
+        self._expires = min(self._expires, expires_at)
 
     def _call(self, method, path, body=None):
         require(method == 'GET' or (method == 'POST' and
@@ -291,6 +327,8 @@ class CertifierGitHubVerifier:
                 'CERTIFIER_PROTECTION_CHANGED_DURING_VERIFICATION')
 
     def emit(self, acquired, contract):
+        self.api.bind_effect_expiry(min(contract.expires_at, acquired.authority.expires_at,
+            acquired.receipt.expires_at, acquired.snapshot.lease.expires_at))
         b = acquired.snapshot.observed_binding
         value = self.api.post(f'/repos/{b.repository}/check-runs', {
             'name': contract.certificate_name, 'head_sha': b.source_sha,
@@ -299,6 +337,39 @@ class CertifierGitHubVerifier:
                        'summary': 'Independent registry receipt verified for the exact source and target binding.'}})
         require(type(value.get('id')) is int and value['id'] > 0, 'CERTIFIER_CHECK_RECEIPT_UNAVAILABLE')
         return value['id']
+
+    def emit_first(self, acquired, contract):
+        self.api.bind_effect_expiry(min(contract.expires_at, acquired.authority.expires_at,
+            acquired.expires_at, acquired.snapshot.lease.expires_at))
+        b = acquired.snapshot.observed_binding
+        value = self.api.post(f'/repos/{b.repository}/check-runs', {
+            'name': contract.certificate_name, 'head_sha': b.source_sha,
+            'external_id': binding_digest(b), 'status': 'completed', 'conclusion': 'success',
+            'output': {'title': 'First scope certification',
+                       'summary': 'Authenticated operator scope delegation and independent current evidence verified.'}})
+        require(type(value.get('id')) is int and value['id'] > 0, 'FIRST_CERTIFICATION_CHECK_RECEIPT_UNAVAILABLE')
+        return value['id']
+
+    def verify_dependencies(self, acquired, contract, now):
+        if acquired.dependencies:
+            self.api.assert_identity(acquired.authority, acquired.repository_id, now)
+        for dependency in acquired.dependencies:
+            require(dependency.issuer_app_id == contract.certifier_app_id
+                    and dependency.name == contract.certificate_name and _future(dependency.expires_at, now),
+                    'FIRST_CERTIFICATION_DEPENDENCY_ISSUER_UNACCEPTED')
+            b = dependency.binding
+            for ref, sha in ((b.source_ref, b.source_sha), (b.target_ref, b.target_base_sha)):
+                value = self.api.get(f'/repos/{b.repository}/branches/{quote(ref, safe="")}')
+                require(value['commit']['sha'] == sha, 'FIRST_CERTIFICATION_DEPENDENCY_REF_MOVED')
+            value = self.api.get(f'/repos/{b.repository}/check-runs/{dependency.check_id}')
+            require(value['id'] == dependency.check_id and value['app']['id'] == dependency.issuer_app_id
+                    and value['name'] == dependency.name and value['head_sha'] == b.source_sha
+                    and value['external_id'] == binding_digest(b)
+                    and value['status'] == 'completed' and value['conclusion'] == 'success',
+                    'FIRST_CERTIFICATION_DEPENDENCY_RECEIPT_UNVERIFIED')
+            for ref, sha in ((b.source_ref, b.source_sha), (b.target_ref, b.target_base_sha)):
+                value = self.api.get(f'/repos/{b.repository}/branches/{quote(ref, safe="")}')
+                require(value['commit']['sha'] == sha, 'FIRST_CERTIFICATION_DEPENDENCY_REF_MOVED')
 
     def readback(self, acquired, contract, check_id):
         b = acquired.snapshot.observed_binding
@@ -311,7 +382,7 @@ class CertifierGitHubVerifier:
 
 
 class RestrictedCertificationRegistry:
-    """Read-only source adapter for the EMPTY, separately accepted 011 model.
+    """Read-only source adapter for the EMPTY, separately accepted 011 model and 012 scope lease API.
 
     This adapter cannot register or issue certifications. Only the operator can
     authenticate an existing independent receipt and populate this read model.
@@ -331,7 +402,7 @@ class RestrictedCertificationRegistry:
             protected_read(params['sslrootcert'], allow_public=True)
         except PublisherUnavailable:
             require(False, 'CERTIFIER_UNTRUSTED_DATABASE_CA')
-        self.connection.set_session(readonly=True, autocommit=False)
+        self.connection.set_session(readonly=True, autocommit=False, isolation_level='READ COMMITTED')
 
     @staticmethod
     def _roles(cur):
@@ -345,19 +416,20 @@ class RestrictedCertificationRegistry:
           AND pg_has_role(session_user,bad.oid,'MEMBER'))
          AND NOT EXISTS(SELECT 1 FROM pg_namespace n WHERE
           n.nspname IN ('certifier_authority','publisher_authority','assignment_leases','scoped_registration',
-                        'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission')
+                        'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases')
           AND (pg_has_role(session_user,n.nspowner,'MEMBER') OR has_schema_privilege(session_user,n.oid,'CREATE')))
          AND NOT EXISTS(SELECT 1 FROM pg_class t JOIN pg_namespace n ON n.oid=t.relnamespace
           WHERE t.relkind IN ('r','p','v','m','f')
           AND (n.nspname IN ('certifier_authority','publisher_authority','assignment_leases','scoped_registration',
-                            'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission')
+                            'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases')
                OR n.nspname='public')
           AND (pg_has_role(session_user,t.relowner,'MEMBER')
                OR has_table_privilege(session_user,t.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')))
          AND NOT EXISTS(SELECT 1 FROM pg_proc f JOIN pg_namespace n ON n.oid=f.pronamespace
           WHERE n.nspname IN ('certifier_authority','publisher_authority','assignment_leases','scoped_registration',
-                             'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission')
-          AND f.oid<>'assignment_leases.inspect_binding(uuid)'::regprocedure
+                             'atomic_inspection','controller_coordinator','frozen_recovery','scoped_admission','scope_assignment_leases')
+          AND f.oid IS DISTINCT FROM to_regprocedure('assignment_leases.inspect_binding(uuid)')
+          AND f.oid IS DISTINCT FROM to_regprocedure('scope_assignment_leases.inspect_binding(uuid)')
           AND has_function_privilege(session_user,f.oid,'EXECUTE'))
          FROM pg_roles r WHERE r.rolname=session_user""")
         row = cur.fetchone()
@@ -411,7 +483,7 @@ class RestrictedCertificationRegistry:
                             (binding.product, scope_type, scope_name, binding.source_sha))
                 require(cur.fetchone() == (True,), 'CERTIFIER_EXISTING_SCOPE_REGISTRATION_REQUIRED')
                 assignment_id = str(uuid.UUID(str(assignment)))
-                cur.execute('SELECT assignment_leases.inspect_binding(%s)', (assignment_id,))
+                cur.execute('SELECT scope_assignment_leases.inspect_binding(%s)', (assignment_id,))
                 row = cur.fetchone()
                 require(row is not None and type(row[0]) is dict, 'CERTIFIER_ONLINE_LEASE_UNAVAILABLE')
                 live = row[0]
@@ -463,4 +535,281 @@ class AcceptedCertifierContractVerifier:
             binding_digest(b), acquired.repository_id, acquired.pr_number,
             policy.certificate_app_id, policy.publisher_app_id, policy.certificate_name,
             policy.controller_contexts, policy.acceptance_ref + '#' + policy.revision,
-            min(policy.expires_at, a.expires_at, acquired.receipt.expires_at), 'SCOPE_CERTIFICATION')
+            min(policy.expires_at, a.expires_at, acquired.receipt.expires_at, acquired.snapshot.lease.expires_at), 'SCOPE_CERTIFICATION')
+
+
+@dataclass(frozen=True)
+class CertificationDependency:
+    binding: PromotionRequest
+    repository_id: int
+    check_id: int
+    issuer_app_id: int
+    name: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class PendingCertification:
+    authority: Authority
+    snapshot: TrustedSnapshot
+    repository_id: int
+    pr_number: int
+    scope_type: str
+    scope_name: str
+    assignment_id: str
+    lease_id: str
+    lease_epoch: int
+    principal: str
+    delegation_ref: str
+    capability_receipt: str
+    issued_at: datetime
+    expires_at: datetime
+    dependencies: tuple[CertificationDependency, ...]
+
+
+@dataclass(frozen=True)
+class AcceptedFirstCertificationContract:
+    binding_hash: str
+    repository_id: int
+    pr_number: int
+    certifier_app_id: int
+    publisher_app_id: int
+    certificate_name: str
+    controller_contexts: tuple[str, ...]
+    receipt_ref: str
+    expires_at: datetime
+    purpose: str
+    scope_type: str
+    scope_name: str
+    delegation_ref: str
+    capability_receipt: str
+
+
+def _validate_pending(acquired, binding, now, host):
+    from datetime import timedelta
+    require(type(acquired) is PendingCertification, 'AUTHENTICATED_PENDING_SCOPE_DELEGATION_REQUIRED')
+    source_level = _validate_snapshot(acquired, binding, now, host)
+    s = acquired.snapshot; lease = s.lease
+    require(s.certificate is None, 'FIRST_CERTIFICATION_CANNOT_USE_HISTORICAL_CERTIFICATE')
+    require(acquired.scope_type == source_level.upper() and acquired.scope_name == binding.source_ref
+            and _text(acquired.delegation_ref) and _text(acquired.capability_receipt),
+            'FIRST_CERTIFICATION_EXACT_SCOPE_DELEGATION_REQUIRED')
+    require(type(acquired.issued_at) is datetime and acquired.issued_at.tzinfo is not None
+            and acquired.issued_at <= now < acquired.expires_at <= acquired.issued_at + timedelta(minutes=5)
+            and acquired.expires_at <= acquired.authority.expires_at, 'FIRST_CERTIFICATION_DELEGATION_EXPIRED_OR_UNBOUNDED')
+    require(type(lease) is LeaseEvidence and lease.binding == binding and lease.state == 'ACTIVE'
+            and _future(lease.expires_at, now) and acquired.expires_at <= lease.expires_at
+            and _text(lease.owner) and lease.owner == lease.expected_owner == acquired.principal
+            and lease.assignment_id == acquired.assignment_id and _text(acquired.assignment_id)
+            and _text(acquired.lease_id) and type(acquired.lease_epoch) is int and acquired.lease_epoch > 0,
+            'FIRST_CERTIFICATION_CURRENT_SCOPE_LEASE_REQUIRED')
+    require(type(acquired.dependencies) is tuple and len(acquired.dependencies) <= 100,
+            'FIRST_CERTIFICATION_DEPENDENCY_POLICY_UNAVAILABLE')
+    seen = set()
+    from .policy import resolve_edge, PolicyError
+    for value in acquired.dependencies:
+        require(type(value) is CertificationDependency and type(value.binding) is PromotionRequest
+                and value.binding != binding and value.binding.repository == binding.repository
+                and value.binding.product == binding.product and value.repository_id == acquired.repository_id
+                and all(type(v) is int and v > 0 for v in (value.repository_id, value.check_id, value.issuer_app_id))
+                and _text(value.name) and _future(value.expires_at, now), 'FIRST_CERTIFICATION_DEPENDENCY_INVALID')
+        try:
+            resolve_edge(s.mapping, value.binding.source_ref, value.binding.target_ref)
+        except PolicyError:
+            require(False, 'FIRST_CERTIFICATION_DEPENDENCY_SCOPE_UNREGISTERED')
+        key = binding_digest(value.binding)
+        require(key not in seen, 'FIRST_CERTIFICATION_DEPENDENCY_AMBIGUOUS')
+        seen.add(key)
+
+
+def _first_contract(verifier, acquired, now):
+    require(verifier is not None, 'FIRST_CERTIFICATION_ACCEPTANCE_UNCONFIGURED')
+    return _validate_first_contract(verifier.verify(acquired, now), acquired, now)
+
+
+def _validate_first_contract(value, acquired, now):
+    from .decision import CONTROL_PLANE_CONTEXTS
+    require(type(value) is AcceptedFirstCertificationContract, 'FIRST_CERTIFICATION_ACCEPTANCE_UNVERIFIED')
+    require(all(type(v) is int and v > 0 for v in (value.repository_id, value.pr_number,
+            value.certifier_app_id, value.publisher_app_id)), 'FIRST_CERTIFICATION_ACCEPTANCE_IDENTITIES_INVALID')
+    require(value.binding_hash == binding_digest(acquired.snapshot.observed_binding)
+            and value.repository_id == acquired.repository_id and value.pr_number == acquired.pr_number
+            and value.certifier_app_id == acquired.authority.app_id
+            and value.certifier_app_id not in (15368, value.publisher_app_id)
+            and value.scope_type == acquired.scope_type and value.scope_name == acquired.scope_name
+            and value.delegation_ref == acquired.delegation_ref and value.capability_receipt == acquired.capability_receipt,
+            'FIRST_CERTIFICATION_ACCEPTANCE_SCOPE_OR_IDENTITY_MISMATCH')
+    require(_text(value.certificate_name) and value.certificate_name not in CONTROL_PLANE_CONTEXTS
+            and value.certificate_name not in {v.name for v in acquired.snapshot.required_checks}
+            and all(v.producer not in ('github-actions:' + str(value.certifier_app_id),
+                                      'github-actions:' + str(value.publisher_app_id))
+                    for v in acquired.snapshot.required_checks), 'FIRST_CERTIFICATION_DISTINCT_ISSUER_REQUIRED')
+    require(type(value.controller_contexts) is tuple and bool(value.controller_contexts)
+            and len(set(value.controller_contexts)) == len(value.controller_contexts)
+            and set(value.controller_contexts) <= set(CONTEXTS)
+            and value.purpose == 'FIRST_SCOPE_CERTIFICATION' and _text(value.receipt_ref)
+            and _future(value.expires_at, now) and value.expires_at <= acquired.expires_at,
+            'FIRST_CERTIFICATION_ACCEPTANCE_INVALID')
+    return value
+
+
+class AcceptedFirstCertificationContractVerifier:
+    """Scoped first issuance is delegated by operator row AND protected policy."""
+    def __init__(self, protected_policy_reader): self.protected_policy_reader = protected_policy_reader
+
+    def verify(self, acquired, now):
+        from .publisher_adapter import PublicationDenied
+        try:
+            from .publisher_acceptance import load_acceptance
+            policy = load_acceptance(self.protected_policy_reader(), now)
+        except PublicationDenied:
+            raise
+        except Exception:
+            raise PublicationDenied('FIRST_CERTIFICATION_ACCEPTANCE_UNAVAILABLE') from None
+        a = acquired.authority; b = acquired.snapshot.observed_binding
+        require(policy.certificate_app_id == a.app_id and policy.certificate_installation_id == a.installation_id
+                and policy.publisher_app_id != a.app_id and policy.certifier_custody_receipt == a.custody_receipt
+                and policy.certifier_capability_receipt == acquired.capability_receipt
+                and (b.repository, acquired.repository_id) in policy.repositories,
+                'FIRST_CERTIFICATION_ACCEPTANCE_PINS_MISMATCH')
+        return AcceptedFirstCertificationContract(binding_digest(b), acquired.repository_id, acquired.pr_number,
+            a.app_id, policy.publisher_app_id, policy.certificate_name, policy.controller_contexts,
+            policy.acceptance_ref + '#' + policy.revision, min(policy.expires_at, acquired.expires_at),
+            'FIRST_SCOPE_CERTIFICATION', acquired.scope_type, acquired.scope_name,
+            acquired.delegation_ref, acquired.capability_receipt)
+
+
+class AuthenticatedFirstCertifier(AuthenticatedCertifier):
+    """First issuance from authenticated scoped delegation, never promotion.allowed."""
+    def _acquire(self, binding):
+        require(all(v is not None for v in (self.registry, self.github, self.ledger)),
+                'FIRST_CERTIFICATION_PRIVILEGED_DEPENDENCIES_UNCONFIGURED')
+        require(self.contract_verifier is not None, 'FIRST_CERTIFICATION_ACCEPTANCE_UNCONFIGURED')
+        now = self.clock()
+        acquired = self.registry.acquire(binding, now)
+        _validate_pending(acquired, binding, now, self.host)
+        contract = _first_contract(self.contract_verifier, acquired, now)
+        self.github.verify_dependencies(acquired, contract, now)
+        self.github.verify(acquired, contract, now)
+        fresh = self.clock()
+        require(self.registry.acquire(binding, fresh) == acquired, 'FIRST_CERTIFICATION_DELEGATION_REVOKED_OR_CHANGED')
+        require(_first_contract(self.contract_verifier, acquired, self.clock()) == contract, 'FIRST_CERTIFICATION_CONTRACT_CHANGED')
+        final = self.clock()
+        _validate_pending(acquired, binding, final, self.host)
+        _validate_first_contract(contract, acquired, final)
+        return acquired, contract
+
+    def publish(self, binding):
+        acquired, contract = self._acquire(binding)
+        # Shared key with existing-receipt transport prevents two effects for the
+        # same exact binding even when one ledger serves both operations.
+        key = 'certifier:' + binding_digest(binding)
+        require(self.ledger.reserve(key, str(acquired.authority.epoch)), 'CERTIFIER_INTENT_ALREADY_CONSUMED')
+        attempted = False; receipts = []
+        try:
+            fresh, fresh_contract = self._acquire(binding)
+            require(fresh == acquired and fresh_contract == contract, 'FIRST_CERTIFICATION_DELEGATION_REVOKED_OR_CHANGED')
+            effect_time = self.clock()
+            _validate_pending(fresh, binding, effect_time, self.host)
+            _validate_first_contract(contract, fresh, effect_time)
+            attempted = True
+            check_id = self.github.emit_first(fresh, contract)
+            require(self.github.readback(fresh, contract, check_id), 'FIRST_CERTIFICATION_READBACK_MISMATCH')
+            receipts.append({'check_id': check_id, 'delegation_ref': fresh.delegation_ref})
+        except BaseException as exc:
+            state = 'UNCERTAIN' if attempted else 'REJECTED'
+            self.ledger.record(key, state, receipts)
+            if not isinstance(exc, Exception): raise
+            return PublicationResult(state, tuple(receipts))
+        self.ledger.record(key, 'COMPLETE', receipts)
+        return PublicationResult('COMPLETE', tuple(receipts))
+
+
+class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
+    """Read-only scoped delegation + genuine scope-level lease API (012/013).
+
+    Missing operator read model, product grant or scope lease API denies. There is
+    no fallback to legacy metadata or the incompatible atomic assignment API.
+    """
+    def acquire(self, binding, now):
+        import uuid
+        from .publisher_acquisition import decode_snapshot
+        from .policy import resolve_edge
+        require(type(binding) is PromotionRequest, 'INVALID_CERTIFICATION_BINDING')
+        self._session()
+        with self.connection:
+            with self.connection.cursor() as cur:
+                self._roles(cur)
+                cur.execute("""SELECT c.authority,c.snapshot,c.repository_id,c.pr_number,
+                 c.scope_type,c.scope_name,c.assignment_id,c.lease_id,c.lease_epoch,c.lease_principal,
+                 c.delegation_ref,c.capability_receipt,c.issued_at,c.expires_at,c.dependency_policy,c.accepted_by
+                 FROM certifier_authority.pending_bindings c
+                 JOIN certifier_authority.product_grants g ON g.principal=c.principal AND g.product=c.product
+                 JOIN pg_roles r ON r.rolname=c.principal AND r.oid=c.role_oid AND r.oid=g.role_oid
+                 JOIN public.products p ON p.product=c.product AND p.repository=c.repository
+                 WHERE c.binding_hash=%s AND c.principal=session_user AND c.product=%s AND c.repository=%s
+                 AND g.repository=c.repository AND g.repository_id=c.repository_id
+                 AND c.active AND g.active AND c.issued_at<=clock_timestamp()
+                 AND c.expires_at>clock_timestamp() AND g.expires_at>clock_timestamp()
+                 AND c.purpose='FIRST_SCOPE_CERTIFICATION' AND c.accepted_by='Ralph L. Appolon'
+                 AND NOT p.production_go AND NOT p.live_capabilities_enabled AND NOT p.external_effects_enabled
+                 LIMIT 2""", (binding_digest(binding), binding.product, binding.repository))
+                rows = cur.fetchall()
+                require(len(rows) == 1, 'FIRST_CERTIFICATION_ACTIVE_PENDING_PRODUCT_GRANT_REQUIRED')
+                (raw_authority, raw_snapshot, repo_id, pr, scope_type, scope_name, assignment, lease_id, epoch,
+                 principal, delegation_ref, capability, issued_at, expires_at, raw_dependencies, accepted_by) = rows[0]
+                raw_authority = dict(raw_authority)
+                raw_authority['expires_at'] = datetime.fromisoformat(raw_authority['expires_at'])
+                raw_authority['repositories'] = tuple(raw_authority['repositories'])
+                authority = Authority(**raw_authority)
+                snapshot = decode_snapshot(raw_snapshot)
+                require(type(raw_dependencies) is list and len(raw_dependencies) <= 100
+                        and accepted_by == 'Ralph L. Appolon', 'FIRST_CERTIFICATION_OPERATOR_DEPENDENCY_POLICY_REQUIRED')
+                dependencies = []
+                for raw in raw_dependencies:
+                    raw = dict(raw)
+                    raw['binding'] = PromotionRequest(**raw['binding'])
+                    raw['expires_at'] = datetime.fromisoformat(raw['expires_at'])
+                    dependencies.append(CertificationDependency(**raw))
+                assignment_id = str(uuid.UUID(str(assignment)))
+                acquired = PendingCertification(authority, snapshot, repo_id, pr, scope_type, scope_name,
+                    assignment_id, str(lease_id), epoch, principal, delegation_ref, capability,
+                    issued_at, expires_at, tuple(dependencies))
+                _validate_pending(acquired, binding, now, authority.host)
+                cur.execute('SELECT scope_assignment_leases.inspect_binding(%s)', (assignment_id,))
+                row = cur.fetchone()
+                require(row is not None and type(row[0]) is dict, 'FIRST_CERTIFICATION_ONLINE_SCOPE_LEASE_UNAVAILABLE')
+                live = row[0]
+                require(live.get('authority') == 'ONLINE_DATABASE_RECEIPT' and live.get('state') == 'ACTIVE'
+                        and live.get('binding_id') == assignment_id and live.get('lease_id') == str(lease_id)
+                        and type(live.get('epoch')) is int and live['epoch'] == epoch
+                        and live.get('principal') == principal, 'FIRST_CERTIFICATION_ONLINE_SCOPE_LEASE_REVOKED_OR_CHANGED')
+                source_level, target_level = resolve_edge(snapshot.mapping, binding.source_ref, binding.target_ref)
+                expected = dict(repository=binding.repository, repository_id=repo_id, product=binding.product,
+                    source_ref=binding.source_ref, target_ref=binding.target_ref, head_sha=binding.source_sha,
+                    base_sha=binding.target_base_sha, principal=principal,
+                    source_level=source_level, target_level=target_level)
+                actual = live.get('binding', {})
+                require(all(actual.get(k) == v for k, v in expected.items()), 'FIRST_CERTIFICATION_ONLINE_SCOPE_BINDING_MISMATCH')
+                expiry = datetime.fromisoformat(live['expires_at'])
+                require(_future(expiry, now) and snapshot.lease.expires_at == expiry,
+                        'FIRST_CERTIFICATION_ONLINE_SCOPE_LEASE_EXPIRED_OR_CHANGED')
+                return acquired
+
+
+def build_first_certifier_service(connection, jwt_provider, ledger_path, policy_reader,
+                                  *, host, clock=lambda: datetime.now(timezone.utc)):
+    """Compose administered source dependencies; no credential/config provisioning.
+
+    Call only from an operator-controlled integration. connection must authenticate
+    the independent restricted reader, jwt_provider the dedicated certifier key
+    custodian, and policy_reader the protected accepted policy. No author JSON,
+    issuer guessing, environment enabling, public CLI or installed caller exists.
+    Construction creates only the caller-provisioned private durable intent ledger.
+    """
+    from .publisher_effect import IntentLedger
+    api = CertifierGitHubClient(jwt_provider, clock=clock)
+    return AuthenticatedFirstCertifier(RestrictedFirstCertificationRegistry(connection),
+        CertifierGitHubVerifier(api), IntentLedger(ledger_path),
+        contract_verifier=AcceptedFirstCertificationContractVerifier(policy_reader),
+        host=host, clock=clock)

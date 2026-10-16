@@ -49,6 +49,7 @@ class CertifierAPI(API):
         super().__init__(); self.effects = []; self.identity = None; self.result = None
     def assert_identity(self, authority, repository_id, now):
         self.identity = authority.app_id
+    def bind_effect_expiry(self, expires_at): self.expiry_cap = expires_at
     def post(self, path, body):
         self.effects.append((path, body))
         self.result = dict(body, id=77, app={'id': self.identity})
@@ -191,16 +192,20 @@ class CertifierTransportTests(unittest.TestCase):
         def request(method, path, token, body=None):
             calls.append((method, path, body))
             if path == '/app': return {'id': 99}
-            if path == '/app/installations/100':
-                return {'id': 100, 'app_id': 99, 'suspended_at': None, 'permissions': dict(CertifierGitHubClient.PERMISSIONS)}
+            if path in ('/app/installations/100', '/repos/appolon1908/Breero.com/installation'):
+                return {'id': 100, 'app_id': 99, 'suspended_at': None, 'permissions': dict(CertifierGitHubClient.PERMISSIONS),
+                        'repository_selection': 'selected', 'account': {'login': 'appolon1908', 'id': 42}}
+            if path == '/repositories/123':
+                return {'id': 123, 'full_name': fixture.REQUEST.repository, 'owner': {'login': 'appolon1908', 'id': 42}}
             if path.endswith('/access_tokens'):
                 return {'token': 'synthetic', 'expires_at': (fixture.NOW + timedelta(minutes=1)).isoformat(),
                         'permissions': dict(CertifierGitHubClient.PERMISSIONS), 'repositories': [{'id': 123}]}
             raise AssertionError(path)
         client = CertifierGitHubClient(lambda: 'synthetic-jwt', request=request, clock=lambda: fixture.NOW)
         client.assert_identity(Registry().value.authority, 123, fixture.NOW)
-        self.assertEqual(calls[-1][2]['repository_ids'], [123])
-        permissions = calls[-1][2]['permissions']
+        minted = next(body for method, path, body in calls if path.endswith('/access_tokens'))
+        self.assertEqual(minted['repository_ids'], [123])
+        permissions = minted['permissions']
         self.assertEqual(permissions['checks'], 'write')
         self.assertEqual({key for key, value in permissions.items() if value == 'write'}, {'checks'})
         self.assertNotIn('statuses', permissions)
@@ -255,14 +260,14 @@ class RestrictedCertificationRegistryTests(unittest.TestCase):
         from codestra_control.certifier_adapter import RestrictedCertificationRegistry
         value = RestrictedCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
         self.assertEqual(value, self.value)
-        self.connection.set_session.assert_called_once_with(readonly=True, autocommit=False)
+        self.connection.set_session.assert_called_once_with(readonly=True, autocommit=False, isolation_level='READ COMMITTED')
         statements = [call.args[0] for call in self.cursor.execute.call_args_list]
         self.assertEqual(len(statements), 4)
         self.assertTrue(all(statement.lstrip().startswith('SELECT') for statement in statements))
         self.assertIn('certifier_authority.product_grants', statements[1])
         self.assertIn('role_oid', statements[1])
         self.assertIn('scope_certifications', statements[2])
-        self.assertEqual(self.cursor.execute.call_args.args, ('SELECT assignment_leases.inspect_binding(%s)', (self.value.receipt.assignment_id,)))
+        self.assertEqual(self.cursor.execute.call_args.args, ('SELECT scope_assignment_leases.inspect_binding(%s)', (self.value.receipt.assignment_id,)))
 
     def test_role_switch_trust_authentication_or_mutating_privileges_are_refused(self):
         from codestra_control.certifier_adapter import RestrictedCertificationRegistry
@@ -384,6 +389,7 @@ class CertifierSourceSQLTests(unittest.TestCase):
                 cur.execute('CREATE SCHEMA assignment_leases')
                 cur.execute("CREATE FUNCTION assignment_leases.inspect_binding(uuid) RETURNS jsonb LANGUAGE sql AS $$SELECT '{}'::jsonb$$")
                 cur.execute((Path(__file__).resolve().parents[1] / '011-certifier-authority.sql').read_text())
+                cur.execute((Path(__file__).resolve().parents[1] / '013-first-certification-pending.sql').read_text())
         except BaseException:
             cls.tearDownClass(); raise
 
@@ -424,3 +430,365 @@ class CertifierSourceSQLTests(unittest.TestCase):
                                 ('d' * 64, '11111111-1111-4111-8111-111111111111',
                                  '22222222-2222-4222-8222-222222222222', actor, purpose, origin))
             cur.execute('DELETE FROM certifier_authority.product_grants')
+
+
+    def test_pending_schema_rejects_historical_certificate_unbounded_delegation_and_wrong_purpose(self):
+        import psycopg2
+        import json
+        with self.connection.cursor() as cur:
+            cur.execute("INSERT INTO certifier_authority.product_grants(principal,role_oid,product,repository,repository_id,expires_at) SELECT session_user,oid,'Breero','appolon1908/Breero.com',123,clock_timestamp()+interval '1 minute' FROM pg_roles WHERE rolname=session_user")
+            for snapshot, minutes, purpose in (({}, 2, 'FIRST_SCOPE_CERTIFICATION'),
+                    ({'certificate': {'status': 'CERTIFIED'}}, 2, 'FIRST_SCOPE_CERTIFICATION'),
+                    ({'certificate': None}, 10, 'FIRST_SCOPE_CERTIFICATION'),
+                    ({'certificate': None}, 2, 'CI')):
+                with self.subTest(snapshot=snapshot, minutes=minutes, purpose=purpose), self.assertRaises(psycopg2.errors.CheckViolation):
+                    cur.execute("""INSERT INTO certifier_authority.pending_bindings(
+                     binding_hash,principal,role_oid,product,repository,repository_id,pr_number,authority,snapshot,
+                     scope_type,scope_name,assignment_id,lease_id,lease_epoch,lease_principal,delegation_ref,
+                     capability_receipt,dependency_policy,accepted_by,purpose,issued_at,expires_at)
+                     SELECT %s,session_user,oid,'Breero','appolon1908/Breero.com',123,9,'{}',%s::jsonb,
+                     'STAGING','staging',%s,%s,1,'owner','delegation:1','capability:1','[]','Ralph L. Appolon',
+                     %s,clock_timestamp(),clock_timestamp()+make_interval(mins=>%s)
+                     FROM pg_roles WHERE rolname=session_user""", ('f' * 64, json.dumps(snapshot),
+                        '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', purpose, minutes))
+            cur.execute('SELECT count(*) FROM certifier_authority.pending_bindings')
+            self.assertEqual(cur.fetchone(), (0,))
+            cur.execute('DELETE FROM certifier_authority.product_grants')
+
+
+class PendingRegistry:
+    def __init__(self):
+        from codestra_control.certifier_adapter import PendingCertification
+        base = Registry().value
+        self.value = PendingCertification(base.authority, base.snapshot, 123, 9,
+            'STAGING', 'staging', 'assignment:1', 'lease:1', 1, 'owner',
+            'operator:exact-scope-delegation', 'accepted:scope-capability',
+            fixture.NOW, fixture.NOW + timedelta(minutes=2), ())
+        self.calls = 0
+    def acquire(self, binding, now):
+        self.calls += 1
+        return self.value
+
+
+class FirstContractVerifier:
+    def verify(self, acquired, now):
+        from codestra_control.certifier_adapter import AcceptedFirstCertificationContract
+        return AcceptedFirstCertificationContract(binding_digest(fixture.REQUEST), 123, 9, 99, 7,
+            'scope-certification', ('codestra-control-plane', 'codestra/control-plane'),
+            'operator:accepted-first-scope-delegation', fixture.NOW + timedelta(minutes=2),
+            'FIRST_SCOPE_CERTIFICATION', acquired.scope_type, acquired.scope_name,
+            acquired.delegation_ref, acquired.capability_receipt)
+
+
+class FirstCertifierTests(unittest.TestCase):
+    def setUp(self):
+        from codestra_control.certifier_adapter import AuthenticatedFirstCertifier
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.registry = PendingRegistry(); self.api = CertifierAPI(); self.github = CertifierGitHubVerifier(self.api)
+        self.path = Path(self.temp.name) / 'first.sqlite'
+        self.certifier = AuthenticatedFirstCertifier(self.registry, self.github, IntentLedger(self.path),
+            contract_verifier=FirstContractVerifier(), host='dev-desktop', clock=lambda: fixture.NOW)
+
+    def test_first_check_absent_can_be_issued_from_authenticated_scoped_delegation_only(self):
+        self.assertIsNone(self.registry.value.snapshot.certificate)
+        with patch('codestra_control.decision.evaluate_promotion', side_effect=AssertionError('not a certifier')):
+            result = self.certifier.publish(fixture.REQUEST)
+        self.assertEqual(result.state, 'COMPLETE')
+        self.assertEqual(len(self.api.effects), 1)
+        self.assertFalse(any('/check-runs/10' in path for path in self.api.paths))
+        self.assertEqual(self.api.effects[0][1]['external_id'], binding_digest(fixture.REQUEST))
+        self.assertIn('First scope certification', self.api.effects[0][1]['output']['title'])
+        self.assertEqual(result.receipts, ({'check_id': 77, 'delegation_ref': self.registry.value.delegation_ref},))
+
+    def test_missing_delegation_dependency_lease_review_and_historical_certificate_deny(self):
+        original = self.registry.value
+        snapshots = (replace(original.snapshot, dependencies_complete=False),
+                     replace(original.snapshot, dependencies_certified=False),
+                     replace(original.snapshot, lease=None), replace(original.snapshot, reviews=()),
+                     replace(original.snapshot, certificate=fixture.ready().certificate))
+        for value in (replace(original, delegation_ref=''), replace(original, capability_receipt=''),
+                      replace(original, expires_at=fixture.NOW),
+                      *(replace(original, snapshot=snapshot) for snapshot in snapshots)):
+            self.registry.value = value
+            with self.subTest(value=value), self.assertRaises(PublicationDenied):
+                self.certifier.publish(fixture.REQUEST)
+        self.assertEqual(self.api.effects, [])
+
+    def test_supported_scope_does_not_include_atomic_or_hotfix_exceptions(self):
+        for ref in ('atomic/sec--sub--task', 'hotfix/fix'):
+            binding = replace(fixture.REQUEST, source_ref=ref)
+            self.registry.value = replace(self.registry.value,
+                snapshot=replace(self.registry.value.snapshot, observed_binding=binding))
+            with self.subTest(ref=ref), self.assertRaises(PublicationDenied): self.certifier.publish(binding)
+        self.assertEqual(self.api.effects, [])
+
+    def test_source_base_drift_and_failed_merge_check_deny_before_first_effect(self):
+        original_get = self.api.get; original_pages = self.api.pages
+        for field in ('head', 'base'):
+            def moved(path):
+                value = original_get(path)
+                if path.endswith('/pulls/9'): value[field]['sha'] = 'd' * 40
+                return value
+            self.api.get = moved
+            with self.subTest(field=field), self.assertRaises(PublicationDenied): self.certifier.publish(fixture.REQUEST)
+        self.api.get = original_get
+        def failed(path, key=None):
+            value = original_pages(path, key)
+            if '/commits/' + 'c' * 40 in path: value[0]['conclusion'] = 'failure'
+            return value
+        self.api.pages = failed
+        with self.assertRaises(PublicationDenied): self.certifier.publish(fixture.REQUEST)
+        self.assertEqual(self.api.effects, [])
+
+    def test_revoked_pending_grant_after_intent_stops_and_consumes_intent(self):
+        original = self.registry.acquire
+        def revoked(binding, now):
+            if self.registry.calls >= 2: raise PublicationDenied('PENDING_GRANT_REVOKED')
+            return original(binding, now)
+        self.registry.acquire = revoked
+        self.assertEqual(self.certifier.publish(fixture.REQUEST).state, 'REJECTED')
+        self.assertEqual(self.api.effects, [])
+        self.registry.acquire = original
+        with self.assertRaises(PublicationDenied): self.certifier.publish(fixture.REQUEST)
+
+    def test_first_readback_wrong_app_is_uncertain_and_reopen_cannot_retry(self):
+        original = self.api.get
+        self.api.get = lambda path: dict(original(path), app={'id': 7}) if path.endswith('/check-runs/77') else original(path)
+        self.assertEqual(self.certifier.publish(fixture.REQUEST).state, 'UNCERTAIN')
+        self.certifier.ledger = IntentLedger(self.path)
+        with self.assertRaises(PublicationDenied): self.certifier.publish(fixture.REQUEST)
+        self.assertEqual(len(self.api.effects), 1)
+
+    def test_no_privileged_registry_or_accepted_contract_defaults_to_denial(self):
+        self.certifier.registry = None
+        with self.assertRaises(PublicationDenied): self.certifier.publish(fixture.REQUEST)
+        self.certifier.registry = self.registry; self.certifier.contract_verifier = None
+        with self.assertRaises(PublicationDenied): self.certifier.publish(fixture.REQUEST)
+        self.assertEqual(self.api.effects, [])
+
+
+    def test_complete_dependency_policy_requires_exact_live_accepted_scope_check(self):
+        from codestra_control.certifier_adapter import CertificationDependency
+        dependency_binding = replace(fixture.REQUEST, source_ref='testing', target_ref='staging',
+                                     source_sha='e' * 40, target_base_sha=fixture.REQUEST.source_sha)
+        dependency = CertificationDependency(dependency_binding, 123, 88, 99,
+                                            'scope-certification', fixture.NOW + timedelta(minutes=2))
+        self.registry.value = replace(self.registry.value, dependencies=(dependency,))
+        original = self.api.get
+        def dependency_api(path):
+            self.assertEqual(self.api.identity, 99, 'dependency reads require accepted App authentication')
+            if path.endswith('/branches/testing'): return {'commit': {'sha': 'e' * 40}}
+            if path.endswith('/branches/staging'): return {'commit': {'sha': fixture.REQUEST.source_sha}}
+            if path.endswith('/check-runs/88'):
+                return {'id': 88, 'app': {'id': 99}, 'name': 'scope-certification', 'head_sha': 'e' * 40,
+                        'external_id': binding_digest(dependency_binding), 'status': 'completed', 'conclusion': 'success'}
+            return original(path)
+        self.api.get = dependency_api
+        self.assertEqual(self.certifier.publish(fixture.REQUEST).state, 'COMPLETE')
+
+    def test_revoked_wrong_issuer_or_missing_dependency_receipt_denies_without_effect(self):
+        from codestra_control.certifier_adapter import CertificationDependency
+        dependency_binding = replace(fixture.REQUEST, source_ref='testing', target_ref='staging',
+                                     source_sha='e' * 40, target_base_sha=fixture.REQUEST.source_sha)
+        original = self.api.get
+        for issuer, conclusion in ((7, 'success'), (99, 'failure')):
+            self.registry.value = replace(self.registry.value, dependencies=(CertificationDependency(
+                dependency_binding, 123, 88, issuer, 'scope-certification', fixture.NOW + timedelta(minutes=2)),))
+            def dependency_api(path):
+                if path.endswith('/branches/testing'): return {'commit': {'sha': 'e' * 40}}
+                if path.endswith('/branches/staging'): return {'commit': {'sha': fixture.REQUEST.source_sha}}
+                if path.endswith('/check-runs/88'):
+                    return {'id': 88, 'app': {'id': issuer}, 'name': 'scope-certification', 'head_sha': 'e' * 40,
+                            'external_id': binding_digest(dependency_binding), 'status': 'completed', 'conclusion': conclusion}
+                return original(path)
+            self.api.get = dependency_api
+            with self.subTest(issuer=issuer, conclusion=conclusion), self.assertRaises(PublicationDenied):
+                self.certifier.publish(fixture.REQUEST)
+        self.assertEqual(self.api.effects, [])
+
+
+class RestrictedFirstCertificationRegistryTests(RestrictedCertificationRegistryTests):
+    """Exercise first-issuance acquisition separately from existing receipt reads."""
+    def setUp(self):
+        super().setUp()
+        from dataclasses import asdict
+        import json
+        pending = PendingRegistry().value
+        self.pending = replace(pending, assignment_id=self.value.receipt.assignment_id,
+            lease_id=self.value.receipt.lease_id, snapshot=self.value.snapshot)
+        encode = lambda value: json.loads(json.dumps(asdict(value), default=lambda dt: dt.isoformat()))
+        self.pending_row = (encode(self.pending.authority), encode(self.pending.snapshot), 123, 9,
+            self.pending.scope_type, self.pending.scope_name, self.pending.assignment_id,
+            self.pending.lease_id, 1, 'owner', self.pending.delegation_ref,
+            self.pending.capability_receipt, self.pending.issued_at, self.pending.expires_at, [], 'Ralph L. Appolon')
+        self.lease['binding'].update(source_level='staging', target_level='production')
+        self.cursor.fetchall.return_value = [self.pending_row]
+        self.cursor.fetchone.side_effect = [(True, True), (self.lease,)]
+
+    def test_authenticated_source_reader_checks_grant_scope_existing_certification_and_online_lease(self):
+        from codestra_control.certifier_adapter import RestrictedFirstCertificationRegistry
+        value = RestrictedFirstCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
+        self.assertEqual(value, self.pending)
+        statements = [call.args[0] for call in self.cursor.execute.call_args_list]
+        self.assertEqual(len(statements), 3)
+        self.assertIn('certifier_authority.pending_bindings', statements[1])
+        self.assertIn('certifier_authority.product_grants', statements[1])
+        self.assertEqual(self.cursor.execute.call_args.args,
+            ('SELECT scope_assignment_leases.inspect_binding(%s)', (self.pending.assignment_id,)))
+        self.assertFalse(any('scope_certifications' in statement or 'SELECT assignment_leases.inspect_binding' in statement for statement in statements))
+
+    def test_grant_or_existing_scope_registration_missing_denies(self):
+        from codestra_control.certifier_adapter import RestrictedFirstCertificationRegistry
+        self.cursor.fetchall.return_value = []
+        with self.assertRaises(PublicationDenied):
+            RestrictedFirstCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
+
+    def test_role_switch_trust_authentication_or_mutating_privileges_are_refused(self):
+        from codestra_control.certifier_adapter import RestrictedFirstCertificationRegistry
+        for result in ((False, True), (True, False), None):
+            self.cursor.fetchone.side_effect = [result]
+            with self.subTest(result=result), self.assertRaises(PublicationDenied):
+                RestrictedFirstCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
+
+    def test_wrong_lease_current_binding_or_revocation_denies(self):
+        from codestra_control.certifier_adapter import RestrictedFirstCertificationRegistry
+        for change in ({'state': 'REVOKED'}, {'epoch': 2}, {'principal': 'other'},
+                       {'expires_at': fixture.NOW.isoformat()},
+                       {'binding': dict(self.lease['binding'], base_sha='d' * 40)},
+                       {'binding': dict(self.lease['binding'], source_level='atomic_task')}):
+            self.cursor.fetchone.side_effect = [(True, True), (dict(self.lease, **change),)]
+            with self.subTest(change=change), self.assertRaises(PublicationDenied):
+                RestrictedFirstCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
+
+    def test_unverified_tls_and_untrusted_ca_deny_before_query(self):
+        from codestra_control.certifier_adapter import RestrictedFirstCertificationRegistry
+        self.connection.get_dsn_parameters.return_value['sslmode'] = 'require'
+        with self.assertRaises(PublicationDenied):
+            RestrictedFirstCertificationRegistry(self.connection).acquire(fixture.REQUEST, fixture.NOW)
+        self.assertEqual(self.cursor.execute.call_count, 0)
+
+
+class AcceptedFirstCertificationContractTests(AcceptedCertifierContractTests):
+    def test_protected_accepted_policy_binds_distinct_certifier_and_exact_repository(self):
+        from codestra_control.certifier_adapter import AcceptedFirstCertificationContractVerifier
+        acquired = PendingRegistry().value
+        value = AcceptedFirstCertificationContractVerifier(lambda: b'protected-synthetic-policy').verify(acquired, fixture.NOW)
+        self.assertEqual(value.purpose, 'FIRST_SCOPE_CERTIFICATION')
+        self.assertEqual(value.scope_type, 'STAGING')
+        self.assertEqual(value.scope_name, fixture.REQUEST.source_ref)
+        self.assertEqual(value.delegation_ref, acquired.delegation_ref)
+        self.assertEqual(value.capability_receipt, acquired.capability_receipt)
+        self.assertFalse(hasattr(value, 'existing_receipt_ref'))
+
+    def test_policy_wrong_app_installation_custody_or_repository_denies(self):
+        from codestra_control.certifier_adapter import AcceptedFirstCertificationContractVerifier
+        verifier = AcceptedFirstCertificationContractVerifier(lambda: b'protected-synthetic-policy')
+        for field, value in (('certificate_app_id', 7), ('certificate_installation_id', 999),
+                            ('certifier_custody_receipt', 'other'), ('certifier_capability_receipt', 'other'),
+                            ('repositories', ((fixture.REQUEST.repository, 999),))):
+            original = getattr(self.policy, field); setattr(self.policy, field, value)
+            with self.subTest(field=field), self.assertRaises(PublicationDenied):
+                verifier.verify(PendingRegistry().value, fixture.NOW)
+            setattr(self.policy, field, original)
+
+    def test_missing_protected_policy_and_parser_refusal_deny(self):
+        from codestra_control.certifier_adapter import AcceptedFirstCertificationContractVerifier
+        def unreadable(): raise OSError('private secret diagnostic')
+        with self.assertRaises(PublicationDenied) as caught:
+            AcceptedFirstCertificationContractVerifier(unreadable).verify(PendingRegistry().value, fixture.NOW)
+        self.assertNotIn('secret', str(caught.exception))
+
+
+class CertifierExpirationFenceTests(unittest.TestCase):
+    def test_existing_and_first_preflight_final_registry_read_exhausting_expiry_never_reserves_or_posts(self):
+        from codestra_control.certifier_adapter import AuthenticatedFirstCertifier
+        from unittest import mock
+        for first in (False, True):
+            registry = PendingRegistry() if first else Registry()
+            api = CertifierAPI(); now = [fixture.NOW]
+            original = registry.acquire
+            calls = [0]
+            def slow(binding, observed_at):
+                calls[0] += 1
+                if calls[0] == 2: now[0] += timedelta(minutes=3)
+                return original(binding, observed_at)
+            registry.acquire = slow
+            ledger = mock.Mock()
+            cls = AuthenticatedFirstCertifier if first else AuthenticatedCertifier
+            certifier = cls(registry, CertifierGitHubVerifier(api), ledger,
+                contract_verifier=FirstContractVerifier() if first else ContractVerifier(),
+                host='dev-desktop', clock=lambda: now[0])
+            with self.subTest(first=first), self.assertRaises(PublicationDenied): certifier.publish(fixture.REQUEST)
+            self.assertEqual(api.effects, [])
+            ledger.reserve.assert_not_called()
+
+    def test_existing_and_first_contract_read_exhausting_expiry_after_intent_rejects_without_post(self):
+        from codestra_control.certifier_adapter import AuthenticatedFirstCertifier
+        for first in (False, True):
+            with tempfile.TemporaryDirectory() as directory:
+                registry = PendingRegistry() if first else Registry()
+                verifier = FirstContractVerifier() if first else ContractVerifier()
+                original = verifier.verify; calls = [0]; now = [fixture.NOW]
+                def slow(acquired, observed_at):
+                    calls[0] += 1
+                    result = original(acquired, observed_at)
+                    if calls[0] == 4: now[0] += timedelta(minutes=3)
+                    return result
+                verifier.verify = slow
+                api = CertifierAPI(); cls = AuthenticatedFirstCertifier if first else AuthenticatedCertifier
+                certifier = cls(registry, CertifierGitHubVerifier(api), IntentLedger(Path(directory) / 'intent.sqlite'),
+                    contract_verifier=verifier, host='dev-desktop', clock=lambda: now[0])
+                with self.subTest(first=first): self.assertEqual(certifier.publish(fixture.REQUEST).state, 'REJECTED')
+                self.assertEqual(api.effects, [])
+
+    def test_certifier_token_expiry_is_capped_before_check_effect(self):
+        client = CertifierGitHubClient(lambda: 'unused', clock=lambda: fixture.NOW)
+        client._token = 'synthetic'; client._expires = fixture.NOW + timedelta(hours=1)
+        expiry = fixture.NOW + timedelta(seconds=1)
+        client.bind_effect_expiry(expiry)
+        client.clock = lambda: expiry
+        with self.assertRaises(PublicationDenied): client.post('/repos/appolon1908/Breero.com/check-runs', {})
+
+
+class CertifierInstallationFenceTests(unittest.TestCase):
+    def test_all_repository_installation_wrong_owner_or_repository_identity_denies(self):
+        for kind in ('selection', 'owner', 'repository', 'coverage'):
+            def request(method, path, token, body=None):
+                installation = {'id': 100, 'app_id': 99, 'suspended_at': None,
+                    'permissions': dict(CertifierGitHubClient.PERMISSIONS), 'repository_selection': 'selected',
+                    'account': {'login': 'appolon1908', 'id': 42}}
+                if path == '/app': return {'id': 99}
+                if path == '/app/installations/100':
+                    if kind == 'selection': installation['repository_selection'] = 'all'
+                    if kind == 'owner': installation['account']['id'] = 43
+                    return installation
+                if path.endswith('/access_tokens'):
+                    return {'token': 'synthetic', 'expires_at': (fixture.NOW + timedelta(minutes=1)).isoformat(),
+                            'permissions': dict(CertifierGitHubClient.PERMISSIONS), 'repositories': [{'id': 123}]}
+                if path == '/repositories/123':
+                    return {'id': 999 if kind == 'repository' else 123, 'full_name': fixture.REQUEST.repository,
+                            'owner': {'login': 'appolon1908', 'id': 42}}
+                if path.endswith('/installation'):
+                    if kind == 'coverage': installation['id'] = 101
+                    return installation
+                raise AssertionError(path)
+            client = CertifierGitHubClient(lambda: 'synthetic', request=request, clock=lambda: fixture.NOW)
+            with self.subTest(kind=kind), self.assertRaises(PublicationDenied):
+                client.assert_identity(Registry().value.authority, 123, fixture.NOW)
+
+
+class FirstCertifierFactoryTests(unittest.TestCase):
+    def test_privileged_factory_wires_real_ports_without_reading_credentials_or_posting(self):
+        from unittest import mock
+        from codestra_control.certifier_adapter import build_first_certifier_service, AuthenticatedFirstCertifier, RestrictedFirstCertificationRegistry
+        with tempfile.TemporaryDirectory() as directory:
+            signer = mock.Mock(side_effect=AssertionError('construction cannot read credentials'))
+            policy_reader = mock.Mock(side_effect=AssertionError('construction cannot read policy'))
+            connection = mock.Mock()
+            service = build_first_certifier_service(connection, signer, Path(directory) / 'ledger.sqlite',
+                policy_reader, host='dev-desktop', clock=lambda: fixture.NOW)
+            self.assertIsInstance(service, AuthenticatedFirstCertifier)
+            self.assertIsInstance(service.registry, RestrictedFirstCertificationRegistry)
+            self.assertIsInstance(service.github.api, CertifierGitHubClient)
+            self.assertIs(service.registry.connection, connection)
+            signer.assert_not_called(); policy_reader.assert_not_called()

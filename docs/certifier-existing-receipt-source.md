@@ -1,72 +1,129 @@
-# Existing scope certification transport: source boundary
+# Independent scope certification source
 
-This section supplies source for an independent GitHub App to publish an existing,
-independently authenticated `SCOPE_CERTIFICATION` receipt as a check-run. It does
-not implement a first-certification decision or bootstrap a trusted issuer.
-`evaluate_promotion.allowed`, ordinary CI, a caller-created dataclass, an author
-configuration file and a legacy `CERTIFIED`/`PASS` row are insufficient authority.
-There is no public certifier CLI, installed factory, enable flag, key, grant,
-active read-model row, lease, service change or network effect in this change.
-The default `AuthenticatedCertifier` has unset privileged dependencies and denies.
+The certifier now has two separate source paths: transport an existing independently
+authenticated `SCOPE_CERTIFICATION` receipt, or issue the first check from an
+operator-authenticated exact-scope delegation. First issuance does not require an
+existing check-run or `ScopeCertificate`. Both paths deny when privileged
+acquisition or protected acceptance is unavailable. Nothing is installed, enabled,
+applied, granted or published live by this change.
 
-`ExistingScopeReceipt` binds repository/product, source and target refs, source
-SHA and target base SHA, registered scope type/name, existing receipt reference,
-expiration, assignment, lease ID/epoch and principal. A Python value does not
-authenticate itself: only a separately administered online registry may return
-it. The accompanying snapshot can have `certificate=None`. The adapter never
-constructs a `ScopeCertificate` and never derives one from a promotion decision.
+`AuthenticatedFirstCertifier` accepts only `PendingCertification` acquired through
+a privileged registry. Its snapshot must have `certificate=None`; historical
+certificates are rejected. An author object, ordinary CI, a legacy PASS row and
+`evaluate_promotion.allowed` cannot establish certification authority. The source
+never constructs a `ScopeCertificate` to pass a circular gate.
 
-`RestrictedCertificationRegistry` is a concrete read-only implementation for the
-empty source read model in `011-certifier-authority.sql`. It requires verified TLS
-with a protected CA, an authenticated SCRAM session with equal session/current
-users and no role switch, an OID-bound active per-product grant, and an exact
-operator-accepted existing receipt. Elevated/inherited roles, schema or table
-ownership, data mutation privileges and execution of other sensitive APIs deny.
-It also queries `assignment_leases.inspect_binding(uuid)` for current ownership,
-lease ID/epoch, expiration, repository ID, refs and both SHAs. An exact legacy
-scope certification row is checked as an additional registration prerequisite;
-it supplies no independent issuer authentication.
+The empty source table in `013-first-certification-pending.sql` binds the
+credential-authenticated reader's principal/OID and explicit product grant to the
+exact repository/product, repository ID, PR, source/target refs, head/base SHAs,
+registered scope, authority, current scope assignment/lease ID/epoch/principal,
+accepted delegation reference and capability. The operator explicitly accepts the
+complete dependency policy. Delegations expire within five minutes and remain
+inactive by default. No first-certification rows, credentials or grants are seeded.
 
-The SQL file contains no identities, grants, policies, certification procedure or
-receipt inserts. Its tables remain empty. Applying it to any installed database,
-assigning a reader, and registering a receipt each require separate operator
-acceptance outside this source change. Registration must include independently
-verified provenance for an already existing certification, plus an acceptance
-reference. Copying a legacy PASS record or a successful check into this read model
-would violate its trust contract. No source API currently decides or authenticates
-first issuance, so the source cannot claim that capability is complete.
+`RestrictedFirstCertificationRegistry` requires verified TLS with a protected CA,
+authenticated SCRAM, equal session/current users, no role switch, and an active
+OID-bound product grant. Elevated/inherited roles, schema/table ownership, data
+mutation rights and execution of sensitive mutating APIs deny. It independently
+queries `scope_assignment_leases.inspect_binding(uuid)` from source migration 012
+and checks current state, lease ID/epoch/principal, exact repository ID, registered
+source/target levels, refs, both SHAs and expiration. That API rechecks the actual
+registered product and scope mappings. Missing tables/API or revoked/drifted
+records deny. The incompatible atomic-task lease API is never a fallback. Every acquisition
+uses a READ COMMITTED transaction; repeatable snapshots cannot cache revoked
+authority.
 
-`AcceptedCertifierContractVerifier` reads the shared protected publisher acceptance
-policy through a privileged zero-argument reader. Exact repository IDs, accepted
-certifier App/installation, distinct publisher/ordinary CI identity, capability,
-check name, controller contexts, policy revision and expiry are required.
-`certifier_custody_receipt` pins the independent certifier custody; the separate
-`custody_receipt` remains publisher-only and cannot satisfy this pin. Missing
-or rejected acceptance denies. The certifier credential custodian is independent;
-the publisher must never receive its private key or its check-write token.
+The dependency policy is an operator-owned complete inventory, including an
+explicit empty inventory when no dependencies apply. Every listed dependency
+must use a supported registered edge in the same product/repository, have an
+unambiguous exact binding, and possess a current successful check-run from the
+accepted certifier App/name. The online verifier rereads dependency refs around
+receipt inspection. Missing, expired, wrong-issuer or revoked dependencies deny;
+legacy metadata does not supply their provenance. Policy booleans alone cannot
+replace this separately authenticated inventory.
 
-`CertifierGitHubClient` obtains a repository-restricted token only after checking
-the accepted App and unsuspended installation online. Its sole write grant is
-`checks:write`. `metadata:read`, `contents:read` and `pull_requests:read` support
-exact refs, merge checks and reviews; `administration:read` is required to inspect
-classic enforced protection and bypass allowances. The installation must match
-these minimal permissions exactly. There are no status, content, workflow,
-protection or ref write permissions. The transport refuses status/ref API effects.
+`AcceptedFirstCertificationContractVerifier` reads the shared protected acceptance
+policy through a privileged zero-argument reader. It pins the independent
+certifier App/installation, `certifier_custody_receipt`, exact repository ID and
+`certifier_capability_receipt`, then binds that policy to the exact pending scope
+and delegation reference. The separate `custody_receipt` remains publisher-only.
+There is no fabricated existing receipt reference. The first-issuance purpose is
+`FIRST_SCOPE_CERTIFICATION`; existing receipt transport uses `SCOPE_CERTIFICATION`.
 
-Before publishing, the online verifier checks the exact open PR head and target
-base, protected target, accepted enforced protection, required checks on both the
-head and current test merge, independent eligible reviews and resolved threads.
-It rereads refs, protection and checks, then the orchestrator reacquires the
-registry receipt and accepted contract. A durable one-use intent is committed
-before a second complete preflight and the check-run effect. The check-run uses
-`external_id=binding_digest(PromotionRequest)`. Its readback must match App, name,
-exact SHA, binding digest and completed success. A lost response or mismatched
-readback is `UNCERTAIN`; revocation before the effect is `REJECTED`. Both consume
-the durable intent permanently; no automatic retry or compensation is provided.
+The dedicated GitHub App transport requests a single-repository token. Its sole
+write grant is `checks:write`; `metadata:read`, `contents:read` and
+`pull_requests:read` support refs/checks/reviews, while `administration:read` is
+needed to inspect classic enforced protection and bypass allowances. Installed
+permissions must match exactly, the installation must select repositories, and
+online repository owner/ID and per-repository installation coverage must agree.
+Full selected-repository inventory remains an operator acceptance prerequisite.
+The publisher never receives the certifier private key or check-write token.
 
-Source tests use synthetic privileged ports and a temporary socket-only
-PostgreSQL cluster for schema/predicate checks. They do not establish deployed
-issuer acceptance, operational credentials, a populated authoritative receipt,
-live protection acceptance, certification, publication or promotion approval.
-`PRODUCTION_GO=NO`, `LIVE_CAPABILITIES_ENABLED=NO`, `EXTERNAL_EFFECTS=false` remain
-in force.
+Before issuance, independent online reads verify required checks on the exact
+head and current test merge, the exact open PR and protected target base, accepted
+enforced protection, independent eligible codeowner reviews and resolved threads.
+The issuer reacquires the authenticated pending record, scope lease and protected
+contract. A durable one-use intent is then committed, followed by a complete
+second preflight. Existing receipt transport shares the same binding key so one
+ledger cannot emit twice for the same exact promotion.
+
+After all final database/policy reads, the issuer samples time again and validates
+all stable evidence. It repeats a local expiry check immediately before emission
+and caps the API session to the minimum accepted contract, authority, scope lease
+and existing receipt or pending delegation expiration. No further authority
+broker read is inserted between that fence and the POST. The check-run uses
+`external_id=binding_digest(PromotionRequest)`. Readback must match App, check
+name, exact SHA, binding digest and completed success. A failure before the effect
+is `REJECTED`; an ambiguous POST or readback mismatch is `UNCERTAIN`. Both consume
+the intent permanently. There is no automatic retry or compensation.
+
+The local time check and GitHub's acceptance of the network request cannot form
+an atomic transaction. Network latency may cross an authority expiration after
+the final local fence. This residual boundary is explicit; the source does not
+claim an atomic guarantee across the database, credential custodian and GitHub.
+
+## Concrete first-issuance operational proposal
+
+The following prerequisites describe future operator actions. They are neither
+executed nor authorized as runtime provisioning by this source preparation.
+
+1. Independently accept the dedicated certifier App, selected repository IDs,
+   exact permissions, separate credential custody and scope-certification
+   capability. Record them in the protected shared producer acceptance policy.
+2. Review and separately apply source migrations 011, 012 and 013 under an
+   operator-owned schema authority. Provision a SCRAM/TLS certifier reader with
+   OID-bound product/read grants, SELECT on its required read-model/product
+   tables, and only the scope lease `inspect_binding(uuid)` API. It must have no
+   claim/write/schema-owner privileges. No source migration creates these grants.
+3. Register the actual product/scope mapping and exact scope assignment through
+   the operator-owned scope lease records. A separately authenticated scope owner
+   claims that assignment using source API `claim(uuid, request_uuid)`. The
+   certifier uses an independent read principal and cannot claim its own lease.
+4. Independently accept an exact pending first-issuance delegation, including a
+   complete current dependency inventory, protected capability reference, source
+   snapshot with no certificate, and the genuine current scope lease ID/epoch.
+   Bound its expiration to the acceptance, authority and lease, at most five
+   minutes after issuance. Author-supplied JSON and copied legacy PASS are invalid.
+5. An administered internal caller uses `build_first_certifier_service` to wire
+   the real restricted registry, protected contract reader, dedicated App client,
+   online verifier and private durable intent ledger, then invokes
+   `AuthenticatedFirstCertifier.publish(exact_promotion_request)`. The factory
+   accepts only privileged connection/custodian/policy-reader dependencies and
+   reads no credentials or policy during construction. Missing
+   composition remains unavailable; no public CLI or installed service is added.
+6. Independently read the real resulting check-run. If accepted, a separately
+   authorized operator can register that exact live check receipt in the
+   publisher's acquisition model. Publisher verification must still authenticate
+   the dedicated App, current protection, refs and receipt freshness. A synthetic
+   unit test is not a receipt, certification, publication or promotion approval.
+
+The existing-receipt path retains its empty source model in 011 and separately
+checks a previously authenticated receipt plus exact scope registration. Its
+legacy scope metadata is only an additional prerequisite; the operator-owned
+independent receipt acceptance provides provenance. It also now requires the
+scope-level lease API from 012.
+
+Source tests use synthetic privileged ports and temporary socket-only PostgreSQL
+clusters. `PRODUCTION_GO=NO`, `LIVE_CAPABILITIES_ENABLED=NO` and
+`EXTERNAL_EFFECTS=false` remain in force; live issuer acceptance and runtime
+composition are unprovisioned.
