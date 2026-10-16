@@ -17,6 +17,65 @@
   "certification": null,
   "live_effects_authorized": false,
   "installation_performed": false,
-  "source_state": "IMPLEMENTED_SOURCE_ONLY_RUNTIME_UNINSTALLED",
-  "validation_record": "docs/verification/2026-10-16-scoped-operation-admission.json"
+  "source_state": "MERGED_SOURCE_ONLY_RUNTIME_UNINSTALLED",
+  "validation_record": "docs/verification/2026-10-16-scoped-operation-admission.json",
+  "publication": {
+    "implementation_head": "f5d8c46270d321c247c2b57a49797ff22c857fb9",
+    "pull_request": "https://github.com/appolon1908/Codestra-Control-Plane/pull/46",
+    "state": "MERGED",
+    "merged_at": "2026-10-16T14:19:43Z",
+    "merge_commit": "31f8f4303fb5bcc26c48a5d636b405837411f3c5",
+    "artifact_attached": true,
+    "submitted_github_reviews_observed": 0,
+    "observation_date": "2026-10-16"
+  },
+  "contributions": [
+    {
+      "owner": "/root",
+      "scope": "Protected client, integration, shared Git safety review, full-suite verification and assigned-branch publication",
+      "state": "INTEGRATED_AND_PUBLISHED",
+      "branch": "atomic/cp-01-foundation--02-trusted-decisions--scoped-l1-l2-admission"
+    },
+    {
+      "owner": "/root/verify_publication_gate",
+      "scope": "010-scoped-operation-admission.sql and tests/test_scoped_admission_sql.py",
+      "state": "INTEGRATED_AND_PUBLISHED",
+      "verification": "24 disposable PostgreSQL 16/TLS/SCRAM tests passed; included in the full-suite validation record",
+      "unintegrated_owned_changes": false
+    },
+    {
+      "owner": "/root/verify_coverage_source",
+      "scope": "Stage materialization and Git safety, plus independent SQL and test-bootstrap source review",
+      "state": "INTEGRATED_AND_PUBLISHED",
+      "verification": "42 materialization tests passed under normal Python and python3 -S; included in the full-suite validation record",
+      "unintegrated_owned_changes": false
+    },
+    {
+      "owner": "/root/verify_publication_gate/verify_postgres_auth_docs",
+      "scope": "Read-only early SQL authentication and operation-grant design analysis",
+      "state": "READ_ONLY_COMPLETE",
+      "source_changes": false,
+      "independent_final_implementation_review": false
+    },
+    {
+      "owner": "/root/review_scoped_admission",
+      "scope": "Initial independent source review",
+      "state": "REVIEW_INTERRUPTED",
+      "blocker": "Agent execution was rejected by automatic cybersecurity review; no final review approval was issued. Materializer/Git fixes were authored by verify_coverage_source and reviewed by root; SQL fixes were authored by verify_publication_gate and independently reviewed by verify_coverage_source, who also reviewed root's client/bootstrap changes.",
+      "source_changes": false
+    }
+  ],
+  "end_of_work": {
+    "date": "2026-10-16",
+    "scope": "Existing scoped-l1-l2-admission assignment only; record reconciliation and required checks, with root as the sole writer and publisher",
+    "implementation_remote_head_verified": "f5d8c46270d321c247c2b57a49797ff22c857fb9",
+    "delegates_have_separate_unpublished_branches": false,
+    "runtime_installation_and_genuine_admission": "NOT_ESTABLISHED_BY_SOURCE_PUBLICATION",
+    "certification_status": "NOT_ESTABLISHED",
+    "certification_blockers": [
+      "This source task has no accepted runtime assignment, database lease or exact-commit controller/issuer certification receipt.",
+      "The source merge and hosted CI do not establish credential-authenticated runtime installation or an operational scope grant.",
+      "PR #46 has no submitted GitHub review records; agent component review does not establish independent GitHub CODEOWNER approval."
+    ]
+  }
 }

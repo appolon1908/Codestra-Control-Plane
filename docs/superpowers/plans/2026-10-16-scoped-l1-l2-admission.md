@@ -72,8 +72,19 @@ README.md; docs/scoped-operation-admission.md; source-preparation record.
 - [x] Run affected tests and full normal/python3 -S suites with PostgreSQL 16 available.
 - [x] Independent whole-branch review; fix actionable findings and rerun affected checks.
 - [x] Commit exact source, ordinary push and draft atomic-to-subsection PR.
-- [ ] Attach PR and record exact validation and unresolved deployment/admission gates.
+- [x] Attach PR and record exact validation and unresolved deployment/admission gates.
 
 Executed source validation is recorded in docs/verification/2026-10-16-scoped-operation-admission.json. Publication checkpoints are recorded by the source PR; none grant runtime authority.
 
 PR #46 initially exposed a hosted test-discovery import error masked by the local library PYTHONPATH. The test modules now bootstrap their own resolved repository lib path. Both CI-equivalent full commands pass 575 tests without a library PYTHONPATH override; executed commands are in the validation record.
+
+End-of-work reconciliation on 2026-10-16 verified implementation head
+`f5d8c46270d321c247c2b57a49797ff22c857fb9` on its assigned remote branch and
+[PR #46](https://github.com/appolon1908/Codestra-Control-Plane/pull/46) merged
+at `31f8f4303fb5bcc26c48a5d636b405837411f3c5`. All three hosted implementation
+checks succeeded. The task record now identifies each existing contributor and
+the interrupted review separately; delegates' completed source is integrated
+on the shared task branch. No submitted GitHub review records were observed.
+The merge is a source checkpoint: runtime installation, accepted operational
+references, genuine scoped admission and controller certification remain
+outside this completed source task.

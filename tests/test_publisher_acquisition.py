@@ -103,7 +103,7 @@ class AcquisitionTests(unittest.TestCase):
         result=RestrictedRegistry(connection).acquire(fixture.REQUEST)
         self.assertEqual(result.snapshot,snapshot);self.assertEqual(result.authority,a)
         self.assertEqual(result.lease_id,receipt['lease_id']);self.assertEqual(result.lease_epoch,7)
-        self.assertEqual(cursor.execute.call_args.args,('SELECT assignment_leases.inspect_binding(%s)',(assignment,)))
+        self.assertEqual(cursor.execute.call_args.args,('SELECT scope_assignment_leases.inspect_binding(%s)',(assignment,)))
         for field,value in [('state','REVOKED'),('principal','forged'),('epoch',0),('binding_id','different')]:
             cursor.fetchone.side_effect=[(True,True),(dict(receipt,**{field:value}),)]
             with self.subTest(field=field),self.assertRaises(PublicationDenied):RestrictedRegistry(connection).acquire(fixture.REQUEST)

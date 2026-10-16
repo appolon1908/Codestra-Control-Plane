@@ -4,7 +4,7 @@ Authority read-model rows are operator-maintained, never runtime-writable.
 GitHub is independently queried on every preflight; stored PASS values are unused.
 """
 from dataclasses import fields,replace
-from datetime import datetime
+from datetime import datetime,timezone
 import uuid
 from urllib.parse import quote
 from . import evidence as e
@@ -73,7 +73,10 @@ class RestrictedRegistry:
                 require(type(lease) is e.LeaseEvidence,'AUTHENTICATED_LEASE_REQUIRED')
                 try:assignment=str(uuid.UUID(lease.assignment_id))
                 except (ValueError,TypeError,AttributeError):require(False,'AUTHENTICATED_ASSIGNMENT_REQUIRED')
-                cur.execute('SELECT assignment_leases.inspect_binding(%s)',(assignment,))
+                # This publisher handles registered scope/environment edges.
+                # Atomic candidate leases have a different, narrower authority
+                # and cannot authenticate these bindings.
+                cur.execute('SELECT scope_assignment_leases.inspect_binding(%s)',(assignment,))
                 row=cur.fetchone()
                 require(row is not None and type(row[0]) is dict,'ONLINE_LEASE_UNAVAILABLE')
                 receipt=row[0];actual=receipt.get('binding',{})
@@ -106,10 +109,11 @@ class RestrictedRegistry:
                 return tuple(e.PromotionRequest(**row[0]) for row in rows)
 
 class GitHubVerifier:
-    def __init__(self,api,*,certificate_name,certificate_app_id=None,provenance_verifier=None):
+    def __init__(self,api,*,certificate_name,certificate_app_id=None,provenance_verifier=None,clock=lambda:datetime.now(timezone.utc)):
         self.api=api;self.certificate_name=certificate_name;self.certificate_app_id=certificate_app_id
         self.provenance_verifier=provenance_verifier
         self._last_provenance=None
+        self.clock=clock
     @staticmethod
     def _producer(check):return 'github-actions:'+str(check['app']['id'])
     def _checks(self,repo,sha,requirements):
@@ -177,9 +181,21 @@ class GitHubVerifier:
     def revalidate(self,acquired,now):
         from .publisher_provenance import verify_contract
         require(verify_contract(self.provenance_verifier,acquired,now)==self._last_provenance,'PUBLISHER_PROVENANCE_CHANGED')
+        return self.fence(acquired,now)
+    def fence(self,acquired,now):
+        require(self._last_provenance is not None
+                and self._last_provenance.binding_hash==binding_digest(acquired.snapshot.observed_binding),
+                'PUBLICATION_PERMIT_UNAVAILABLE')
+        verify_issuer(acquired,now)
+        deadline=min(self._last_provenance.expires_at,acquired.authority.expires_at,
+                     acquired.issuer.expires_at,acquired.snapshot.lease.expires_at)
+        require(deadline>now,'PUBLICATION_PERMIT_EXPIRED')
+        return deadline
     def post(self,acquired,context,state):
         from .publisher_adapter import CONTEXTS
         require(context in CONTEXTS and state=='success','INVALID_PUBLICATION_CONTEXT')
+        deadline=self.fence(acquired,self.clock())
+        self.api.cap_expiry(deadline)
         b=acquired.snapshot.observed_binding
         result=self.api.post(f'/repos/{b.repository}/statuses/{b.source_sha}',
                              {'state':state,'context':context,'description':'Authenticated exact-binding promotion evidence',

@@ -34,6 +34,13 @@ class GitHubAppTests(unittest.TestCase):
         self.client.assert_identity(Store().authority,123,fixture.NOW)
         self.client.clock=lambda:fixture.NOW+timedelta(minutes=3)
         with self.assertRaises(PublicationDenied):self.client.get('/things')
+    def test_installation_token_cannot_outlive_publication_permit(self):
+        self.client.assert_identity(Store().authority,123,fixture.NOW)
+        self.client.cap_expiry(fixture.NOW+timedelta(seconds=1))
+        self.client.clock=lambda:fixture.NOW+timedelta(seconds=2)
+        before=len(self.calls)
+        with self.assertRaises(PublicationDenied):self.client.post('/things',{})
+        self.assertEqual(len(self.calls),before)
     def test_pagination_is_bounded_and_duplicate_ids_refused(self):
         self.client.assert_identity(Store().authority,123,fixture.NOW)
         self.assertEqual(self.client.pages('/things'),[{'id':1}])
