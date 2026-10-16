@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "certifier-integration",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--certifier-integration",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "2d312d3a63adcb06694aa66e1b72601f11e7dac3",
+  "authority": "Ralph L. Appolon",
+  "authorization": "Ralph source implementation and CPhelper coordination: implement source-only independent certifier transport and existing authenticated scope receipt integration. Lead additionally authorized an empty forward source read model and bounded restricted reader; no live application.",
+  "scope": "Independent App check-run transport of existing authoritative SCOPE_CERTIFICATION receipts, read-only exact binding registry source, protected accepted-contract policy integration, offline tests and boundary documentation.",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false,
+  "production_go": false,
+  "live_capabilities_enabled": false,
+  "external_effects": false,
+  "first_issuance_implemented": false,
+  "unresolved_gates": [
+    "No authoritative first-certification decision/issuer API was supplied; no certification can be synthesized from CI, promotion.allowed or legacy PASS.",
+    "011-certifier-authority.sql is an empty unapplied source read model. Independently authenticated pre-existing scope receipts and OID-bound product grants require separate operator acceptance.",
+    "Accepted producer policy, independent certifier credential custody, verified TLS database access, private durable ledger and live online protection evidence are not provisioned by this change.",
+    "No public CLI or installed production certifier factory is enabled. Default privileged dependencies remain unset and deny."
+  ]
+}
