@@ -8,7 +8,7 @@ No public CLI, production factory, trust bootstrap or credential installation is
 provided. Promotion.allowed, ordinary CI and legacy PASS do not confer authority.
 Python types never authenticate themselves; all registry acquisition is privileged.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import re
 from urllib.parse import quote
@@ -351,6 +351,8 @@ class CertifierGitHubVerifier:
         return value['id']
 
     def verify_dependencies(self, acquired, contract, now):
+        from datetime import timedelta
+        deadline = contract.expires_at
         if acquired.dependencies:
             self.api.assert_identity(acquired.authority, acquired.repository_id, now)
         for dependency in acquired.dependencies:
@@ -367,9 +369,29 @@ class CertifierGitHubVerifier:
                     and value['external_id'] == binding_digest(b)
                     and value['status'] == 'completed' and value['conclusion'] == 'success',
                     'FIRST_CERTIFICATION_DEPENDENCY_RECEIPT_UNVERIFIED')
+            completed_raw = value.get('completed_at')
+            require(type(completed_raw) is str, 'FIRST_CERTIFICATION_DEPENDENCY_TIME_UNAVAILABLE')
+            try:
+                completed = datetime.fromisoformat(completed_raw.replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                require(False, 'FIRST_CERTIFICATION_DEPENDENCY_TIME_INVALID')
+            require(completed.tzinfo is not None and completed.utcoffset() == timedelta(0),
+                    'FIRST_CERTIFICATION_DEPENDENCY_TIME_INVALID')
+            fresh_until = completed + timedelta(seconds=contract.max_receipt_age_seconds)
+            require(completed <= now < fresh_until, 'FIRST_CERTIFICATION_DEPENDENCY_RECEIPT_STALE_OR_FUTURE')
+            suite_ref = value.get('check_suite')
+            require(type(suite_ref) is dict and type(suite_ref.get('id')) is int and suite_ref['id'] > 0,
+                    'FIRST_CERTIFICATION_DEPENDENCY_SUITE_UNAVAILABLE')
+            suite = self.api.get(f'/repos/{b.repository}/check-suites/{suite_ref["id"]}')
+            require(type(suite.get('id')) is int and suite['id'] == suite_ref['id']
+                    and suite.get('app', {}).get('id') == contract.certifier_app_id
+                    and suite.get('head_sha') == b.source_sha and suite.get('status') == 'completed'
+                    and suite.get('conclusion') == 'success', 'FIRST_CERTIFICATION_DEPENDENCY_SUITE_UNVERIFIED')
+            deadline = min(deadline, dependency.expires_at, fresh_until)
             for ref, sha in ((b.source_ref, b.source_sha), (b.target_ref, b.target_base_sha)):
                 value = self.api.get(f'/repos/{b.repository}/branches/{quote(ref, safe="")}')
                 require(value['commit']['sha'] == sha, 'FIRST_CERTIFICATION_DEPENDENCY_REF_MOVED')
+        return deadline
 
     def readback(self, acquired, contract, check_id):
         b = acquired.snapshot.observed_binding
@@ -583,6 +605,7 @@ class AcceptedFirstCertificationContract:
     scope_name: str
     delegation_ref: str
     capability_receipt: str
+    max_receipt_age_seconds: int
 
 
 def _validate_pending(acquired, binding, now, host):
@@ -644,6 +667,8 @@ def _validate_first_contract(value, acquired, now):
             and all(v.producer not in ('github-actions:' + str(value.certifier_app_id),
                                       'github-actions:' + str(value.publisher_app_id))
                     for v in acquired.snapshot.required_checks), 'FIRST_CERTIFICATION_DISTINCT_ISSUER_REQUIRED')
+    require(type(value.max_receipt_age_seconds) is int and 1 <= value.max_receipt_age_seconds <= 300,
+            'FIRST_CERTIFICATION_DEPENDENCY_FRESHNESS_POLICY_REQUIRED')
     require(type(value.controller_contexts) is tuple and bool(value.controller_contexts)
             and len(set(value.controller_contexts)) == len(value.controller_contexts)
             and set(value.controller_contexts) <= set(CONTEXTS)
@@ -676,7 +701,7 @@ class AcceptedFirstCertificationContractVerifier:
             a.app_id, policy.publisher_app_id, policy.certificate_name, policy.controller_contexts,
             policy.acceptance_ref + '#' + policy.revision, min(policy.expires_at, acquired.expires_at),
             'FIRST_SCOPE_CERTIFICATION', acquired.scope_type, acquired.scope_name,
-            acquired.delegation_ref, acquired.capability_receipt)
+            acquired.delegation_ref, acquired.capability_receipt, policy.max_receipt_age_seconds)
 
 
 class AuthenticatedFirstCertifier(AuthenticatedCertifier):
@@ -689,15 +714,16 @@ class AuthenticatedFirstCertifier(AuthenticatedCertifier):
         acquired = self.registry.acquire(binding, now)
         _validate_pending(acquired, binding, now, self.host)
         contract = _first_contract(self.contract_verifier, acquired, now)
-        self.github.verify_dependencies(acquired, contract, now)
+        dependency_deadline = self.github.verify_dependencies(acquired, contract, now)
         self.github.verify(acquired, contract, now)
         fresh = self.clock()
         require(self.registry.acquire(binding, fresh) == acquired, 'FIRST_CERTIFICATION_DELEGATION_REVOKED_OR_CHANGED')
         require(_first_contract(self.contract_verifier, acquired, self.clock()) == contract, 'FIRST_CERTIFICATION_CONTRACT_CHANGED')
         final = self.clock()
         _validate_pending(acquired, binding, final, self.host)
-        _validate_first_contract(contract, acquired, final)
-        return acquired, contract
+        effect_contract = replace(contract, expires_at=min(contract.expires_at, dependency_deadline))
+        _validate_first_contract(effect_contract, acquired, final)
+        return acquired, effect_contract
 
     def publish(self, binding):
         acquired, contract = self._acquire(binding)
@@ -731,6 +757,85 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
     Missing operator read model, product grant or scope lease API denies. There is
     no fallback to legacy metadata or the incompatible atomic assignment API.
     """
+    @staticmethod
+    def _registered_dependencies(cur, acquired):
+        """Reconcile the entire current registered hierarchy, never snapshot claims."""
+        from .policy import ScopeEdge
+        b = acquired.snapshot.observed_binding; mapping = acquired.snapshot.mapping
+        cur.execute("""SELECT p.repository,p.test_branch,p.promotion_chain,r.payload,
+         s.repository_id,s.development_ref,s.testing_ref,s.staging_ref,s.production_ref,s.release_ref,
+         NOT EXISTS(SELECT 1 FROM scoped_registration.workstations rw
+          LEFT JOIN public.workstations w ON w.workstation_id=rw.workstation_id AND w.product=rw.product
+          WHERE rw.product=p.product AND w.workstation_id IS NULL)
+         AND NOT EXISTS(SELECT 1 FROM scoped_registration.lanes l
+          LEFT JOIN public.workstations w ON w.workstation_id=l.identity AND w.product=l.product
+          WHERE l.product=p.product AND l.kind='workstation' AND w.workstation_id IS NULL)
+         FROM public.products p JOIN scoped_registration.products r USING(product)
+         JOIN scope_assignment_leases.products s USING(product)
+         WHERE p.product=%s AND s.repository=p.repository AND s.active AND s.expires_at>clock_timestamp()
+         AND NOT p.production_go AND NOT p.live_capabilities_enabled AND NOT p.external_effects_enabled""", (b.product,))
+        product = cur.fetchone()
+        require(product is not None, 'FIRST_CERTIFICATION_CURRENT_PRODUCT_REGISTRY_REQUIRED')
+        repository, testing, chain, registered, repo_id, development, test_ref, staging, production, release, complete = product
+        require(repository == b.repository and repo_id == acquired.repository_id and complete is True
+                and registered == dict(product=b.product, repository=repository, test_branch=testing, promotion_chain=chain)
+                and chain == [development, test_ref, staging, production] and testing == test_ref
+                and (mapping.development_ref, mapping.testing_ref, mapping.staging_ref,
+                     mapping.production_ref, mapping.release_ref) == (development, test_ref, staging, production, release),
+                'FIRST_CERTIFICATION_PRODUCT_REGISTRY_DRIFT')
+        cur.execute("""SELECT section_key,branch FROM public.sections
+         WHERE product=%s ORDER BY branch LIMIT 1001""", (b.product,))
+        sections = cur.fetchall()
+        require(len(sections) <= 1000 and len({key for key, _ in sections}) == len(sections)
+                and len({ref for _, ref in sections}) == len(sections), 'FIRST_CERTIFICATION_SECTION_INVENTORY_INVALID')
+        section_refs = dict(sections)
+        cur.execute("""SELECT w.workstation_id,w.section,w.subsection,w.branch,w.parent_branch,
+         w.worktree,w.order_index,w.depends_on,r.branch,r.worktree,r.payload,l.worktree,l.branch,l.identity
+         FROM public.workstations w
+         LEFT JOIN scoped_registration.workstations r ON r.workstation_id=w.workstation_id AND r.product=w.product
+         LEFT JOIN scoped_registration.lanes l ON l.identity=w.workstation_id AND l.product=w.product AND l.kind='workstation'
+         WHERE w.product=%s ORDER BY w.branch LIMIT 1001""", (b.product,))
+        workstations = cur.fetchall()
+        require(len(workstations) <= 1000, 'FIRST_CERTIFICATION_SUBSECTION_INVENTORY_LIMIT')
+        edges = {ScopeEdge('section', ref, 'development', development) for _, ref in sections}
+        scopes = {}; identities = {}
+        for row in workstations:
+            wid, section, subsection, ref, parent, worktree, order, depends, registered_ref, registered_tree, payload, lane_tree, lane_ref, lane_id = row
+            expected = dict(product=b.product, workstation_id=wid, section=section, subsection=subsection,
+                            branch=ref, parent_branch=parent, worktree=worktree, order_index=order)
+            require(section_refs.get(section) == parent and payload == expected
+                    and registered_ref == ref == lane_ref and registered_tree == worktree == lane_tree
+                    and lane_id == wid and wid not in identities and ref not in scopes,
+                    'FIRST_CERTIFICATION_SUBSECTION_REGISTRY_DRIFT')
+            require(type(depends) is list and all(_text(v) for v in depends)
+                    and len(set(depends)) == len(depends), 'FIRST_CERTIFICATION_SUBSECTION_DEPENDENCY_DRIFT')
+            scopes[ref] = (parent, wid, tuple(depends)); identities[wid] = (ref, parent)
+            edges.add(ScopeEdge('subsection', ref, 'section', parent))
+        require(len(mapping.scope_edges) == len(edges) and set(mapping.scope_edges) == edges,
+                'FIRST_CERTIFICATION_SCOPE_MAPPING_HIDES_CURRENT_REGISTRY')
+        scope = acquired.scope_type
+        if scope == 'SECTION':
+            required = {(ref, parent) for ref, (parent, _, _) in scopes.items() if parent == b.source_ref}
+        elif scope == 'DEVELOPMENT':
+            required = {(ref, development) for _, ref in sections}
+        elif scope in ('TESTING', 'STAGING', 'PRODUCTION'):
+            required = {dict(TESTING=(development, test_ref), STAGING=(test_ref, staging), PRODUCTION=(staging, production))[scope]}
+        elif scope == 'SUBSECTION':
+            require(b.source_ref in scopes, 'FIRST_CERTIFICATION_SUBSECTION_REGISTRY_REQUIRED')
+            parent, workstation, depends = scopes[b.source_ref]
+            cur.execute("""SELECT EXISTS(SELECT 1 FROM public.atomic_tasks WHERE workstation_id=%s)
+             OR EXISTS(SELECT 1 FROM scoped_registration.candidates WHERE product=%s AND workstation_id=%s)""",
+                        (workstation, b.product, workstation))
+            require(cur.fetchone() == (False,), 'FIRST_CERTIFICATION_ATOMIC_DEPENDENCY_CERTIFICATE_UNSUPPORTED')
+            require(all(value in identities and value != workstation for value in depends),
+                    'FIRST_CERTIFICATION_SUBSECTION_PREREQUISITE_UNREGISTERED')
+            required = {identities[value] for value in depends}
+        else:
+            require(False, 'FIRST_CERTIFICATION_SCOPE_UNSUPPORTED')
+        declared = [(value.binding.source_ref, value.binding.target_ref) for value in acquired.dependencies]
+        require(len(declared) == len(required) and set(declared) == required,
+                'FIRST_CERTIFICATION_CURRENT_DEPENDENCY_INVENTORY_MISMATCH')
+
     def acquire(self, binding, now):
         import uuid
         from .publisher_acquisition import decode_snapshot
@@ -776,6 +881,7 @@ class RestrictedFirstCertificationRegistry(RestrictedCertificationRegistry):
                     assignment_id, str(lease_id), epoch, principal, delegation_ref, capability,
                     issued_at, expires_at, tuple(dependencies))
                 _validate_pending(acquired, binding, now, authority.host)
+                self._registered_dependencies(cur, acquired)
                 cur.execute('SELECT scope_assignment_leases.inspect_binding(%s)', (assignment_id,))
                 row = cur.fetchone()
                 require(row is not None and type(row[0]) is dict, 'FIRST_CERTIFICATION_ONLINE_SCOPE_LEASE_UNAVAILABLE')

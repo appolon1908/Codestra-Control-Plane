@@ -32,5 +32,5 @@ CREATE TABLE certifier_authority.pending_bindings (
 );
 REVOKE ALL ON certifier_authority.pending_bindings FROM PUBLIC;
 COMMENT ON TABLE certifier_authority.pending_bindings IS
- 'Operator-owned exact scope first-issuance delegation with complete independently accepted dependency policy. Not an existing certificate or a caller/CI PASS. Empty by default; runtime is restricted to read-only acquisition and current independent online verification.';
+ 'Operator-owned exact scope first-issuance delegation with declared dependency policy. Runtime must independently reconcile current registered prerequisite inventory; delegation cannot override configured children. Not an existing certificate or a caller/CI PASS. Empty by default; runtime is restricted to read-only acquisition and current independent online verification.';
 COMMIT;

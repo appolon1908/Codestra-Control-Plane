@@ -17,8 +17,8 @@ The empty source table in `013-first-certification-pending.sql` binds the
 credential-authenticated reader's principal/OID and explicit product grant to the
 exact repository/product, repository ID, PR, source/target refs, head/base SHAs,
 registered scope, authority, current scope assignment/lease ID/epoch/principal,
-accepted delegation reference and capability. The operator explicitly accepts the
-complete dependency policy. Delegations expire within five minutes and remain
+accepted delegation reference and capability. The operator explicitly accepts a declared dependency policy; every acquisition
+reconciles it against the current configured hierarchy. Delegations expire within five minutes and remain
 inactive by default. No first-certification rows, credentials or grants are seeded.
 
 `RestrictedFirstCertificationRegistry` requires verified TLS with a protected CA,
@@ -33,12 +33,28 @@ records deny. The incompatible atomic-task lease API is never a fallback. Every 
 uses a READ COMMITTED transaction; repeatable snapshots cannot cache revoked
 authority.
 
-The dependency policy is an operator-owned complete inventory, including an
-explicit empty inventory when no dependencies apply. Every listed dependency
+The dependency policy is operator-owned, and its declaration is independently
+checked against the current registry on every acquisition. Product/environment
+refs, registered product mirrors, all configured sections and all subsections
+with their registered mirrors and lanes must agree with the snapshot mapping.
+A snapshot or operator delegation cannot hide a current child. SECTION requires
+every registered subsection under its section; DEVELOPMENT requires every
+configured section; TESTING, STAGING and PRODUCTION require the immediate
+registered predecessor certificate binding. Missing or extra declared bindings
+deny. SUBSECTION requires its registered workstation dependencies and denies
+whenever any actual atomic task or registered candidate exists in that subsection:
+the shared certificate contract does not support authentic atomic bindings.
+This limitation has no status/PASS or atomic-route exception. Empty declared
+inventories are valid only when the current supported prerequisite inventory is
+actually empty. Every listed dependency
 must use a supported registered edge in the same product/repository, have an
 unambiguous exact binding, and possess a current successful check-run from the
 accepted certifier App/name. The online verifier rereads dependency refs around
-receipt inspection. Missing, expired, wrong-issuer or revoked dependencies deny;
+receipt inspection and independently reads each check suite to match its App
+and exact head SHA. GitHub `completed_at` must be UTC, present, not in the future,
+and fresh under the protected policy’s `max_receipt_age_seconds`. An operator
+expiry cannot extend that real receipt freshness deadline. The minimum of all
+these deadlines bounds the returned effect contract and API token before POST. Missing, expired, wrong-issuer or revoked dependencies deny;
 legacy metadata does not supply their provenance. Policy booleans alone cannot
 replace this separately authenticated inventory.
 
@@ -93,7 +109,12 @@ executed nor authorized as runtime provisioning by this source preparation.
 2. Review and separately apply source migrations 011, 012 and 013 under an
    operator-owned schema authority. Provision a SCRAM/TLS certifier reader with
    OID-bound product/read grants, SELECT on its required read-model/product
-   tables, and only the scope lease `inspect_binding(uuid)` API. It must have no
+   tables, and only the scope lease `inspect_binding(uuid)` API. Canonical dependency
+   reconciliation additionally requires schema USAGE on `scoped_registration`
+   and SELECT on `public.products`, `public.sections`, `public.workstations`,
+   `public.atomic_tasks`, `scoped_registration.products`,
+   `scoped_registration.workstations`, `scoped_registration.lanes`,
+   `scoped_registration.candidates`, and `scope_assignment_leases.products`. It must have no
    claim/write/schema-owner privileges. No source migration creates these grants.
 3. Register the actual product/scope mapping and exact scope assignment through
    the operator-owned scope lease records. A separately authenticated scope owner
