@@ -146,7 +146,7 @@ class GitMaterializer:
 
 
 def dependency_digest(binding,prerequisite):
-    require(set(prerequisite)=={'product','scope_type','scope_name','sha'} and prerequisite['scope_type'] in ('SECTION','DEVELOPMENT','TESTING','STAGING','PRODUCTION'),'INVALID_DEPENDENCY_SCOPE')
+    require(set(prerequisite)=={'product','scope_type','scope_name','sha'} and prerequisite['scope_type'] in ('SUBSECTION','SECTION','DEVELOPMENT','TESTING','STAGING','PRODUCTION'),'INVALID_DEPENDENCY_SCOPE')
     payload={'schema':'codestra.lease-dependency.v1','promotion':asdict(binding),'scope_type':prerequisite['scope_type'],'scope_name':prerequisite['scope_name']}
     return hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "coordinator-atomic-inspection",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--coordinator-atomic-inspection",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "641fd8f59bd462337809bb353bb5456d87f3cee1",
+  "owner_thread": "01a13c31-799c-7d72-8fe5-dd1fcd92c279",
+  "worktree": "/tmp/cp-coordinator-01a13c31",
+  "authorization_basis": "User explicitly requested continued automatic clean controller implementation, PR updates, resolved mapping and genuine registration/dependency/atomic admission evidence.",
+  "scope": "Executable read-only atomic inspection with restricted SQL mapping/lease/dependency acquisition and independent current Git/GitHub validation. No live registration, admission, lease, certification, publisher effect or deployment.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}
