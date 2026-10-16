@@ -81,3 +81,35 @@ class ProvenanceTests(unittest.TestCase):
             required_checks=(RequiredCheck('quality','github-actions:99'),)))
         with self.assertRaisesRegex(PublicationDenied,'INDEPENDENT_PROVENANCE'):
             verify_contract(Provenance(),acquired,fixture.NOW)
+
+    def test_final_online_revalidation_cannot_consume_lifetime_before_intent(self):
+        from test_publisher_acquisition import API
+        from codestra_control.publisher_adapter import AuthenticatedPublisher
+        now=[fixture.NOW]; calls=[0]
+        class SlowProvenance:
+            def verify(self,acquired,at):
+                calls[0]+=1
+                if calls[0]==3:now[0]=fixture.NOW+timedelta(seconds=2)
+                return replace(contract(acquired),controller_contexts=('codestra-control-plane','codestra/control-plane'),expires_at=fixture.NOW+timedelta(seconds=1))
+        store=Store()
+        store.snapshot=replace(store.snapshot,certificate=replace(store.snapshot.certificate,receipt_id='check:10'))
+        verifier=GitHubVerifier(API(),certificate_name='scope-certification',certificate_app_id=99,provenance_verifier=SlowProvenance())
+        ledger=Mock()
+        publisher=AuthenticatedPublisher(store,verifier,ledger,host='dev-desktop',clock=lambda:now[0])
+        with self.assertRaises(PublicationDenied):publisher._acquire(fixture.REQUEST)
+        self.assertEqual(ledger.mock_calls,[])
+
+    def test_post_has_fresh_expiry_fence_after_successful_preflight(self):
+        from test_publisher_acquisition import API
+        api=API();api.post=Mock(return_value={'id':77})
+        now=[fixture.NOW]
+        class ShortProvenance:
+            def verify(self,acquired,at):return replace(contract(acquired),controller_contexts=('codestra-control-plane','codestra/control-plane'),expires_at=fixture.NOW+timedelta(seconds=1))
+        verifier=GitHubVerifier(api,certificate_name='scope-certification',certificate_app_id=99,provenance_verifier=ShortProvenance())
+        verifier.clock=lambda:now[0]
+        acquired=replace(self.acquired,snapshot=replace(self.acquired.snapshot,
+            certificate=replace(self.acquired.snapshot.certificate,receipt_id='check:10')))
+        verifier.verify(acquired,fixture.NOW)
+        now[0]=fixture.NOW+timedelta(seconds=2)
+        with self.assertRaises(PublicationDenied):verifier.post(acquired,'codestra-control-plane','success')
+        api.post.assert_not_called()

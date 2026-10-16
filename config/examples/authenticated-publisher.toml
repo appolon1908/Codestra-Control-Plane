@@ -1,0 +1,13 @@
+# PROPOSED source template, never installed or accepted by this task.
+# Zero App IDs intentionally refuse startup before any database connection.
+# The separately protected acceptance record must also be ACCEPTED and current.
+app_id = 0
+installation_id = 0
+certificate_app_id = 0
+certificate_name = "scope-certification"
+app_key_file = "/etc/codestra/control-plane/credentials/publisher-app.pem"
+database_dsn_file = "/etc/codestra/control-plane/credentials/publisher.dsn"
+ledger_file = "/var/lib/codestra-control-plane/publisher/intents.sqlite"
+producer_acceptance_file = "/etc/codestra/control-plane/producer-acceptance.json"
+repositories = ["appolon1908/codestra"]
+certifier_observer_socket = "/run/codestra-certifier-observer/observer.sock"

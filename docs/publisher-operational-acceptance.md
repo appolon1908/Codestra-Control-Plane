@@ -45,9 +45,11 @@ PostgreSQL `system_user`, together with its privilege, TLS and binding checks.
 That source guard does not itself approve an authentication method, identity
 mapping, credential custodian or runtime principal.
 
-The startup contract requires exactly seven configuration fields: `app_id`,
+The startup contract requires exactly ten configuration fields: `app_id`,
 `installation_id`, `certificate_app_id`, `certificate_name`, `app_key_file`,
-`database_dsn_file` and `ledger_file`. See the successor source guide for their
+`database_dsn_file`, `ledger_file`, `producer_acceptance_file`,
+`certifier_observer_socket` and `repositories`. The independently accepted producer
+contract and separate read-only certifier identity observer are required. See the successor source guide for their
 types and custody requirements. A template or a nonempty receipt string is not
 accepted operator configuration or authenticated provenance.
 

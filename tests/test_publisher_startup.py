@@ -82,10 +82,11 @@ class StartupTests(unittest.TestCase):
         from codestra_control.publisher_startup import CONFIG,run_configured_cycle
         from codestra_control.publisher_adapter import PublicationResult
         import test_decision as fixture
-        config=b'app_id=7\ninstallation_id=8\ncertificate_app_id=99\ncertificate_name="scope-certification"\napp_key_file="/fixture/app.pem"\ndatabase_dsn_file="/fixture/db.dsn"\nledger_file="/fixture/intents.sqlite"\n'
+        config=b'app_id=7\ninstallation_id=8\ncertificate_app_id=99\ncertificate_name="scope-certification"\napp_key_file="/fixture/app.pem"\ndatabase_dsn_file="/fixture/db.dsn"\nledger_file="/fixture/intents.sqlite"\nproducer_acceptance_file="/fixture/acceptance.json"\ncertifier_observer_socket="/fixture/observer.sock"\nrepositories=["appolon1908/Breero.com"]\n'
         dsn=b'host=authority.example dbname=registry user=publisher sslmode=verify-full sslrootcert=/fixture/ca.pem'
         def read(path,**kwargs):
-            return {str(CONFIG):config,'/fixture/db.dsn':dsn,'/fixture/ca.pem':b'synthetic CA fixture'}[str(path)]
+            return {str(CONFIG):config,'/fixture/db.dsn':dsn,'/fixture/ca.pem':b'synthetic CA fixture',
+                    '/fixture/acceptance.json':json.dumps(self.acceptance()).encode()}[str(path)]
         service=mock.MagicMock();service._publisher.store.bindings.return_value=(fixture.REQUEST,)
         service._publisher.publish.return_value=PublicationResult('COMPLETE',())
         from codestra_control.publisher_github import ObservedPR
@@ -98,8 +99,47 @@ class StartupTests(unittest.TestCase):
             self.assertEqual(run_configured_cycle(),('COMPLETE',))
         connect.assert_called_once_with(host='authority.example',dbname='registry',user='publisher',sslmode='verify-full',sslrootcert='/fixture/ca.pem')
         self.assertIsInstance(build.call_args.args[1],AppJWT)
+        from codestra_control.publisher_acceptance import AcceptedProducerVerifier
+        self.assertIsInstance(build.call_args.kwargs['provenance_verifier'], AcceptedProducerVerifier)
         service._publisher.publish.assert_called_once_with(fixture.REQUEST)
         connection.close.assert_called_once_with()
+    @staticmethod
+    def acceptance():
+        from datetime import datetime, timedelta, timezone
+        now=datetime.now(timezone.utc)
+        return {'schema':'codestra.producer-acceptance.v1','state':'ACCEPTED',
+                'accepted_by':'Ralph L. Appolon','acceptance_ref':'synthetic-operator-acceptance',
+                'publisher_app_id':7,'publisher_installation_id':8,
+                'certificate_app_id':99,'certificate_installation_id':98,
+                'certificate_name':'scope-certification',
+                'controller_contexts':['codestra-control-plane','codestra/control-plane'],
+                'repositories':[{'repository':'appolon1908/Breero.com','repository_id':123}],
+                'custody_receipt':'synthetic-custody','certifier_custody_receipt':'synthetic-certifier-custody',
+                'certifier_capability_receipt':'synthetic-capability',
+                'accepted_at':(now-timedelta(seconds=1)).isoformat(),
+                'expires_at':(now+timedelta(minutes=30)).isoformat(),'max_receipt_age_seconds':300}
+
+    def test_proposed_or_mismatched_acceptance_denies_before_database_connection(self):
+        from codestra_control.publisher_startup import CONFIG,run_configured_cycle
+        config=b'app_id=7\ninstallation_id=8\ncertificate_app_id=99\ncertificate_name="scope-certification"\napp_key_file="/fixture/app.pem"\ndatabase_dsn_file="/fixture/db.dsn"\nledger_file="/fixture/intents.sqlite"\nproducer_acceptance_file="/fixture/acceptance.json"\ncertifier_observer_socket="/fixture/observer.sock"\nrepositories=["appolon1908/Breero.com"]\n'
+        for mutation in ({'state':'PROPOSED'},{'publisher_app_id':777},
+                         {'repositories':[{'repository':'appolon1908/codestra','repository_id':456}]}):
+            accepted=dict(self.acceptance(),**mutation)
+            def read(path,**kwargs):
+                return config if path==CONFIG else json.dumps(accepted).encode()
+            with self.subTest(mutation=mutation),mock.patch('codestra_control.publisher_startup.protected_read',side_effect=read),mock.patch('codestra_control.publisher_startup.verify_code_custody'),mock.patch('psycopg2.connect') as connect:
+                with self.assertRaises(PublisherUnavailable): run_configured_cycle()
+                connect.assert_not_called()
+
+    def test_pilot_inventory_rejects_bindings_outside_configured_scope(self):
+        from codestra_control.publisher_startup import reconcile_inventory
+        from codestra_control.publisher_adapter import PublicationDenied
+        import test_decision as fixture
+        publisher=mock.MagicMock();publisher.store.bindings.return_value=(fixture.REQUEST,)
+        with self.assertRaises(PublicationDenied):
+            reconcile_inventory(publisher,7,8,repositories=('appolon1908/codestra',))
+        publisher.github.api.inventory.assert_not_called()
+        publisher.publish.assert_not_called()
     def test_empty_authority_inventory_is_explicitly_unavailable_not_healthy(self):
         from codestra_control.publisher_startup import reconcile_inventory
         publisher=mock.MagicMock();publisher.store.bindings.return_value=()

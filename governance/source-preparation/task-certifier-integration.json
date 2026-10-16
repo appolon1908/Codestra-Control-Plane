@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "certifier-integration",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--certifier-integration",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "2d312d3a63adcb06694aa66e1b72601f11e7dac3",
+  "authority": "Ralph L. Appolon",
+  "authorization": "Ralph source implementation and CPhelper coordination: implement source-only independent certifier transport and existing authenticated scope receipt integration. Lead additionally authorized an empty forward source read model and bounded restricted reader; no live application. Lead subsequently selected a source first-issuance path with exact scoped delegation, new scope-level lease source API and empty pending read model; no runtime activation or live writes.",
+  "scope": "Independent App transport and separate exact-scope delegated first certification source; authenticated read-only pending/existing registries; source scope lease API integration; protected accepted contracts; offline tests and operational proposal.",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false,
+  "production_go": false,
+  "live_capabilities_enabled": false,
+  "external_effects": false,
+  "first_issuance_implemented": true,
+  "unresolved_gates": [
+    "011/012/013 source schemas are unapplied and empty. Authenticated principals/OID-bound product grants, actual scoped assignments/leases, and independently accepted exact pending delegations require separate operator provisioning.",
+    "Protected producer acceptance, independent certifier custody/capability, strict TLS/SCRAM database connection and private durable ledger are unprovisioned.",
+    "No public CLI, installed production composition or certifier service is enabled. Default privileged dependencies remain unset and deny.",
+    "Final local expiry fences cannot be atomic with remote network acceptance; residual cross-system timing must be operationally accepted.",
+    "SUBSECTION first certification with any configured atomic task/candidate remains denied: the shared certificate contract has no authentic registered atomic dependency binding. No atomic/hotfix route exception is added."
+  ],
+  "first_issuance_status": "SOURCE_ONLY_UNPROVISIONED",
+  "validation": {
+    "targeted_result": "69 tests passed; 0 skipped; 8.903 seconds",
+    "scope": "Final certifier source, factory, expiry and installation guards, 011/013 constraints, and combined real TLS/SCRAM PostgreSQL012/013 registry/first-issuer with synthetic GitHub only. Real registered-child omission, extra dependency, hidden snapshot mapping, final-read child additions and actual atomic inventory regressions; all environment predecessor policy; independent suite/time freshness and deadline expiry regressions. Real PostgreSQL cross-section prerequisite omission red-green; valid canonical section-ID/key receipts; ambiguous, duplicate, unknown, self, malformed and cyclic section dependency rejection. Real PostgreSQL global subsection graph cycle with fresh child receipts reproduced red-green; canonical workstation ID references, unknown/self/alias/duplicate rejection across section issuance, and complete acyclic graph success.",
+    "fixture_dependencies": "Actual 012 fixture and protected acceptance parser were loaded from their sibling source worktrees for the isolated target run. Final assembled tests now import these required modules directly and fail if missing.",
+    "storage": "New private 0700 /dev/shm temporary directory; default PostgreSQL/fsync flags preserved; fixture database removed on teardown.",
+    "full_suite": "No second full suite launched; integration lead owns final assembled full-suite validation."
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "publisher-receipt-integration",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--publisher-receipt-integration",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "2d312d3a63adcb06694aa66e1b72601f11e7dac3",
+  "authority": "Ralph L. Appolon",
+  "owner": "Publisher Integration source implementation helper",
+  "authorization": "Ralph explicitly authorized source implementation helpers. Root lead owns startup and integration. No source publication or installed-runtime changes are authorized for this helper.",
+  "scope": "Add the protected exact-schema producer acceptance loader and online publisher/certifier receipt verifier with offline tests. Independent certifier identity is observed through an administered narrow read-only API port; no certifier signer is obtained by the publisher. No selected live identities, credentials, grants, leases or acceptance records are provisioned.",
+  "reviewed_source_sha256": {
+    "lib/codestra_control/publisher_acceptance.py": "f5b22d3652e046d5e30f79059a0c942b8d8198c8254152542a322a78e2aed7cc",
+    "tests/test_publisher_acceptance.py": "1b1c4277d563f36f8bb273af6c34dac588d48406894f3635a15a27ceb4d6d44d"
+  },
+  "validation": {
+    "command": "python3 -m unittest discover -s tests -p test_publisher_acceptance.py -v",
+    "result": "Ran 24 tests in 0.323s; OK",
+    "test_effects": "Synthetic HTTP responses and a temporary SQLite intent ledger only. Rejected protected acceptance leaves no publication intents and no status effects. The repository-wide unittest command was separately started; its result is reported by the integration lead after completion."
+  },
+  "unresolved_gates": [
+    "Operator-authenticated ACCEPTED policy and actual producer/custody/capability pins remain unprovisioned.",
+    "A separately administered credential custodian must supply authenticated certifier App installation observations.",
+    "The complete selected-repository inventory of both App installations must be operationally accepted. Current per-target coverage reads do not establish that complete inventory; protected policy pins and repository-scoped publisher tokens cannot automatically expand publication targets.",
+    "Installed runtime, permissions, GitHub protections, database authority, leases, certification and publication acceptance remain outside this source implementation."
+  ],
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false,
+  "PRODUCTION_GO": "NO",
+  "LIVE_CAPABILITIES_ENABLED": "NO",
+  "EXTERNAL_EFFECTS": false
+}

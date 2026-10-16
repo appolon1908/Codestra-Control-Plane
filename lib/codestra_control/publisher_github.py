@@ -123,6 +123,12 @@ class GitHubAppClient:
     def _call(self,method,path,body=None):
         require(self._token is not None and self._expires>self.clock(),'APP_SESSION_UNAVAILABLE')
         return self.request(method,path,self._token,body)
+    def cap_expiry(self,deadline):
+        """An installation token cannot extend an acquired publication permit."""
+        require(type(deadline) is datetime and deadline.tzinfo is not None
+                and self._expires is not None,'APP_PERMIT_UNAVAILABLE')
+        self._expires=min(self._expires,deadline)
+        require(self._expires>self.clock(),'APP_PERMIT_EXPIRED')
     def get(self,path):return self._call('GET',path)
     def post(self,path,body):return self._call('POST',path,body)
     def pages(self,path,key=None):

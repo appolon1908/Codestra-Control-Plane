@@ -47,11 +47,14 @@ API reference: https://docs.github.com/en/rest/repos/rules
 
 ## Accepted issuer provenance port
 
-`GitHubVerifier` now requires a privileged `provenance_verifier`. Its default is
-unset and denies before GitHub API access. The configured startup path supplies no
-accepted verifier, policy or issuer merely by existing. No new configuration flag,
-author JSON, HTTP ingestion, receipt-string shortcut or public activation path exists.
-`build_publisher_service` exposes injection only as an internal integration seam.
+`GitHubVerifier` requires a privileged `provenance_verifier`; the generic factory
+default remains unset and denies. The successor configured startup now supplies
+`AcceptedProducerVerifier`, using a protected operator acceptance record and a
+separate read-only certifier identity custodian. Proposed, missing, expired or
+revoked acceptance denies. No actual issuer is accepted merely by installing the
+code or copying a template. Author JSON, HTTP ingestion, ordinary CI, a receipt
+string or an environment flag cannot supply this authority. See
+[publisher-certifier-integration.md](publisher-certifier-integration.md).
 
 Only an independently accepted internal verifier may return VerifiedProducerContract.
 The verifier must authenticate current operator acceptance, custody, actual issuer and
