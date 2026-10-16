@@ -45,6 +45,9 @@ class PublisherReleaseTests(unittest.TestCase):
         for entry in manifest['files']:
             data = (self.output / entry['source_path']).read_bytes()
             self.assertEqual(hashlib.sha256(data).hexdigest(), entry['sha256'])
+            if not entry['source_path'].startswith('legacy/'):
+                self.assertEqual(entry['proposed_target'],
+                    '/opt/codestra-control-plane/releases/'+self.sha+'/'+entry['source_path'])
         self.assertEqual(json.loads((self.output / 'release-manifest.json').read_text()), manifest)
         name = Path(manifest['driver_artifact']['path']).name
         self.assertEqual(name, 'psycopg2_binary-2.9.10-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl')

@@ -48,12 +48,14 @@ def prepare_release(root, source_sha, output, driver_wheel):
         raise ValueError('INVALID_SYSTEM_TOOL_REQUIREMENTS')
     output = Path(output)
     output.mkdir(mode=0o700)  # Refuse overwrites, including an existing symlink.
+    runtime_root='/opt/codestra-control-plane/releases/'+source_sha
     manifest = {'schema': 'codestra.publisher-candidate.v1', 'source_commit': source_sha,
+                'proposed_runtime_root': runtime_root,
                 'release_approved': False, 'install_allowed': False, 'activation_allowed': False,
                 'lock_provisioning': {'directory': '/run/codestra-control-plane', 'directory_owner': 'root',
-                                     'directory_group': 'sentinelx', 'directory_mode': '0750',
+                                     'directory_group': 'codestra-publisher', 'directory_mode': '0750',
                                      'file': '/run/codestra-control-plane/publisher.lock', 'file_owner': 'root',
-                                     'file_group': 'sentinelx', 'file_mode': '0640', 'approved': False},
+                                     'file_group': 'codestra-publisher', 'file_mode': '0640', 'approved': False},
                 'cutover_requires': ['both enabled publisher timers paused', 'both writer services verified stopped',
                                     'unused alias verified stopped', 'rollback backup verified before any installed write'],
                 'designated_service': 'codestra-control-plane-status.service',
@@ -74,7 +76,7 @@ def prepare_release(root, source_sha, output, driver_wheel):
         destination.write_bytes(data)
         destination.chmod(mode)
         target = ('/opt/codestra-dev/control-plane/bin/github-status-sync'
-                  if path.startswith('legacy/') else '/srv/codestra/dev-platform/control-plane/' + path)
+                  if path.startswith('legacy/') else runtime_root+'/' + path)
         manifest['files'].append({'source_path': path, 'sha256': hashlib.sha256(data).hexdigest(),
                                   'size': len(data), 'mode': oct(mode), 'proposed_target': target})
     wheel_path = output / 'vendor/psycopg2_binary-2.9.10-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl'

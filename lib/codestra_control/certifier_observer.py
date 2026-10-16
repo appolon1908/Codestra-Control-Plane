@@ -6,6 +6,7 @@ may serve the fixed protected socket to the designated publisher UID.
 """
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import stat
@@ -186,7 +187,8 @@ def run_configured_observer():
     try:
         config = tomllib.loads(protected_read(CONFIG).decode())
         require(set(config) == {'app_key_file', 'producer_acceptance_file', 'socket_file', 'publisher_user'}
-                and config['publisher_user'] == 'sentinelx'
+                and type(config['publisher_user']) is str
+                and re.fullmatch(r'[a-z_][a-z0-9_-]{0,31}',config['publisher_user'])
                 and all(type(config[k]) is str and Path(config[k]).is_absolute()
                         for k in ('app_key_file', 'producer_acceptance_file', 'socket_file')),
                 'INVALID_OBSERVER_CONFIGURATION')

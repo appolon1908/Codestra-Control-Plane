@@ -61,6 +61,13 @@ cannot make an already compromised loader trustworthy: immutable approved code
 and startup-path custody remain external deployment prerequisites. The private
 ledger directory must also be provisioned separately; startup does not create it.
 
+The current candidate proposes an immutable root-owned runtime at
+`/opt/codestra-control-plane/releases/<exact-source-sha>` and an explicitly approved
+isolated Python invocation, rather than changing ownership of shared developer
+ancestors. The proposed dedicated `codestra-publisher` OS account is uncreated;
+using it requires approved account/unit/group changes. The observer's protected
+configuration pins that caller account and resolves its actual non-root UID.
+
 ## Authority and data contract
 
 The proposed DDL `006-publisher-authority-read-model.sql` defines an operator-owned
