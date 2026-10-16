@@ -11,7 +11,7 @@
   "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
   "owner_section": "Startup and Integration; lead coordinator",
   "authorization": "Ralph source implementation and CP helper authorization, relayed 2026-10-16 18:40-18:45 UTC; latest user lets do it.",
-  "scope": "Source-only producer verification, separate read-only certifier custodian IPC, startup wiring, existing-certification adapter, proposed configuration/install/rollback packet and isolated verification.",
+  "scope": "Source-only producer verification, separate read-only certifier custodian IPC, startup wiring, existing and first scope certification adapters, isolated authenticated scope assignment/leases, proposed configuration/install/rollback packet and combined isolated verification.",
   "database_registration": null,
   "database_lease": null,
   "certification": null,

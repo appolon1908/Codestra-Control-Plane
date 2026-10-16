@@ -6,13 +6,15 @@ receipts into source startup, keeping absent operational acceptance unavailable.
 **Architecture:** A protected acceptance file pins separate publisher and certifier
 Apps. A separate local credential custodian exposes only three read-only GitHub
 identity observations over a protected UNIX socket. The publisher never receives
-the certifier key, JWT or installation token. Existing independently authenticated
-scope certifications can be transported by a separate certifier adapter.
+the certifier key, JWT or installation token. A separate certifier adapter supports
+existing receipts and first scope issuance from an authenticated exact delegation,
+fresh independent GitHub evidence and a genuine owned scope lease.
 
 **Spec:** Ralph's source-only single-host publisher approval, current
 `docs/effective-protection-and-publisher-provenance.md`, and implementation/helper
-authorization relayed on 2026-10-16 at 18:40–18:45 UTC. No first-certification
-database authority has been supplied; legacy PASS records cannot fill that gap.
+authorization relayed on 2026-10-16 at 18:40–18:45 UTC. The new source authority
+models are empty and unprovisioned; legacy PASS records cannot populate them as
+authenticated evidence.
 
 ## Constraints
 
@@ -32,11 +34,14 @@ database authority has been supplied; legacy PASS records cannot fill that gap.
    revoked acceptance/installations, stale certificates and exact binding drift.
 2. **Certifier Integration** — `certifier_integration`, isolated
    `certifier-integration-20261016`: transport existing independently authenticated
-   scope receipts using a separate App and durable intents. Missing authoritative
-   acquisition denies; never manufacture a first certification from CI.
+   scope receipts and implement first issuance using a separate App and durable
+   intents. An authenticated scope delegation, complete current prerequisites,
+   genuine scope lease and fresh online evidence are mandatory.
 3. **Configuration and Rollback** — `configuration_and_rollback`, isolated
    `configuration-and-rollback-20261016`: proposed templates, exact action-time
-   approval and committed-byte candidate preparation. No installation or activation.
+   approval and committed-byte candidate preparation; isolated authenticated
+   scope-level assignment/lease SQL, preserving atomic leases. No installation
+   or activation.
 4. **Startup and Integration** — root, existing isolated worktree: source-only
    read-only custodian IPC, startup composition, explicit pilot inventory scoping,
    integrated verification and independent section review.
@@ -53,6 +58,9 @@ source CI do not establish controller certification or installation acceptance.
 - Missing/revoked acceptance denies before inventory or status effects.
 - Pilot inventory cannot expand beyond both configured and accepted scope.
 - An existing certification adapter must not imply a first-certification authority.
+- Declared dependency lists cannot omit current configured prerequisites.
+- Scope exclusivity is across owners/assignment UUIDs, not only one task record.
+- Git replace refs cannot substitute different bytes under an approved commit SHA.
 
 ## Progress
 
@@ -61,3 +69,11 @@ source CI do not establish controller certification or installation acceptance.
 - Native worktree creation reported `Not a git repository` from the installed
   working directory; Git worktree fallback used for helpers. Existing integration
   worktree reused; previous branch and local commit preserved.
+- The original 598-test regression run passed in 1631.881 seconds; it preceded
+  final source assembly and is not final-commit evidence.
+- Independent review found and fixed separate custody pins, installed permission
+  overgrants, observer protocol fields, per-sign key modes, expiry after slow final
+  reads, and Git object substitution. Late dependency completeness and scope
+  exclusivity findings are being fixed by their original assigned owners.
+- Final combined suite, exact source SHA, independent review and source PR remain
+  required. All actual App/DB/runtime approvals remain unset; Phase B postponed.
