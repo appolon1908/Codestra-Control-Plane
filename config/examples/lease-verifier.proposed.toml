@@ -1,0 +1,6 @@
+# PROPOSED source example. No App, credential, role or installation is supplied.
+# All permissions of the independently accepted verifier App must be read-only.
+database_dsn_file = "/etc/codestra/control-plane/credentials/lease-verifier.dsn"
+app_id = 0
+installation_id = 0
+app_key_file = "/etc/codestra/control-plane/credentials/lease-verifier-app.pem"
