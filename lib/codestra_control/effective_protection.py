@@ -88,6 +88,11 @@ def _observe_protection(api,repo,branch):
         require(detail['source_type']==source_type and detail['source']==source,'RULESET_SOURCE_MISMATCH')
         matches=[v for v in detail['rules'] if v.get('type')==kind]
         require(len(matches)==1 and matches[0].get('parameters')==rule.get('parameters'),'RULESET_RULE_MISMATCH')
+        if kind=='required_linear_history':
+            # GitHub enforces this additional history restriction. Its complete
+            # provenance and rule detail are verified above and remain digested.
+            require(rule.get('parameters') in (None,{}),'UNSUPPORTED_LINEAR_HISTORY_PARAMETERS')
+            continue
         if kind in ('deletion','non_fast_forward'):continue
         require(kind in ('pull_request','required_status_checks'),'UNSUPPORTED_EFFECTIVE_RULE')
         p=rule['parameters']
