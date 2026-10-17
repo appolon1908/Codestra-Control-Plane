@@ -20,6 +20,9 @@ STATUS = ROOT / "bin" / "codestra-github-statusd"
 MIGRATION_BRANCH = "sync/agent02-mw03-connectors-20261007-api"
 MIGRATION_BASE = "section/mw-03-connectors"
 SHA = "a" * 40
+KLYROW_HEAD = "implementation/klyrow-ses-transport-20261008"
+KLYROW_BASE = "implementation/klyrow-server3-safe-staging-20261008"
+KLYROW_SHA = "8ed5d1edd3872223c6b5eb88aa831834eec9b5e9"
 
 
 class GitHubStatusContinuityTests(unittest.TestCase):
@@ -122,6 +125,43 @@ class GitHubStatusContinuityTests(unittest.TestCase):
             )
             self.assertFalse(ok)
             self.assertIn("SHA mismatch", reason)
+
+    def test_klyrow_exact_sha_migration_preserves_remote_head_verification(self) -> None:
+        class ReviewDate(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 10, 16)
+
+        policy = self.check["migration_reason"]
+        with mock.patch.dict(policy.__globals__, {"date": ReviewDate}):
+            self.assertIn(
+                "klyrow_pr186_exact_sha",
+                policy("klyrow.com", KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA),
+            )
+
+        with mock.patch.dict(
+            self.status["validate"].__globals__,
+            {"remote_sha": lambda *_: KLYROW_SHA},
+        ):
+            ok, reason = self.status["validate"](
+                None, "klyrow.com", "testing", "/unused",
+                KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA,
+            )
+            self.assertTrue(ok, reason)
+            self.assertIn("exact-SHA klyrow_pr186_exact_sha", reason)
+
+        policy_called = mock.Mock(side_effect=AssertionError("policy must not run after SHA mismatch"))
+        with mock.patch.dict(
+            self.status["validate"].__globals__,
+            {"remote_sha": lambda *_: "0" * 40, "MIGRATION_REASON": policy_called},
+        ):
+            ok, reason = self.status["validate"](
+                None, "klyrow.com", "testing", "/unused",
+                KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA,
+            )
+            self.assertFalse(ok)
+            self.assertIn("SHA mismatch", reason)
+        policy_called.assert_not_called()
 
     def test_wrong_scope_never_inherits_migration(self) -> None:
         self.assertIsNone(

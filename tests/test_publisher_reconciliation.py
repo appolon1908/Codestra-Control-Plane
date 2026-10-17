@@ -11,6 +11,10 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 SHA = "777331d8907480977880923c5b012926a7dfc6b8"
 HEAD = "governance/development-control-plane-v1"
+KLYROW_PRODUCT = "klyrow.com"
+KLYROW_HEAD = "implementation/klyrow-ses-transport-20261008"
+KLYROW_BASE = "implementation/klyrow-server3-safe-staging-20261008"
+KLYROW_SHA = "8ed5d1edd3872223c6b5eb88aa831834eec9b5e9"
 
 
 class PublisherReconciliationTests(unittest.TestCase):
@@ -45,6 +49,43 @@ class PublisherReconciliationTests(unittest.TestCase):
                 return cls(2026, 10, 16)
         with mock.patch.dict(policy.__globals__, {"date": Expired}):
             self.assertIsNone(policy("Keycloak", HEAD, "main", SHA))
+
+    def test_klyrow_pr186_exception_is_exact_sha_bound_and_expires(self):
+        policy = self.load("codestra-github-check")["migration_reason"]
+
+        class Active(date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 10, 16)
+
+        with mock.patch.dict(policy.__globals__, {"date": Active}):
+            reason = policy(KLYROW_PRODUCT, KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA)
+            self.assertIn("klyrow_pr186_exact_sha", reason)
+            self.assertIsNone(policy(KLYROW_PRODUCT, KLYROW_HEAD, KLYROW_BASE, "0" * 40))
+            self.assertIsNone(policy(KLYROW_PRODUCT, KLYROW_HEAD, "development", KLYROW_SHA))
+            self.assertIsNone(policy("Kong", KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA))
+
+        class Expired(Active):
+            @classmethod
+            def today(cls):
+                return cls(2026, 10, 24)
+
+        with mock.patch.dict(policy.__globals__, {"date": Expired}):
+            self.assertIsNone(policy(KLYROW_PRODUCT, KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA))
+
+    def test_klyrow_legacy_pair_reaches_sha_validation_instead_of_being_skipped(self):
+        candidate = self.load("codestra-github-statusd")["reconciliation_candidate"]
+        policy = mock.Mock(return_value="klyrow_pr186_exact_sha:expires=2026-10-23")
+        governed = mock.Mock(side_effect=AssertionError("migration admission must not query hierarchy"))
+        with mock.patch.dict(candidate.__globals__, {
+            "MIGRATION_REASON": policy,
+            "governed": governed,
+        }):
+            self.assertTrue(candidate(
+                None, KLYROW_PRODUCT, "testing", KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA,
+            ))
+        policy.assert_called_once_with(KLYROW_PRODUCT, KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA)
+        governed.assert_not_called()
 
     def test_publisher_uses_four_argument_policy_for_every_product(self):
         validate = self.load("codestra-github-statusd")["validate"]
