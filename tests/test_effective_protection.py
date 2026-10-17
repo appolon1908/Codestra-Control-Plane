@@ -124,3 +124,61 @@ class EffectiveProtectionTests(unittest.TestCase):
         extra={'context':'new-required','app_id':456}
         self.api.classic['required_status_checks']['checks'].append(extra)
         with self.assertRaisesRegex(PublicationDenied,'PROTECTION_DRIFT'):self.check()
+
+    def _add_linear_history(self, parameters=None):
+        rule={'type':'required_linear_history'}
+        if parameters is not None:rule['parameters']=parameters
+        self.api.rules.append(dict(rule,ruleset_id=42,
+                                   ruleset_source_type='Repository',ruleset_source=REPO))
+        self.api.detail['rules'].append(deepcopy(rule))
+
+    def test_linear_history_preserves_gates_and_changes_evidence_digest(self):
+        before=self.check()
+        self._add_linear_history()
+        try:
+            after=self.check()
+        except PublicationDenied as exc:
+            self.fail(f'Valid additional linear-history restriction was rejected: {exc}')
+        self.assertEqual(before.checks,after.checks)
+        self.assertEqual(before.approvals,after.approvals)
+        self.assertTrue(all((after.codeowner,after.stale,after.last_push,
+                             after.conversations,after.strict)))
+        self.assertNotEqual(before.evidence_digest,after.evidence_digest)
+
+    def test_linear_history_empty_parameters_are_supported(self):
+        self._add_linear_history({})
+        try:
+            observed=self.check()
+        except PublicationDenied as exc:
+            self.fail(f'Parameter-free linear-history observation was rejected: {exc}')
+        self.assertTrue(observed.strict)
+
+    def test_linear_history_cannot_replace_codeowner_approval(self):
+        self._add_linear_history()
+        self.api.rules[0]['parameters']['require_code_owner_review']=False
+        self.api.detail['rules'][0]['parameters']['require_code_owner_review']=False
+        with self.assertRaisesRegex(PublicationDenied,'PROTECTION_CONTRACT_UNENFORCED'):
+            self.check()
+
+    def test_linear_history_does_not_accept_unknown_parameters(self):
+        self._add_linear_history({'future_option':True})
+        with self.assertRaises(PublicationDenied):self.check()
+
+    def test_linear_history_keeps_bypass_and_provenance_checks(self):
+        self._add_linear_history()
+        self.api.detail['bypass_actors']=[{'actor_type':'Integration','actor_id':7}]
+        with self.assertRaisesRegex(PublicationDenied,'RULESET_BYPASS_UNVERIFIABLE'):
+            self.check()
+        self.api.detail['bypass_actors']=[]
+        self.api.detail['rules'].pop()
+        with self.assertRaisesRegex(PublicationDenied,'RULESET_RULE_MISMATCH'):
+            self.check()
+
+    def test_linear_history_does_not_admit_unknown_rule_types(self):
+        self._add_linear_history()
+        extra={'type':'merge_queue','parameters':{}}
+        self.api.rules.append(dict(extra,ruleset_id=42,
+                                   ruleset_source_type='Repository',ruleset_source=REPO))
+        self.api.detail['rules'].append(deepcopy(extra))
+        with self.assertRaisesRegex(PublicationDenied,'UNSUPPORTED_EFFECTIVE_RULE'):
+            self.check()

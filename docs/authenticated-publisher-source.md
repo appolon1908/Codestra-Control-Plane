@@ -118,19 +118,25 @@ https://docs.github.com/en/rest/apps/installations
 
 Online verification requires exact PR source/target refs and SHAs, same stable
 repository IDs, an open non-draft mergeable PR and current test-merge SHA. The target
-must have classic protection enabled, enforce admins, strict producer-bound required
-checks, independent approvals, codeowner review, stale-review dismissal, last-push
-approval and conversation resolution. Equivalent ruleset-only enforcement is not
-implemented and fails closed. Required producer checks must succeed on both head
-and current test merge. Complete latest check/review inventories, current reviewer
-WRITE eligibility and all resolved threads are queried independently.
+must have verified effective protection from classic protection, active rulesets,
+or both. Classic protection must enforce admins; every observed ruleset must have
+visible empty bypass actors and matching source/rule metadata. Strict producer-bound
+required checks, independent approvals, codeowner review, stale-review dismissal,
+last-push approval and conversation resolution remain mandatory. Parameter-free
+`required_linear_history` is an additional GitHub-enforced restriction, retained
+in the evidence digest; it supplies none of those mandatory gates. Unknown rule
+types and unsupported linear-history parameters still fail closed. Required
+producer checks must succeed on both head and current test merge. Complete latest
+check/review inventories, current reviewer WRITE eligibility and all resolved
+threads are queried independently. See GitHub's [linear-history rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#require-linear-history).
 
-An already-required `codestra-control-plane` or `codestra/control-plane` context
-must not name a conflicting publisher App. A positive App binding must match the
-accepted publisher; malformed IDs deny with `CONTROLLER_CHECK_PRODUCER_MISMATCH`.
-Unbound (`null`/`-1`) contexts retain their existing compatibility behavior. The
-publisher still excludes its own success requirement from preflight to avoid a
-circular dependency; this check does not add contexts or change branch protection.
+Every required check must have a positive producer App binding. The required
+`codestra-control-plane` and/or `codestra/control-plane` contexts must exactly match
+the accepted publisher App and accepted context set; conflicting bindings deny
+with `CONTROLLER_CHECK_PRODUCER_MISMATCH`. Missing, null or wildcard producer
+bindings fail closed. The publisher still excludes its own success requirement
+from CI preflight to avoid a circular dependency; this does not add contexts or
+change branch protection.
 GitHub's [branch-protection contract](https://docs.github.com/en/rest/branches/branch-protection#update-branch-protection)
 defines the required check's App binding and the explicit any-App value.
 
