@@ -1,0 +1,11 @@
+# PROPOSED configuration for the separate root custodian, never installed here.
+# Proposed fixed target: /etc/codestra/control-plane/certifier-observer.toml
+# Actual App/installation/repository IDs come only from protected acceptance.
+app_key_file = "/etc/codestra/scope-certifier/credentials/certifier-app.pem"
+producer_acceptance_file = "/etc/codestra/control-plane/producer-acceptance.json"
+socket_file = "/run/codestra-certifier-observer/observer.sock"
+publisher_user = "codestra-publisher"
+# The socket returns public identity/scope observations, never a JWT or token.
+# The root server peer and proposed dedicated caller peer must both be verified.
+# codestra-publisher is a NEW UNCREATED OS account; creating it is unapproved.
+# The referenced PROPOSED acceptance record with App IDs 0 denies authority.

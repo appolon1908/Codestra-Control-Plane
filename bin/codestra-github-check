@@ -36,6 +36,19 @@ KEYCLOAK_BOOTSTRAP = {
     ),
 }
 
+# Exact, expiring admission for the already-open Klyrow SES transport PR. The
+# exception is tied to the reviewed head/base pair and immutable candidate SHA;
+# it does not authorize any other Klyrow branch or promotion path.
+KLYROW_MIGRATIONS = {
+    (
+        "implementation/klyrow-ses-transport-20261008",
+        "implementation/klyrow-server3-safe-staging-20261008",
+    ): (
+        "f6e56f4fcd75f53a794dfee3d36913611a791248",
+        date(2026, 10, 23),
+    ),
+}
+
 MIDDLEWARE_MIGRATIONS = {
     ("fix/source-hygiene-post430-20261005", "main"): date(2026, 10, 15),
     (
@@ -124,6 +137,13 @@ def migration_reason(product: str, head: str, base: str, head_sha: str) -> str |
             exact_sha, expiry = reviewed_candidate
             if head_sha == exact_sha and date.today() <= expiry:
                 return f"keycloak_bootstrap_exact_sha:expires={expiry.isoformat()}"
+        return None
+    if product == "klyrow.com":
+        reviewed_candidate = KLYROW_MIGRATIONS.get(pair)
+        if reviewed_candidate is not None:
+            exact_sha, expiry = reviewed_candidate
+            if head_sha == exact_sha and date.today() <= expiry:
+                return f"klyrow_pr186_exact_sha:expires={expiry.isoformat()}"
         return None
     if product != "Middleware-":
         return None

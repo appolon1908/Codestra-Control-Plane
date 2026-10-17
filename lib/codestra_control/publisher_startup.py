@@ -4,6 +4,7 @@ No configuration, keys, connection secrets or service state are provisioned here
 The designated service must own the local lock before any credential is read.
 """
 import base64
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -104,7 +105,10 @@ class AppJWT:
 def verify_code_custody():
     root=Path(__file__).resolve().parents[2]
     paths=[root/'bin/codestra-github-statusd',root/'runtime-publisher-tools.json',*root.joinpath('lib').rglob('*.py')]
+    if (root/'bin/codestra-certifier-observer').exists():paths.append(root/'bin/codestra-certifier-observer')
     if (root/'bin/codestra-lease').exists():paths.append(root/'bin/codestra-lease')
+    if (root/'bin/codestra-coordinate').exists():paths.append(root/'bin/codestra-coordinate')
+    if (root/'bin/codestra-admission').exists():paths.append(root/'bin/codestra-admission')
     for path in paths:
         info=path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=0 or info.st_mode&0o022:
@@ -121,11 +125,35 @@ def run_configured_cycle():
     try:
         config=tomllib.loads(protected_read(CONFIG).decode())
         verify_code_custody()
-        fields={'app_id','installation_id','app_key_file','database_dsn_file','certificate_name','certificate_app_id','ledger_file'}
+        fields={'app_id','installation_id','app_key_file','database_dsn_file','certificate_name',
+                'certificate_app_id','ledger_file','producer_acceptance_file',
+                'certifier_observer_socket','repositories'}
         if set(config)!=fields or any(type(config[k]) is not int or config[k]<=0 for k in ('app_id','installation_id','certificate_app_id')):
             raise PublisherUnavailable('INVALID_OPERATOR_CONFIGURATION')
-        if any(type(config[k]) is not str or not config[k] for k in fields-{'app_id','installation_id','certificate_app_id'}):
+        if any(type(config[k]) is not str or not config[k] for k in fields-{'app_id','installation_id','certificate_app_id','repositories'}):
             raise PublisherUnavailable('INVALID_OPERATOR_CONFIGURATION')
+        from .publisher_acceptance import load_acceptance,AcceptedProducerVerifier
+        from .publisher_adapter import require
+        from .publisher_github import GitHubAppClient
+        from .publisher_scope import APPROVED_REPOSITORIES
+        from .certifier_observer import CertifierObservationClient
+        require(all(Path(config[k]).is_absolute() for k in ('app_key_file','database_dsn_file',
+                'ledger_file','producer_acceptance_file','certifier_observer_socket')),
+                'OPERATOR_PATH_MUST_BE_ABSOLUTE')
+        repositories=config['repositories']
+        require(type(repositories) is list and bool(repositories)
+                and all(type(repo) is str for repo in repositories)
+                and len(set(repositories))==len(repositories)
+                and set(repositories)<=APPROVED_REPOSITORIES,'INVALID_PILOT_REPOSITORIES')
+        read_acceptance=lambda:protected_read(config['producer_acceptance_file'])
+        policy=load_acceptance(read_acceptance(),datetime.now(timezone.utc))
+        require((config['app_id'],config['installation_id'],config['certificate_app_id'],config['certificate_name'])
+                ==(policy.publisher_app_id,policy.publisher_installation_id,policy.certificate_app_id,policy.certificate_name),
+                'OPERATOR_PRODUCER_CONFIGURATION_MISMATCH')
+        require(set(repositories)<={name for name,_ in policy.repositories},'PILOT_SCOPE_NOT_ACCEPTED')
+        signer=AppJWT(config['app_key_file'],config['app_id'])
+        provenance=AcceptedProducerVerifier(read_acceptance,GitHubAppClient(signer),
+                    certifier_api=CertifierObservationClient(config['certifier_observer_socket']))
         # Load secrets only after designated-service ownership has been checked.
         dsn=protected_read(config['database_dsn_file']).decode().strip()
         import psycopg2
@@ -135,10 +163,11 @@ def run_configured_cycle():
             raise PublisherUnavailable('VERIFIED_DATABASE_CONFIGURATION_REQUIRED')
         protected_read(params['sslrootcert'],allow_public=True)
         connection=psycopg2.connect(**params)
-        service=build_publisher_service(connection,AppJWT(config['app_key_file'],config['app_id']),config['ledger_file'],
-                                        certificate_name=config['certificate_name'],certificate_app_id=config['certificate_app_id'])
+        service=build_publisher_service(connection,signer,config['ledger_file'],
+                                        certificate_name=config['certificate_name'],certificate_app_id=config['certificate_app_id'],
+                                        provenance_verifier=provenance)
         publisher=service._publisher
-        return reconcile_inventory(publisher,config['app_id'],config['installation_id'])
+        return reconcile_inventory(publisher,config['app_id'],config['installation_id'],repositories=tuple(repositories))
     except PublisherUnavailable:raise
     except Exception:
         # DSNs, keys, connection errors and API bodies never enter diagnostics.
@@ -148,13 +177,16 @@ def run_configured_cycle():
 
 
 
-def reconcile_inventory(publisher,app_id,installation_id):
+def reconcile_inventory(publisher,app_id,installation_id,*,repositories=None):
     from .publisher_scope import APPROVED_REPOSITORIES
     from .publisher_adapter import PublicationDenied,require
     bindings=publisher.store.bindings()
     require(len(set(bindings))==len(bindings),'DUPLICATE_AUTHORITY_BINDINGS')
+    scope=APPROVED_REPOSITORIES if repositories is None else frozenset(repositories)
+    require(bool(scope) and scope<=APPROVED_REPOSITORIES,'INVALID_PILOT_REPOSITORIES')
+    require(all(binding.repository in scope for binding in bindings),'AUTHORITY_OUTSIDE_PILOT_SCOPE')
     # Complete all approved-repository pages before any status effect.
-    inventory=publisher.github.api.inventory(app_id,installation_id,APPROVED_REPOSITORIES)
+    inventory=publisher.github.api.inventory(app_id,installation_id,scope)
     by_key={(b.repository,b.source_ref,b.target_ref,b.source_sha,b.target_base_sha):b for b in bindings}
     outcomes=[] if bindings else ['UNAVAILABLE_NO_ACTIVE_BINDINGS']
     seen=set()

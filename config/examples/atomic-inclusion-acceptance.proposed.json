@@ -1,0 +1,19 @@
+{
+  "schema": "codestra.atomic-inclusion-acceptance.v1",
+  "state": "PROPOSED",
+  "accepted_by": "",
+  "acceptance_ref": "",
+  "revision": "",
+  "purpose": "ATOMIC_INCLUSION",
+  "repository": "appolon1908/codestra",
+  "repository_id": 1319808791,
+  "app_id": 0,
+  "installation_id": 0,
+  "name": "atomic-inclusion",
+  "custody_receipt": "",
+  "capability_receipt": "",
+  "max_receipt_lifetime_seconds": 86400,
+  "max_observation_age_seconds": 60,
+  "accepted_at": "",
+  "expires_at": ""
+}

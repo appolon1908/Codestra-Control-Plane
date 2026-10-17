@@ -1,0 +1,19 @@
+{
+  "schema": "codestra.producer-acceptance.v1",
+  "state": "PROPOSED",
+  "accepted_by": "",
+  "acceptance_ref": "",
+  "publisher_app_id": 0,
+  "publisher_installation_id": 0,
+  "certificate_app_id": 0,
+  "certificate_installation_id": 0,
+  "certificate_name": "scope-certification",
+  "controller_contexts": ["codestra-control-plane", "codestra/control-plane"],
+  "repositories": [{"repository": "appolon1908/codestra", "repository_id": 1319808791}],
+  "custody_receipt": "",
+  "certifier_custody_receipt": "",
+  "certifier_capability_receipt": "",
+  "accepted_at": "",
+  "expires_at": "",
+  "max_receipt_age_seconds": 300
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "coordinator-integration",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--coordinator-integration",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "c1890bdcc478cf40231087b57f95ba64ff0a7049",
+  "owner_thread": "01a13c31-799c-7d72-8fe5-dd1fcd92c279",
+  "worktree": "/tmp/cp-coordinator-integration-01a13c31",
+  "authorization_basis": "User requested continued automatic controller implementation and PR updates after PR42/43 source integration.",
+  "scope": "Forward integration repair for merged atomic inspector and builder coordinator: complete configured subsection dependencies, canonical UTC serialization, exact authenticated identity/proof provenance, fresh READ COMMITTED final mapping checks, shared remote dependency-ref verification, combined disposable SQL regressions and private CLI cleanup failures. Preserve existing migrations, authority records, issuer/recovery boundaries and other owners' runtime work.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false
+}

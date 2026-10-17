@@ -161,6 +161,20 @@ def governed(c,product,test_branch,base):
         return True
     return section_target(c,product,base)
 
+def reconciliation_candidate(c,product,test_branch,head,base,sha):
+    """Return whether an open PR must receive a controller verdict.
+
+    Exact-SHA migration admissions are evaluated before hierarchy filtering so
+    an already-open legacy pair cannot be silently skipped. The authoritative
+    remote-SHA check still occurs inside validate before any exception passes.
+    """
+    is_bootstrap=head in BOOTSTRAP_HEADS and base in ROOT_BASES
+    if is_bootstrap:
+        return True
+    if MIGRATION_REASON(product,head,base,sha) is not None:
+        return True
+    return governed(c,product,test_branch,base)
+
 def validate(c,product,test_branch,repo_path,head,base,sha):
     observed=remote_sha(repo_path,head)
     if observed!=sha:
@@ -233,8 +247,7 @@ def reconcile():
             continue
         for pr in prs:
             head=pr["head"]["ref"]; base=pr["base"]["ref"]; sha=pr["head"]["sha"]
-            is_bootstrap=head in BOOTSTRAP_HEADS and base in ROOT_BASES
-            if not is_bootstrap and not governed(c,product,test_branch,base):
+            if not reconciliation_candidate(c,product,test_branch,head,base,sha):
                 continue
             ok,reason=validate(c,product,test_branch,repo_path,head,base,sha)
             try:

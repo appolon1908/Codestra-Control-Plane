@@ -103,7 +103,15 @@ class AuthenticatedPublisher:
         fresh=self.clock()
         require(authority.expires_at>fresh,'AUTHORITY_EXPIRED')
         verify_issuer(acquired,fresh)
-        snapshot=replace(snapshot,evaluated_at=fresh)
+        deadline=self.github.revalidate(acquired,fresh)
+        # Online revalidation can take time. Use a clock sampled after it, and
+        # retain a bounded permit rather than the pre-network timestamp.
+        final=self.clock()
+        require(type(deadline) is datetime and deadline.tzinfo is not None
+                and deadline>final,'PUBLICATION_PERMIT_EXPIRED')
+        require(authority.expires_at>final,'AUTHORITY_EXPIRED')
+        verify_issuer(acquired,final)
+        snapshot=replace(snapshot,evaluated_at=final)
         decision=evaluate_promotion(binding,snapshot)
         require(decision.allowed,'FINAL_PROMOTION_DENIED:'+','.join(decision.reasons))
         return replace(acquired,snapshot=snapshot)
@@ -140,7 +148,7 @@ class PublisherService:
         with publisher_session():return self._publisher.publish(binding)
 
 
-def build_publisher_service(connection,jwt_provider,ledger_path,*,certificate_name,certificate_app_id):
+def build_publisher_service(connection,jwt_provider,ledger_path,*,certificate_name,certificate_app_id,provenance_verifier=None):
     """Wire administered dependencies; not a request/JSON/environment factory.
 
     Operational startup must separately supply an authenticated TLS PostgreSQL
@@ -153,5 +161,5 @@ def build_publisher_service(connection,jwt_provider,ledger_path,*,certificate_na
     from .publisher_effect import IntentLedger
     from .publisher_github import GitHubAppClient
     api=GitHubAppClient(jwt_provider)
-    verifier=GitHubVerifier(api,certificate_name=certificate_name,certificate_app_id=certificate_app_id)
+    verifier=GitHubVerifier(api,certificate_name=certificate_name,certificate_app_id=certificate_app_id,provenance_verifier=provenance_verifier)
     return PublisherService(AuthenticatedPublisher(RestrictedRegistry(connection),verifier,IntentLedger(ledger_path),host=socket.gethostname()))

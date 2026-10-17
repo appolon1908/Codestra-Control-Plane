@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "controller-coordinator",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--controller-coordinator",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "641fd8f59bd462337809bb353bb5456d87f3cee1",
+  "owner_thread": "current controller-coordinator implementation chat",
+  "worktree": "/srv/codestra/dev-platform/control-plane/worktrees/controller-coordinator-20261016",
+  "authorization": "User explicitly selected Implement missing coordinator behavior after requesting mapping resolution, registration/dependency evidence and genuine atomic-task admission.",
+  "scope": "Restricted task resolution, approved candidate registration, independent committed proof consumption and assignment-backed admission; disposable tests, local commits and ordinary source PR publication only.",
+  "runtime_assignment": null,
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false,
+  "installation_performed": false
+}

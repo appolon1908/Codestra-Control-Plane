@@ -66,3 +66,15 @@ The source-only [assignment-backed lease contract](docs/assignment-backed-leases
 describes the proposed authenticated issuer, independent materialization verifier,
 read-only publisher acquisition and activation boundaries. No runtime setup is
 authorized or performed by this source change.
+
+The source-only [controller coordinator](docs/controller-coordinator.md) resolves
+approved task metadata, prepares candidate registration and admits a task through
+the authenticated lease issuer after independent verification. It is not deployed;
+runtime identities, mappings, dependency capabilities and installation still need
+separate acceptance.
+
+The source-only [scoped L1/L2 admission API](docs/scoped-operation-admission.md)
+adds exact file-mutation and candidate-push intents on top of coordinator leases.
+Independent verification, current authority checks and committed one-use
+consumption keep source-write and push permission separate. The source client
+does not install the API, grant live access, write product files or push them.

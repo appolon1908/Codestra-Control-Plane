@@ -29,14 +29,28 @@ existing build host, not a security release approval or automatic dependency
 installation. The candidate manifest includes the pins with target verification
 and provisioning approval false. All added runtime Python modules are included.
 
-Operator configuration has exactly seven fields: positive integer `app_id`, `installation_id` and
+Operator configuration has exactly ten fields: positive integer `app_id`, `installation_id` and
 `certificate_app_id`; string `certificate_name`; absolute `app_key_file`,
-`database_dsn_file`, and `ledger_file` paths. Config/key/DSN files must be root-owned,
+`database_dsn_file`, `ledger_file`, `producer_acceptance_file` and
+`certifier_observer_socket` paths; and an explicit nonempty `repositories` list.
+The configured repository scope must be a subset of the protected accepted scope
+and the source catalog. Config/key/DSN files must be root-owned,
 regular, single-link, private (0600 or0640), with root-owned non-writable parents
 and ancestors and no symlink components. The DSN explicitly supplies host, dbname,
 user, verify-full sslmode and sslrootcert; the CA may be public-readable but must
 have the same protected ownership/ancestry and no group/other write access.
 No caller-controlled DSN or environment fallback supplies authority.
+
+Startup now supplies `AcceptedProducerVerifier`, rather than leaving the provenance
+port unset. The protected acceptance record must pin separate Apps and signing
+custodies, current installation IDs, numeric repository IDs, check name, both
+controller contexts and bounded freshness. The record is reread during each online
+verification. Proposed or expired records deny before connecting to PostgreSQL.
+The separate root custodian in `certifier_observer.py` authenticates the certifier
+App's current installation and repository coverage without sharing its key, JWT
+or tokens with the publisher. Its fixed configuration is
+`/etc/codestra/control-plane/certifier-observer.toml`; no server is installed or
+started by this source change. See [the integration guide](publisher-certifier-integration.md).
 
 Before reading connection/key secrets, startup checks root ownership and no
 group/other write access for the runtime entrypoint, import tree and tool manifest.
@@ -46,6 +60,13 @@ systemd/import environment; no ownership changes occur here. Self-inspection
 cannot make an already compromised loader trustworthy: immutable approved code
 and startup-path custody remain external deployment prerequisites. The private
 ledger directory must also be provisioned separately; startup does not create it.
+
+The current candidate proposes an immutable root-owned runtime at
+`/opt/codestra-control-plane/releases/<exact-source-sha>` and an explicitly approved
+isolated Python invocation, rather than changing ownership of shared developer
+ancestors. The proposed dedicated `codestra-publisher` OS account is uncreated;
+using it requires approved account/unit/group changes. The observer's protected
+configuration pins that caller account and resolves its actual non-root UID.
 
 ## Authority and data contract
 
@@ -170,7 +191,9 @@ GitHub JWT protocol reference: https://docs.github.com/en/apps/creating-github-a
 ## Complete discovery and explicit unavailable coverage
 
 Before any status effect, startup obtains a separate metadata/pull_requests READ
-installation token restricted to the exact approved49 repository names. GitHub
+installation token restricted to the exact explicitly configured and accepted
+repository names. The proposed first pilot is only `appolon1908/codestra`; the
+49-repository source catalog is an upper bound, not an activation grant. GitHub
 must return the complete exact repository set and unique positive actual IDs.
 Every open-PR page for every repository is collected before any authorized write;
 an unavailable/malformed/incomplete inventory stops all writes. This token has no

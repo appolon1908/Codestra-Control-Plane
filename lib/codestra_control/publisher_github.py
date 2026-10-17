@@ -9,8 +9,15 @@ from dataclasses import dataclass
 import re
 import json
 from urllib.parse import urlencode
+from urllib.error import HTTPError
 from urllib.request import Request,build_opener,HTTPRedirectHandler
 from .publisher_adapter import require,PublicationDenied
+
+class APIUnavailable(PublicationDenied):
+    """Only a status code survives; never response bodies, headers or secrets."""
+    def __init__(self,status=None):
+        self.status=status
+        super().__init__('AUTHENTICATED_API_UNAVAILABLE')
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):raise PublicationDenied('API_REDIRECT_REFUSED')
@@ -26,9 +33,11 @@ def request_json(method,path,token,body=None):
             raw=response.read(4*1024*1024+1)
         require(len(raw)<=4*1024*1024,'API_RESPONSE_TOO_LARGE')
         return json.loads(raw)
+    except HTTPError as exc:
+        raise APIUnavailable(exc.code) from None
     except Exception:
         # Do not propagate headers, token, request/body or remote response text.
-        raise PublicationDenied('AUTHENTICATED_API_UNAVAILABLE') from None
+        raise APIUnavailable() from None
 
 @dataclass(frozen=True)
 class ObservedPR:
@@ -114,6 +123,12 @@ class GitHubAppClient:
     def _call(self,method,path,body=None):
         require(self._token is not None and self._expires>self.clock(),'APP_SESSION_UNAVAILABLE')
         return self.request(method,path,self._token,body)
+    def cap_expiry(self,deadline):
+        """An installation token cannot extend an acquired publication permit."""
+        require(type(deadline) is datetime and deadline.tzinfo is not None
+                and self._expires is not None,'APP_PERMIT_UNAVAILABLE')
+        self._expires=min(self._expires,deadline)
+        require(self._expires>self.clock(),'APP_PERMIT_EXPIRED')
     def get(self,path):return self._call('GET',path)
     def post(self,path,body):return self._call('POST',path,body)
     def pages(self,path,key=None):
@@ -127,6 +142,19 @@ class GitHubAppClient:
                 seen.add(item['id']);values.append(item)
             if len(items)<100:return values
         raise PublicationDenied('API_PAGINATION_INCOMPLETE')
+    def effective_rules(self,repo,branch):
+        """Rules lack item IDs; retain complete bounded pages without generic pages()."""
+        from urllib.parse import quote
+        values=[];size=0
+        for page in range(1,101):
+            items=self.get(f'/repos/{repo}/rules/branches/{quote(branch,safe="")}?per_page=100&page={page}')
+            require(type(items) is list and len(items)<=100,'INVALID_EFFECTIVE_RULE_PAGE')
+            size+=len(json.dumps(items).encode())
+            require(size<=4*1024*1024,'EFFECTIVE_RULE_INVENTORY_TOO_LARGE')
+            require(all(type(item) is dict for item in items),'INVALID_EFFECTIVE_RULE')
+            values.extend(items)
+            if len(items)<100:return values
+        raise PublicationDenied('EFFECTIVE_RULE_PAGINATION_INCOMPLETE')
     def eligible_reviewer(self,repo,login):
         from urllib.parse import quote
         value=self.get(f'/repos/{repo}/collaborators/{quote(login,safe="")}/permission')

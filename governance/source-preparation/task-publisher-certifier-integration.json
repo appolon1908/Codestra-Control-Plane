@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "publisher-certifier-integration",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--publisher-certifier-integration",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "2d312d3a63adcb06694aa66e1b72601f11e7dac3",
+  "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "owner_section": "Startup and Integration; lead coordinator",
+  "authorization": "Ralph source implementation and CP helper authorization, relayed 2026-10-16 18:40-18:45 UTC; latest user lets do it.",
+  "scope": "Source-only producer verification, separate read-only certifier custodian IPC, startup wiring, existing and first scope certification adapters, isolated authenticated scope assignment/leases, proposed configuration/install/rollback packet and combined isolated verification.",
+  "database_registration": null,
+  "database_lease": null,
+  "certification": null,
+  "deployment_performed": false,
+  "live_effects_authorized": false,
+  "phase_b": "POSTPONED"
+}
