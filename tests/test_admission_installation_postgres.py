@@ -920,6 +920,71 @@ class InstallationPostgresTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.module.verify(verifier, self.candidate, self.plan, self.store, self.attempt, self.authority)
 
+    def test_production_issuer_authorizes_real_install_verify_and_revoke_first_rollback(self):
+        from test_installation_authority_postgres import ProductionIssuerFixture
+
+        issuer = ProductionIssuerFixture(self.path / 'production-issuer',
+            coordinator.CoordinatorTests.path / 'fixture.crt',
+            coordinator.CoordinatorTests.path / 'fixture.key')
+        self.addCleanup(issuer.close)
+        binding = self.module._context(self.candidate, self.plan, self.store, self.attempt)[1]
+        verifier_oid = self.query("SELECT oid::bigint FROM pg_roles WHERE rolname='verifier'")[0][0]
+        connection, selection, owner = issuer.create_grant(binding, verifier_oid)
+        authority = self.module.OnlinePostgresAuthority(connection, selection)
+        authority.authorize('install', binding, 'preflight')
+        receipt = self.module.install(self.backend, self.candidate, self.plan, self.store,
+            self.configuration, self.attempt, authority)
+        self.assertEqual(receipt['state'], 'DATABASE_APPLIED_ARTIFACTS_STAGED')
+        self.assertFalse(receipt['usable'])
+        observed = self.module.verify(self.verifier(), self.candidate, self.plan,
+            self.store, self.attempt, authority)
+        self.assertEqual(observed['state'], 'INDEPENDENTLY_OBSERVED')
+        self.assertEqual(observed['verifier_role_oid'], verifier_oid)
+        with self.assertRaises((ValueError, psycopg2.Error)):
+            authority.authorize('verify', dict(binding, verifier_role_oid=verifier_oid + 1), 'preflight')
+        with self.assertRaises((ValueError, psycopg2.Error)):
+            authority.authorize('install', dict(binding, source_commit='b' * 40), 'preflight')
+
+        def interrupted(phase):
+            if phase == 'after_revocation':
+                raise RuntimeError('synthetic target recording interruption')
+
+        with self.assertRaises(self.module.InstallationRevokedRecordingFailed):
+            self.module.rollback(self.backend, self.candidate, self.plan, self.store,
+                self.attempt, authority, progress=interrupted)
+        # Revocation has already committed on the separate issuer cluster.
+        with self.assertRaises((ValueError, psycopg2.Error)):
+            authority.authorize('install', binding, 'return')
+        authority.authorize('rollback', binding, 'record_revocation')
+        self.assertEqual(self.module.rollback(self.backend, self.candidate, self.plan,
+            self.store, self.attempt, authority)['state'], 'REVOKED')
+        self.assertEqual(self.query('SELECT stage FROM admission_installation.attempts'), [('REVOKED',)])
+        self.assertEqual(self.query("SELECT to_regnamespace('admission_bootstrap')"), [(None,)])
+
+    def test_production_issuer_binds_complete_runtime_custody_without_installing_itself(self):
+        from test_installation_authority_postgres import ProductionIssuerFixture
+
+        self.runtime_fixture()
+        self.runtime_plan()
+        issuer = ProductionIssuerFixture(self.path / 'runtime-production-issuer',
+            coordinator.CoordinatorTests.path / 'fixture.crt',
+            coordinator.CoordinatorTests.path / 'fixture.key')
+        self.addCleanup(issuer.close)
+        binding = self.module._context(self.candidate, self.plan, self.store, self.attempt)[1]
+        self.assertIn('runtime', binding['filesystem'])
+        verifier_oid = self.query("SELECT oid::bigint FROM pg_roles WHERE rolname='verifier'")[0][0]
+        connection, selection, _ = issuer.create_grant(binding, verifier_oid)
+        authority = self.module.OnlinePostgresAuthority(connection, selection)
+        result = self.module.install(self.backend, self.candidate, self.plan, self.store,
+            self.configuration, self.attempt, authority)
+        self.assertEqual(result['state'], 'DATABASE_APPLIED_RUNTIME_FIXTURE_MATERIALIZED')
+        self.assertFalse(result['runtime_installed'])
+        self.assertEqual(self.module.verify(self.verifier(), self.candidate, self.plan,
+            self.store, self.attempt, authority)['state'], 'INDEPENDENTLY_OBSERVED')
+        self.assertEqual(self.module.rollback(self.backend, self.candidate, self.plan,
+            self.store, self.attempt, authority)['state'], 'REVOKED')
+        self.assertEqual(self.query("SELECT to_regnamespace('admission_bootstrap')"), [(None,)])
+
     def test_invalid_runtime_configuration_denies_before_intent_or_ddl(self):
         fixture = self.runtime_fixture()
         wrong = fixture.configuration.replace(b'app_id=123', b'app_id=true')
