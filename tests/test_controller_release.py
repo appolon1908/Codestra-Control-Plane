@@ -24,7 +24,7 @@ class ControllerReleaseTests(unittest.TestCase):
         self.git('config', 'user.name', 'Fixture')
         self.git('config', 'user.email', 'fixture@example.invalid')
         for name in ENTRYPOINTS + ('bin/codestra-coordinate', 'bin/codestra-admission',
-                                  'bin/codestra-register', 'bin/codestra-inspect-atomic',
+                                  'bin/codestra-register', 'bin/codestra-inspect-atomic', 'bin/codestra-install-admission',
                                   'lib/codestra_control/publisher_ownership.py',
                                   'lib/codestra_control/certifier_adapter.py'):
             self.write(name, b'# fixture source\n')
@@ -34,7 +34,7 @@ class ControllerReleaseTests(unittest.TestCase):
             'schema': 'codestra.publisher-system-tools.v1',
             'target_verified': False, 'provisioning_approved': False}).encode())
         source = Path(__file__).resolve().parents[1]
-        for name in ('codestra-coordinate','codestra-admission','codestra-register','codestra-inspect-atomic'):
+        for name in ('codestra-coordinate','codestra-admission','codestra-register','codestra-inspect-atomic','codestra-install-admission'):
             self.write('bin/'+name,(source/'bin'/name).read_bytes())
         for path in (source / 'lib').rglob('*.py'):
             self.write(str(path.relative_to(source)), path.read_bytes())
@@ -45,7 +45,7 @@ class ControllerReleaseTests(unittest.TestCase):
                 self.write(str(path.relative_to(source)), path.read_bytes())
         for name in ('assignment-backed-leases', 'controller-coordinator',
                      'scoped-operation-admission', 'certifier-existing-receipt-source',
-                     'publisher-certifier-action-time-approval','atomic-inclusion-receipts','global-controller-coverage'):
+                     'publisher-certifier-action-time-approval','atomic-inclusion-receipts','global-controller-coverage', 'admission-installation'):
             self.write('docs/' + name + '.md', (source / 'docs' / (name + '.md')).read_bytes())
         self.write('config/contracts/global-coverage-acceptance.schema.json',
             (source/'config/contracts/global-coverage-acceptance.schema.json').read_bytes())
@@ -93,6 +93,22 @@ class ControllerReleaseTests(unittest.TestCase):
                     module.prepare_controller_release(self.root, changed, output, self.wheel)
                 self.assertFalse(output.exists())
                 self.git('reset', '--hard', self.sha)
+
+    def test_installer_candidate_is_complete_and_still_has_no_operational_authority(self):
+        module = importlib.import_module('codestra_control.controller_release')
+        installer = importlib.import_module('codestra_control.admission_installation')
+        output = Path(self.temporary.name) / 'installer-source'
+        manifest = module.prepare_controller_release(self.root, self.sha, output, self.wheel)
+        names = {entry['source_path'] for entry in manifest['files']}
+        self.assertTrue({'bin/codestra-install-admission', 'lib/codestra_control/admission_installation.py',
+                         '015-admission-installation-state.sql', 'config/examples/admission-installation.proposal.json',
+                         'docs/admission-installation.md'} <= names)
+        digest = hashlib.sha256((output / 'controller-release-manifest.json').read_bytes()).hexdigest()
+        candidate = installer.SourceCandidate.load(output, digest)
+        self.assertEqual(candidate.source_commit, self.sha)
+        self.assertFalse(manifest['install_allowed'])
+        self.assertFalse(manifest['activation_allowed'])
+        self.assertFalse(manifest['database_setup_approved'])
 
     def test_missing_transitive_client_import_refuses_complete_candidate(self):
         module = importlib.import_module('codestra_control.controller_release')
