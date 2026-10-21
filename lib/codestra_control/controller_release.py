@@ -18,12 +18,13 @@ CONTROLLER_ENTRYPOINTS = (
     'bin/codestra-coordinate', 'bin/codestra-admission',
     'bin/codestra-register', 'bin/codestra-inspect-atomic',
     'bin/codestra-install-admission',
+    'bin/codestra-task-bootstrap',
 )
 REQUIRED_LIBRARIES = tuple('lib/codestra_control/' + name + '.py' for name in (
     '__init__', 'controller_coordinator', 'scoped_admission', 'certifier_adapter',
     'certifier_observer', 'lease_materialization', 'admission_materialization',
     'publisher_startup','atomic_receipts','atomic_issuer',
-    'admission_installation',
+    'admission_installation', 'task_bootstrap',
 ))
 SCHEMA_SOURCES = (
     'schema.sql', '002-hierarchy-promotion.sql', '003-readiness-views.sql',
@@ -35,6 +36,7 @@ SCHEMA_SOURCES = (
     '012-scope-assignment-leases.sql', '013-first-certification-pending.sql',
     '014-atomic-inclusion-receipts.sql',
     '015-admission-installation-state.sql',
+    '016-authenticated-task-bootstrap.sql',
 )
 CONFIGURATION_SOURCES = TEMPLATES + ('config/examples/lease-verifier.proposed.toml',
     'config/examples/atomic-inclusion-acceptance.proposed.json','config/examples/global-coverage.proposed.json',
@@ -71,6 +73,8 @@ SCHEMA_PREREQUISITES = {
     # Independent bootstrap ledger: a pre-ledger fence must serialize its
     # creation. It creates no runtime authority and is not a source-list DDL plan.
     '015-admission-installation-state.sql': (),
+    '016-authenticated-task-bootstrap.sql': ('010-controller-coordinator-integration.sql',
+        '010-scoped-operation-admission.sql'),
 }
 
 
@@ -213,6 +217,8 @@ def prepare_controller_release(root, source_sha, output, driver_wheel):
         'atomic_issuer_source_api': 'codestra_control.atomic_issuer.build_atomic_issuer_service',
         'admission_installer_source_api': 'codestra_control.admission_installation',
         'admission_installer_operational_adapter': 'OnlinePostgresAuthority; protected configuration and independent issuer NOT_PROVISIONED',
+        'task_bootstrap_source_api': 'codestra_control.task_bootstrap',
+        'task_bootstrap_installation_profile': 'task-bootstrap-v1; explicit action-time acceptance required; NOT_PROVISIONED',
         'global_coverage': 'structural acceptance specification only; no activated global consumer',
         'unmet_gates': ['independent exact-commit source review and governed publication',
                         'accepted operator, identities, custody, explicit per-product grants and real leases',

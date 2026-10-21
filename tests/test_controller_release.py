@@ -34,7 +34,7 @@ class ControllerReleaseTests(unittest.TestCase):
             'schema': 'codestra.publisher-system-tools.v1',
             'target_verified': False, 'provisioning_approved': False}).encode())
         source = Path(__file__).resolve().parents[1]
-        for name in ('codestra-coordinate','codestra-admission','codestra-register','codestra-inspect-atomic','codestra-install-admission'):
+        for name in ('codestra-coordinate','codestra-admission','codestra-register','codestra-inspect-atomic','codestra-install-admission','codestra-task-bootstrap'):
             self.write('bin/'+name,(source/'bin'/name).read_bytes())
         for path in (source / 'lib').rglob('*.py'):
             self.write(str(path.relative_to(source)), path.read_bytes())
@@ -71,7 +71,9 @@ class ControllerReleaseTests(unittest.TestCase):
         self.assertEqual(manifest['schema'], 'codestra.controller-candidate.v1')
         names = {item['source_path'] for item in manifest['files']}
         self.assertTrue({'bin/codestra-coordinate', 'bin/codestra-admission',
-                         'bin/codestra-register', 'bin/codestra-inspect-atomic'} <= names)
+                         'bin/codestra-register', 'bin/codestra-inspect-atomic',
+                         'bin/codestra-task-bootstrap', 'lib/codestra_control/task_bootstrap.py',
+                         '016-authenticated-task-bootstrap.sql'} <= names)
         self.assertFalse(manifest['install_allowed'])
         self.assertFalse(manifest['activation_allowed'])
         self.assertFalse(manifest['database_setup_approved'])
@@ -82,6 +84,8 @@ class ControllerReleaseTests(unittest.TestCase):
     def test_missing_client_schema_or_configuration_refuses_before_output(self):
         module = importlib.import_module('codestra_control.controller_release')
         for number, name in enumerate(('bin/codestra-admission',
+                                       'bin/codestra-task-bootstrap',
+                                       '016-authenticated-task-bootstrap.sql',
                                        '010-scoped-operation-admission.sql',
                                        'config/examples/lease-verifier.proposed.toml')):
             with self.subTest(missing=name):
