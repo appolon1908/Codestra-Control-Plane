@@ -17,11 +17,13 @@ from .publisher_release import git, prepare_release
 CONTROLLER_ENTRYPOINTS = (
     'bin/codestra-coordinate', 'bin/codestra-admission',
     'bin/codestra-register', 'bin/codestra-inspect-atomic',
+    'bin/codestra-install-admission',
 )
 REQUIRED_LIBRARIES = tuple('lib/codestra_control/' + name + '.py' for name in (
     '__init__', 'controller_coordinator', 'scoped_admission', 'certifier_adapter',
     'certifier_observer', 'lease_materialization', 'admission_materialization',
     'publisher_startup','atomic_receipts','atomic_issuer',
+    'admission_installation',
 ))
 SCHEMA_SOURCES = (
     'schema.sql', '002-hierarchy-promotion.sql', '003-readiness-views.sql',
@@ -32,16 +34,19 @@ SCHEMA_SOURCES = (
     '010-scoped-operation-admission.sql', '011-certifier-authority.sql',
     '012-scope-assignment-leases.sql', '013-first-certification-pending.sql',
     '014-atomic-inclusion-receipts.sql',
+    '015-admission-installation-state.sql',
 )
 CONFIGURATION_SOURCES = TEMPLATES + ('config/examples/lease-verifier.proposed.toml',
     'config/examples/atomic-inclusion-acceptance.proposed.json','config/examples/global-coverage.proposed.json',
-    'config/examples/atomic-authority.proposed.json')
+    'config/examples/atomic-authority.proposed.json',
+    'config/examples/admission-installation.proposal.json')
 CONTRACT_SOURCES = (
     'docs/assignment-backed-leases.md', 'docs/controller-coordinator.md',
     'docs/scoped-operation-admission.md', 'docs/certifier-existing-receipt-source.md',
     'docs/publisher-certifier-action-time-approval.md',
     'docs/atomic-inclusion-receipts.md','docs/global-controller-coverage.md',
     'config/contracts/global-coverage-acceptance.schema.json',
+    'docs/admission-installation.md',
 )
 EXCLUDED_LEGACY_WRITERS = (
     'bin/codestra-certify-scope', 'bin/codestra-section-certify', 'bin/codestra-devctl',
@@ -63,6 +68,9 @@ SCHEMA_PREREQUISITES = {
     '013-first-certification-pending.sql': ('011-certifier-authority.sql','012-scope-assignment-leases.sql'),
     '014-atomic-inclusion-receipts.sql': ('005-scoped-registration.sql','007-assignment-leases.sql',
         '009-controller-coordinator.sql','011-certifier-authority.sql','013-first-certification-pending.sql'),
+    # Independent bootstrap ledger: a pre-ledger fence must serialize its
+    # creation. It creates no runtime authority and is not a source-list DDL plan.
+    '015-admission-installation-state.sql': (),
 }
 
 
@@ -166,6 +174,10 @@ def prepare_controller_release(root, source_sha, output, driver_wheel):
     # pinned driver/tools and refuses existing or symlinked output directories.
     output = Path(output)
     publisher = prepare_release(root, source_sha, output, driver_wheel)
+    # The publisher-only artifact historically leaves the wheel mode to umask.
+    # Complete controller candidates bind an exact regular-file mode as well.
+    (output / publisher['driver_artifact']['path']).chmod(0o644)
+    (output / 'release-manifest.json').chmod(0o644)
     files = list(publisher['files'])
     runtime_root = publisher['proposed_runtime_root']
     for path, (mode, data) in additions.items():
@@ -199,6 +211,8 @@ def prepare_controller_release(root, source_sha, output, driver_wheel):
         'protected_code_custody': publisher['code_custody'],
         'certifier_source_api': 'codestra_control.certifier_adapter.build_first_certifier_service',
         'atomic_issuer_source_api': 'codestra_control.atomic_issuer.build_atomic_issuer_service',
+        'admission_installer_source_api': 'codestra_control.admission_installation',
+        'admission_installer_operational_adapter': 'OnlinePostgresAuthority; protected configuration and independent issuer NOT_PROVISIONED',
         'global_coverage': 'structural acceptance specification only; no activated global consumer',
         'unmet_gates': ['independent exact-commit source review and governed publication',
                         'accepted operator, identities, custody, explicit per-product grants and real leases',
@@ -206,6 +220,7 @@ def prepare_controller_release(root, source_sha, output, driver_wheel):
                         'separate actual provider/certifier capability and complete canonical receipt evidence'],
     }
     with (output / 'controller-release-manifest.json').open('x') as stream:
+        (output / 'controller-release-manifest.json').chmod(0o644)
         json.dump(manifest, stream, indent=2)
         stream.write('\n')
     return manifest
