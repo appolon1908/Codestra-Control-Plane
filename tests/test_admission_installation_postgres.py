@@ -148,6 +148,84 @@ class InstallationPostgresTests(unittest.TestCase):
         self.assertEqual(self.query("SELECT to_regnamespace('atomic_receipts'),to_regnamespace('certifier_authority'),to_regnamespace('frozen_recovery')"), [(None, None, None)])
         self.assertEqual(set(self.plan.value['sources']), set(self.module.MIGRATIONS))
 
+    def test_explicit_task_bootstrap_profile_installs_no_authority_and_preserves_legacy_rows(self):
+        before = self.preserved()
+        self.assertNotIn('016-authenticated-task-bootstrap.sql', self.plan.value['sources'])
+        self.plan = self.module.build_plan(self.candidate, self.backend.describe(),
+            adopted_sources=LEGACY, filesystem_binding=self.store.binding,
+            configuration_sha256=hashlib.sha256(self.configuration).hexdigest(),
+            migration_profile='task-bootstrap-v1')
+        self.authority = fixture_authority(self.module, self.plan, self.attempt)
+        self.assertEqual(self.plan.value['migration_profile'], 'task-bootstrap-v1')
+        self.assertIn('016-authenticated-task-bootstrap.sql', self.plan.value['pending_sources'])
+        result = self.install()
+        self.assertEqual(result['state'], 'DATABASE_APPLIED_ARTIFACTS_STAGED')
+        self.assertFalse(result['usable'])
+        self.assertEqual(self.preserved(), before)
+        self.assertEqual(self.query('SELECT count(*) FROM task_bootstrap.profiles'), [(0,)])
+        self.assertEqual(self.query('SELECT count(*) FROM task_bootstrap.sessions'), [(0,)])
+        self.assertEqual(self.query('SELECT count(*) FROM task_bootstrap.issued'), [(0,)])
+        self.assertEqual(self.install(), result)
+        verifier = self.verifier()
+        events = self.query('SELECT * FROM admission_installation.events ORDER BY event_id')
+        observed = self.module.verify(verifier, self.candidate, self.plan, self.store,
+                                      self.attempt, self.authority)
+        self.assertEqual(observed['state'], 'INDEPENDENTLY_OBSERVED')
+        self.assertFalse(observed['usable'])
+        self.assertEqual(self.query('SELECT * FROM admission_installation.events ORDER BY event_id'), events)
+        def interrupted(phase):
+            if phase == 'after_revocation':
+                raise RuntimeError('synthetic revoke-first interruption')
+        with self.assertRaises(self.module.InstallationRevokedRecordingFailed):
+            self.module.rollback(self.backend, self.candidate, self.plan, self.store,
+                                 self.attempt, self.authority, progress=interrupted)
+        with self.assertRaises(ValueError):
+            self.install()
+        self.assertEqual(self.module.rollback(self.backend, self.candidate, self.plan, self.store,
+            self.attempt, self.authority)['state'], 'REVOKED')
+        self.assertEqual(self.preserved(), before)
+
+    def test_task_bootstrap_trigger_drift_denies_retry_and_independent_verification(self):
+        self.plan = self.module.build_plan(self.candidate, self.backend.describe(),
+            adopted_sources=LEGACY, filesystem_binding=self.store.binding,
+            configuration_sha256=hashlib.sha256(self.configuration).hexdigest(),
+            migration_profile='task-bootstrap-v1')
+        self.authority = fixture_authority(self.module, self.plan, self.attempt)
+        self.install()
+        verifier = self.verifier()
+        self.assertEqual(self.module.verify(verifier, self.candidate, self.plan, self.store,
+            self.attempt, self.authority)['state'], 'INDEPENDENTLY_OBSERVED')
+        catalog_before = self.backend.describe()['catalog_sha256']
+        guards = self.query("SELECT t.tgname FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid "
+            "JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='task_bootstrap' "
+            "AND t.tgrelid='assignment_leases.leases'::regclass AND NOT t.tgisinternal ORDER BY t.tgname")
+        self.assertTrue(guards, 'No bootstrap guard protects legacy lease issuance')
+        self.query(sql.SQL('ALTER TABLE assignment_leases.leases DISABLE TRIGGER {}').format(sql.Identifier(guards[0][0])))
+        self.assertNotEqual(self.backend.describe()['catalog_sha256'], catalog_before)
+        with self.assertRaisesRegex(ValueError, 'CATALOG'):
+            self.install()
+        with self.assertRaisesRegex(ValueError, '^INSTALLATION_NOT_INDEPENDENTLY_VERIFIABLE$'):
+            self.module.verify(verifier, self.candidate, self.plan, self.store, self.attempt, self.authority)
+
+    def test_untracked_task_bootstrap_schema_cannot_be_adopted_by_name_only(self):
+        self.query('CREATE SCHEMA task_bootstrap')
+        with self.assertRaisesRegex(ValueError, 'INVALID_LEGACY_ADOPTION'):
+            self.module.build_plan(self.candidate, self.backend.describe(),
+                adopted_sources=LEGACY + ('016-authenticated-task-bootstrap.sql',),
+                filesystem_binding=self.store.binding, configuration_sha256='a' * 64,
+                migration_profile='task-bootstrap-v1')
+        self.assertEqual(self.query("SELECT to_regnamespace('admission_installation')"), [(None,)])
+
+    def test_profile_substitution_cannot_expand_an_existing_plan(self):
+        value = self.plan.value
+        value['migration_profile'] = 'task-bootstrap-v1'
+        self.plan = self.module.InstallationPlan(self.module.canonical(value))
+        self.authority = fixture_authority(self.module, self.plan, self.attempt)
+        with self.assertRaisesRegex(ValueError, 'BINDING_CONFLICT'):
+            self.install()
+        self.assertEqual(self.query("SELECT to_regnamespace('admission_installation'),to_regnamespace('task_bootstrap')"),
+                         [(None, None)])
+
     def test_exact_retry_is_idempotent_and_does_not_replay_ddl(self):
         first = self.install()
         history = self.query('SELECT * FROM admission_installation.events ORDER BY event_id')

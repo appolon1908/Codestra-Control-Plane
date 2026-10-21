@@ -41,6 +41,18 @@ MIGRATIONS = ('schema.sql', '002-hierarchy-promotion.sql', '005-scoped-registrat
     '007-assignment-leases.sql', '009-atomic-inspection.sql', '009-controller-coordinator.sql',
     '010-controller-coordinator-integration.sql', '010-scoped-operation-admission.sql', LEDGER_SOURCE)
 GRAPH = {name: SCHEMA_PREREQUISITES[name] for name in MIGRATIONS}
+TASK_BOOTSTRAP_SOURCE = '016-authenticated-task-bootstrap.sql'
+
+
+def migration_sources(profile='admission-v1'):
+    """Select source DDL explicitly; packaging a new API never opts it in."""
+    if profile == 'admission-v1':
+        return MIGRATIONS
+    if profile == 'task-bootstrap-v1':
+        return MIGRATIONS + (TASK_BOOTSTRAP_SOURCE,)
+    raise ValueError('UNSUPPORTED_MIGRATION_PROFILE')
+
+
 MANIFEST = 'controller-release-manifest.json'
 SHA256 = re.compile(r'[0-9a-f]{64}')
 SHA1 = re.compile(r'[0-9a-f]{40}')
@@ -360,10 +372,11 @@ MARKERS = {
     '012-scope-assignment-leases.sql': 'relation:scope_assignment_leases.principals',
     '013-first-certification-pending.sql': 'relation:certifier_authority.pending_bindings',
     '014-atomic-inclusion-receipts.sql': 'relation:atomic_receipts.receipts',
+    TASK_BOOTSTRAP_SOURCE: 'schema:task_bootstrap',
 }
 NAMESPACES = ('public', 'scoped_registration', 'publisher_authority', 'assignment_leases',
               'frozen_recovery', 'atomic_inspection', 'scoped_admission',
-              'certifier_authority', 'scope_assignment_leases', 'atomic_receipts')
+              'certifier_authority', 'scope_assignment_leases', 'atomic_receipts', 'task_bootstrap')
 
 
 def _coordinator_contracts(candidate, source):
@@ -418,8 +431,11 @@ class InstallationPlan:
         return json.loads(self.encoded, object_pairs_hook=_unique)
 
 
-def build_plan(candidate, observed, *, adopted_sources, filesystem_binding, configuration_sha256):
+def build_plan(candidate, observed, *, adopted_sources, filesystem_binding, configuration_sha256,
+               migration_profile='admission-v1'):
     """Prepare a non-authorizing exact migration plan from a read-only snapshot."""
+    selected = migration_sources(migration_profile)
+    graph = {name: SCHEMA_PREREQUISITES[name] for name in selected}
     candidate.revalidate()
     if observed.get('postgres_major') != 16:
         raise ValueError('POSTGRESQL_16_COMPATIBILITY_REQUIRED')
@@ -432,30 +448,30 @@ def build_plan(candidate, observed, *, adopted_sources, filesystem_binding, conf
             raise ValueError('INCOMPATIBLE_LEGACY_CONTRACT: ' + name)
     adopted = tuple(adopted_sources)
     if (len(set(adopted)) != len(adopted) or not {'schema.sql', '002-hierarchy-promotion.sql'} <= set(adopted)
-            or not set(adopted) <= set(MIGRATIONS) - {LEDGER_SOURCE}):
+            or not set(adopted) <= set(selected) - {LEDGER_SOURCE, TASK_BOOTSTRAP_SOURCE}):
         raise ValueError('INVALID_LEGACY_ADOPTION')
     versions = observed['migration_versions']
-    checksums = {name: digest(candidate.files[name]) for name in MIGRATIONS}
+    checksums = {name: digest(candidate.files[name]) for name in selected}
     if any(row['sha256'] != checksums[name] for name, row in versions.items() if name in checksums):
         raise ValueError('MIGRATION_CHECKSUM_CONFLICT')
     components = set(observed['components'])
     for name, marker in MARKERS.items():
-        if name not in MIGRATIONS:
+        if name not in selected:
             continue
         if marker in components and name not in adopted and name not in versions:
             raise ValueError('UNTRACKED_EXISTING_COMPONENT: ' + name)
         if name in adopted and marker not in components:
             raise ValueError('MISSING_LEGACY_COMPONENT: ' + name)
     for name in adopted:
-        if not set(GRAPH[name]) <= set(adopted) | versions.keys():
+        if not set(graph[name]) <= set(adopted) | versions.keys():
             raise ValueError('INCOMPLETE_LEGACY_DEPENDENCY_ADOPTION')
     _coordinator_adoption(candidate, observed, set(adopted) | versions.keys())
     if (not isinstance(configuration_sha256, str) or not SHA256.fullmatch(configuration_sha256)
             or set(filesystem_binding) not in ({'path', 'device', 'inode', 'uid', 'gid', 'mode'},
                 {'path', 'device', 'inode', 'uid', 'gid', 'mode', 'runtime'})):
         raise ValueError('INVALID_INSTALLATION_CUSTODY_BINDING')
-    order = migration_order(GRAPH)
-    if set(order) != set(MIGRATIONS):
+    order = migration_order(graph)
+    if set(order) != set(selected):
         raise ValueError('INCOMPLETE_MIGRATION_DEPENDENCY_GRAPH')
     target = observed['identity']
     value = {
@@ -475,6 +491,8 @@ def build_plan(candidate, observed, *, adopted_sources, filesystem_binding, conf
         'filesystem': dict(filesystem_binding), 'configuration_sha256': configuration_sha256,
         'authority': 'NONE_SOURCE_PLAN', 'install_allowed': False, 'activation_allowed': False,
     }
+    if migration_profile != 'admission-v1':
+        value['migration_profile'] = migration_profile
     return InstallationPlan(canonical(value))
 
 
@@ -1610,11 +1628,13 @@ def _context(candidate, plan, store, attempt_id):
         store._candidate(candidate)
     attempt_id = str(uuid.UUID(attempt_id))
     value = plan.value
+    selected = migration_sources(value.get('migration_profile', 'admission-v1'))
+    graph = {name: SCHEMA_PREREQUISITES[name] for name in selected}
     if (value['source_commit'] != candidate.source_commit or value['manifest_sha256'] != candidate.manifest_sha256
-            or value['filesystem'] != store.binding or set(value['sources']) != set(MIGRATIONS)
-            or any(value['sources'][name] != digest(candidate.files[name]) for name in MIGRATIONS)):
+            or value['filesystem'] != store.binding or set(value['sources']) != set(selected)
+            or any(value['sources'][name] != digest(candidate.files[name]) for name in selected)):
         raise ValueError('INSTALLATION_PLAN_BINDING_CONFLICT')
-    expected_pending = [name for name in migration_order(GRAPH)
+    expected_pending = [name for name in migration_order(graph)
                         if name not in value['adopted_sources'] and name not in value['existing_versions'] and name != LEDGER_SOURCE]
     if value['pending_sources'] != expected_pending:
         raise ValueError('INSTALLATION_DEPENDENCY_PLAN_CONFLICT')
@@ -1718,7 +1738,8 @@ def install(backend, candidate, plan, store, configuration, attempt_id, authorit
                     or observed['migration_versions'] != value['existing_versions']):
                 raise ValueError('INSTALLATION_CATALOG_CHANGED')
             rebuilt = build_plan(candidate, observed, adopted_sources=value['adopted_sources'],
-                filesystem_binding=store.binding, configuration_sha256=value['configuration_sha256'])
+                filesystem_binding=store.binding, configuration_sha256=value['configuration_sha256'],
+                migration_profile=value.get('migration_profile', 'admission-v1'))
             if rebuilt.encoded != plan.encoded:
                 raise ValueError('INSTALLATION_PLAN_SEMANTICS_CHANGED')
             _authorize(authority, 'install', binding, 'intent')
@@ -2081,17 +2102,21 @@ def _request_plan(operation, request, candidate):
     common = {'schema', 'candidate', 'manifest_sha256', 'runtime_selection', 'adopted_sources', 'configuration_sha256'}
     required = common if operation == 'plan' else common | {'plan', 'plan_sha256', 'attempt_id'}
     if (operation not in ('plan', 'install', 'verify', 'rollback') or type(request) is not dict
-            or set(request) != required or request['schema'] != 'codestra.admission-installation-request.v1'
+            or set(request) not in (required, required | {'migration_profile'})
+            or request['schema'] != 'codestra.admission-installation-request.v1'
             or request['candidate'] != str(candidate.root)
             or request['manifest_sha256'] != candidate.manifest_sha256
             or type(request['adopted_sources']) is not list
             or not isinstance(request['configuration_sha256'], str)
             or not SHA256.fullmatch(request['configuration_sha256'])):
         raise ValueError('INVALID_INSTALLATION_REQUEST')
+    profile = request.get('migration_profile', 'admission-v1')
+    migration_sources(profile)
     if operation == 'plan':
         return None
     plan = InstallationPlan(canonical(request['plan']))
     if (plan.digest != request['plan_sha256'] or plan.value['adopted_sources'] != sorted(request['adopted_sources'])
+            or plan.value.get('migration_profile', 'admission-v1') != profile
             or plan.value['configuration_sha256'] != request['configuration_sha256']
             or plan.value['filesystem'].get('runtime', {}).get('selection_sha256') != digest(canonical(request['runtime_selection']))):
         raise ValueError('INSTALLATION_REQUEST_PLAN_CONFLICT')
@@ -2108,7 +2133,8 @@ def dispatch_request(operation, request, candidate, backend, store, *, authority
         observed = backend.describe()
         PostgresTarget.authenticated(observed['identity'])
         plan = build_plan(candidate, observed, adopted_sources=request['adopted_sources'],
-            filesystem_binding=store.binding, configuration_sha256=request['configuration_sha256'])
+            filesystem_binding=store.binding, configuration_sha256=request['configuration_sha256'],
+            migration_profile=request.get('migration_profile', 'admission-v1'))
         return dict(state='PLANNED_NOT_AUTHORIZED', plan=plan.value, plan_sha256=plan.digest,
             usable=False, certified=False, install_allowed=False, activation_allowed=False)
     if operation == 'install':

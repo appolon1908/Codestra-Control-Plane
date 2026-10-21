@@ -87,6 +87,38 @@ class PrivilegedEntryTests(unittest.TestCase):
 
 
 class ConnectionPolicyTests(unittest.TestCase):
+    def test_task_bootstrap_migration_requires_explicit_profile(self):
+        module = importlib.import_module('codestra_control.admission_installation')
+        self.assertEqual(module.migration_sources('admission-v1'), module.MIGRATIONS)
+        self.assertNotIn('016-authenticated-task-bootstrap.sql', module.MIGRATIONS)
+        self.assertEqual(module.migration_sources('task-bootstrap-v1'),
+                         module.MIGRATIONS + ('016-authenticated-task-bootstrap.sql',))
+        for invalid in ('', 'global', None, True):
+            with self.subTest(profile=invalid), self.assertRaisesRegex(ValueError, 'MIGRATION_PROFILE'):
+                module.migration_sources(invalid)
+
+    def test_installation_request_binds_migration_profile_to_exact_plan(self):
+        module = importlib.import_module('codestra_control.admission_installation')
+        candidate = SimpleNamespace(root=Path('/synthetic/candidate'), manifest_sha256='a' * 64)
+        request = dict(schema='codestra.admission-installation-request.v1',
+            candidate=str(candidate.root), manifest_sha256=candidate.manifest_sha256,
+            runtime_selection={}, adopted_sources=[], configuration_sha256='b' * 64)
+        self.assertIsNone(module._request_plan('plan', request, candidate))
+        self.assertIsNone(module._request_plan('plan', dict(request, migration_profile='task-bootstrap-v1'), candidate))
+        value = dict(schema='codestra.admission-installation-plan.v1',
+            source_commit='c' * 40, manifest_sha256='a' * 64, configuration_sha256='b' * 64,
+            adopted_sources=[], filesystem={'runtime': {'selection_sha256': module.digest(module.canonical({}))}},
+            target={}, migration_profile='task-bootstrap-v1')
+        plan = module.InstallationPlan(module.canonical(value))
+        operation = dict(request, plan=plan.value, plan_sha256=plan.digest,
+            attempt_id='11111111-1111-4111-8111-111111111111')
+        with self.assertRaisesRegex(ValueError, 'PLAN_CONFLICT'):
+            module._request_plan('install', operation, candidate)
+        self.assertEqual(module._request_plan('install',
+            dict(operation, migration_profile='task-bootstrap-v1'), candidate), plan)
+        with self.assertRaisesRegex(ValueError, 'MIGRATION_PROFILE'):
+            module._request_plan('plan', dict(request, migration_profile='unsupported'), candidate)
+
     def setUp(self):
         self.module = importlib.import_module('codestra_control.admission_installation')
         self.assertTrue(hasattr(self.module, 'connection_parameters'),
