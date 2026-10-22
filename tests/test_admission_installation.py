@@ -173,7 +173,7 @@ class OnlineAuthoritySessionTests(unittest.TestCase):
                 authority._check(Readback(), {'target': {'system_identifier': '22'}})
 
 
-def candidate_fixture(directory, wheel=None, system_tools=None, source_sha='a' * 40):
+def candidate_fixture(directory, wheel=None, system_tools=None, source_sha='a' * 40, administration=False):
     from codestra_control.controller_release import (SCHEMA_SOURCES, CONTROLLER_ENTRYPOINTS,
         REQUIRED_LIBRARIES, CONFIGURATION_SOURCES, CONTRACT_SOURCES)
     from codestra_control.publisher_release import ENTRYPOINTS
@@ -182,6 +182,8 @@ def candidate_fixture(directory, wheel=None, system_tools=None, source_sha='a' *
         + tuple(str(p.relative_to(ROOT)) for p in (ROOT / 'lib').rglob('*.py'))
         + ('015-admission-installation-state.sql', 'bin/codestra-install-admission',
            'config/examples/admission-installation.proposal.json', 'docs/admission-installation.md')))
+    if administration:
+        names += ('018-admission-installation-lock.sql',)
     files = []
     if wheel is None:
         wheel = b'synthetic offline driver fixture, never imported or installed'
@@ -220,7 +222,7 @@ def candidate_fixture(directory, wheel=None, system_tools=None, source_sha='a' *
                     install_allowed=False, activation_allowed=False, files=files,
                     release_approved=False, database_setup_approved=False, authority_provisioning_approved=False,
                     driver_artifact=driver_metadata, runtime=runtime_metadata,
-                    schema_sources=[name for name in names if name.endswith('.sql')])
+                    schema_sources=list(SCHEMA_SOURCES))
     raw = (json.dumps(manifest, sort_keys=True) + '\n').encode()
     path = directory / 'controller-release-manifest.json'
     path.write_bytes(raw)
@@ -228,6 +230,12 @@ def candidate_fixture(directory, wheel=None, system_tools=None, source_sha='a' *
 
 
 class CandidateTests(unittest.TestCase):
+    def test_restricted_profile_requires_separate_admin_source_without_applying_it(self):
+        from codestra_control import admission_installation as module
+        selected = module.migration_sources('task-bootstrap-restricted-v1')
+        self.assertEqual(selected, module.migration_sources('task-bootstrap-v1'))
+        self.assertNotIn('018-admission-installation-lock.sql', selected)
+
     def setUp(self):
         try:
             self.module = importlib.import_module('codestra_control.admission_installation')
@@ -558,6 +566,44 @@ class FileCustodyTests(unittest.TestCase):
 
 
 class RuntimeTargetTests(unittest.TestCase):
+    def test_configured_profile_uses_fixed_distinct_installation_reader(self):
+        import psycopg2
+        class Connection:
+            autocommit = False
+            def get_transaction_status(self):
+                return 0
+            def close(self):
+                pass
+        for profile, expected in (('admission-v1', ['operator']),
+                                  ('task-bootstrap-restricted-v1', ['operator', 'installation_verifier'])):
+            with self.subTest(profile=profile):
+                request = dict(schema='codestra.admission-installation-request.v1',
+                    candidate=str(self.candidate.root), manifest_sha256=self.candidate.manifest_sha256,
+                    runtime_selection=self.specification, adopted_sources=['schema.sql', '002-hierarchy-promotion.sql'],
+                    configuration_sha256=hashlib.sha256(self.bundle()).hexdigest(), migration_profile=profile)
+                config = dict(schema='codestra.admission-installer-config.' + ('v2' if len(expected) == 2 else 'v1'), issuer={})
+                if len(expected) == 2:
+                    config['lock_selection'] = dict(profile_sha256='a' * 64)
+                raw = b'synthetic-protected-configuration'
+                ca = '/etc/codestra/control-plane/fixture-ca.crt'
+                inputs = {self.module.INSTALLER_CONFIG: raw, ca: b'synthetic-public-ca'}
+                inputs.update({self.module.INSTALLER_CREDENTIALS[role]: role.encode() for role in expected})
+                opened = []
+                def connect(**params):
+                    opened.append(params['role'])
+                    return Connection()
+                def dispatch(operation, data, candidate, backend, store, **kwargs):
+                    self.assertEqual(backend.reader is not None, len(expected) == 2)
+                    return 'composed'
+                with patch.object(self.module, '_protected_input', side_effect=lambda ns, path, **kw: inputs[path]), \
+                        patch.object(self.module, 'connection_parameters', side_effect=lambda value: dict(role=value.decode(), sslrootcert=ca)), \
+                        patch.object(psycopg2, 'connect', connect), \
+                        patch.object(self.module, '_installation_journal', return_value=self.journal), \
+                        patch.object(self.module, 'dispatch_request', dispatch):
+                    self.assertEqual(self.module._configured_connections('plan', request, self.candidate,
+                        self.namespace, raw, config), 'composed')
+                self.assertEqual(opened, expected)
+
     def setUp(self):
         self.module = importlib.import_module('codestra_control.admission_installation')
         if not hasattr(self.module, 'RuntimeCustody'):
