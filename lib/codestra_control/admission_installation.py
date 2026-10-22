@@ -42,13 +42,15 @@ MIGRATIONS = ('schema.sql', '002-hierarchy-promotion.sql', '005-scoped-registrat
     '010-controller-coordinator-integration.sql', '010-scoped-operation-admission.sql', LEDGER_SOURCE)
 GRAPH = {name: SCHEMA_PREREQUISITES[name] for name in MIGRATIONS}
 TASK_BOOTSTRAP_SOURCE = '016-authenticated-task-bootstrap.sql'
+LOCK_SOURCE = '018-admission-installation-lock.sql'
+RESTRICTED_PROFILE = 'task-bootstrap-restricted-v1'
 
 
 def migration_sources(profile='admission-v1'):
     """Select source DDL explicitly; packaging a new API never opts it in."""
     if profile == 'admission-v1':
         return MIGRATIONS
-    if profile == 'task-bootstrap-v1':
+    if profile in ('task-bootstrap-v1', RESTRICTED_PROFILE):
         return MIGRATIONS + (TASK_BOOTSTRAP_SOURCE,)
     raise ValueError('UNSUPPORTED_MIGRATION_PROFILE')
 
@@ -376,7 +378,8 @@ MARKERS = {
 }
 NAMESPACES = ('public', 'scoped_registration', 'publisher_authority', 'assignment_leases',
               'frozen_recovery', 'atomic_inspection', 'scoped_admission',
-              'certifier_authority', 'scope_assignment_leases', 'atomic_receipts', 'task_bootstrap')
+              'certifier_authority', 'scope_assignment_leases', 'atomic_receipts', 'task_bootstrap',
+              'admission_installation_lock')
 
 
 def _coordinator_contracts(candidate, source):
@@ -493,6 +496,13 @@ def build_plan(candidate, observed, *, adopted_sources, filesystem_binding, conf
     }
     if migration_profile != 'admission-v1':
         value['migration_profile'] = migration_profile
+    if migration_profile == RESTRICTED_PROFILE:
+        if LOCK_SOURCE not in candidate.files or not observed.get('lock_capability') or not observed.get('installation_reader'):
+            raise ValueError('RESTRICTED_INSTALLATION_CAPABILITIES_REQUIRED')
+        if LEDGER_SOURCE in versions:
+            raise ValueError('EXISTING_LEDGER_REQUIRES_FORWARD_ADOPTION')
+        value['lock_capability'] = observed['lock_capability']
+        value['installation_reader'] = observed['installation_reader']
     return InstallationPlan(canonical(value))
 
 
@@ -502,9 +512,31 @@ class InstallationOutcomeUnknown(RuntimeError):
 
 class PostgresTarget:
     """Own an idle explicit connection; never discover DSNs from the environment."""
-    def __init__(self, connection):
+    def __init__(self, connection, *, lock_selection=None, reader=None):
         self.connection = connection
+        self.lock_selection = lock_selection
+        self.reader = reader
         self._idle()
+
+    def restricted_observation(self, candidate, observed=None):
+        """Observe protected broker and independently authenticated reader, not request JSON."""
+        observed = dict(observed or self.describe())
+        with self.readonly() as cursor:
+            observed['lock_capability'] = _lock_capability(cursor, candidate, self.lock_selection)
+        if self.reader is None:
+            raise ValueError('AUTHENTICATED_INSTALLATION_READER_REQUIRED')
+        identity = _restricted_verifier(self.reader, observed['identity'], exact_reads=True)
+        with self.reader.readonly() as cursor:
+            if _lock_capability(cursor, candidate, self.lock_selection) != observed['lock_capability']:
+                raise ValueError('INSTALLATION_READER_BROKER_CONFLICT')
+        observed['installation_reader'] = {k: identity[k] for k in
+            ('system_identifier', 'database_oid', 'database_name', 'session_user', 'role_oid')}
+        profile = observed['lock_capability']['snapshot']['profile']
+        if (profile['verifier'] != identity['session_user'] or int(profile['verifier_oid']) != identity['role_oid']
+                or profile['operator'] != observed['identity']['session_user']
+                or int(profile['operator_oid']) != observed['identity']['role_oid']):
+            raise ValueError('INSTALLATION_READER_PROFILE_CONFLICT')
+        return observed
 
     def _idle(self):
         from psycopg2.extensions import TRANSACTION_STATUS_IDLE
@@ -1670,11 +1702,93 @@ def _progress(callback, phase):
         callback(phase)
 
 
-def _lock_tables(cursor):
+def _lock_capability(cursor, candidate, selection):
+    """Validate executable source before calling a pre-existing definer API."""
+    if (type(selection) is not dict or set(selection) != {'profile_sha256'}
+            or not isinstance(selection['profile_sha256'], str)
+            or not SHA256.fullmatch(selection['profile_sha256']) or LOCK_SOURCE not in candidate.files):
+        raise ValueError('PROTECTED_LOCK_SELECTION_REQUIRED')
+    pattern = re.compile(r'CREATE FUNCTION admission_installation_lock\.([a-z_]+)'
+        r'\(([^)]*)\) RETURNS (jsonb|trigger) LANGUAGE plpgsql SECURITY DEFINER\n'
+        r"SET search_path=pg_catalog,pg_temp SET timezone='UTC' AS \$\$(.*?)\$\$;", re.S)
+    expected = {name: (args, body, returns) for name, args, returns, body in pattern.findall(candidate.files[LOCK_SOURCE].decode())}
+    if set(expected) != {'describe', 'acquire', '_profile_revision'}:
+        raise ValueError('INVALID_LOCK_SOURCE_CONTRACT')
+    cursor.execute("""SELECT p.oid,p.proname,pg_get_function_identity_arguments(p.oid),p.prosrc,
+      p.prosecdef,l.lanname,p.proconfig,p.proowner,n.oid,n.nspowner,r.rolcanlogin,
+      r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolreplication,r.rolbypassrls,
+      pg_has_role(session_user,r.oid,'MEMBER'),
+      EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE'),
+      has_schema_privilege(session_user,n.oid,'CREATE'),p.prorettype::regtype::text,
+      p.prokind,p.provolatile,p.proparallel,p.proretset,p.proisstrict,p.proleakproof,
+      p.prosupport::oid,p.pronargdefaults,p.provariadic
+      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      JOIN pg_roles r ON r.oid=p.proowner JOIN pg_language l ON l.oid=p.prolang
+      WHERE n.nspname='admission_installation_lock' ORDER BY p.proname,p.oid""")
+    rows = cursor.fetchall()
+    if len(rows) != 3:
+        raise ValueError('LOCK_BROKER_CONTRACT_CHANGED')
+    pins = []
+    for row in rows:
+        oid, name, arguments, body, definer, language, settings, owner, namespace, schema_owner, *tail = row
+        unsafe, returns, flags = tail[:9], tail[9], tuple(tail[10:])
+        if (name not in expected or (arguments, body, returns) != expected[name]
+                or not definer or language != 'plpgsql'
+                or sorted(item.lower() for item in settings or []) != ['search_path=pg_catalog, pg_temp', 'timezone=utc']
+                or owner != schema_owner or any(unsafe)
+                or flags != ('f', 'v', 'u', False, False, False, 0, 0, 0)):
+            raise ValueError('LOCK_BROKER_CONTRACT_CHANGED')
+        pins.append(dict(oid=oid, name=name, owner_oid=owner, namespace_oid=namespace))
+    if len({pin['owner_oid'] for pin in pins}) != 1:
+        raise ValueError('LOCK_BROKER_CONTRACT_CHANGED')
+    cursor.execute("""SELECT c.oid,c.relowner,c.relkind,
+      (EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner)
+       OR EXISTS(SELECT 1 FROM pg_attribute att CROSS JOIN LATERAL aclexplode(att.attacl) a
+         WHERE att.attrelid=c.oid AND a.grantee<>c.relowner)),
+      EXISTS(SELECT 1 FROM pg_roles r WHERE pg_has_role(session_user,r.oid,'MEMBER') AND
+        (has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+         OR has_any_column_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
+      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='admission_installation_lock' AND c.relname='profile'""")
+    table = cursor.fetchone()
+    if not table or table[1] != pins[0]['owner_oid'] or table[2:] != ('r', False, False):
+        raise ValueError('LOCK_BROKER_PROFILE_NOT_PROTECTED')
+    helper_oid = next(pin['oid'] for pin in pins if pin['name'] == '_profile_revision')
+    cursor.execute("""SELECT tgname,tgfoid,tgtype,tgenabled,tgnargs,tgqual IS NULL,
+      tgdeferrable,tginitdeferred,tgconstraint,tgoldtable,tgnewtable
+      FROM pg_trigger WHERE tgrelid=%s AND NOT tgisinternal ORDER BY tgname""", (table[0],))
+    if cursor.fetchall() != [
+            ('profile_revision', helper_oid, 27, 'O', 0, True, False, False, 0, None, None),
+            ('profile_truncate', helper_oid, 34, 'O', 0, True, False, False, 0, None, None)]:
+        raise ValueError('LOCK_PROFILE_GUARDS_CHANGED')
+    cursor.execute('SELECT admission_installation_lock.describe()')
+    snapshot = cursor.fetchone()[0]
+    if snapshot.get('profile_sha256') != selection['profile_sha256']:
+        raise ValueError('LOCK_PROFILE_CHANGED')
+    return dict(snapshot=snapshot, functions=pins, profile_oid=table[0], source_sha256=digest(candidate.files[LOCK_SOURCE]))
+
+
+def _lock_tables(cursor, *, backend=None, candidate=None, plan=None):
     from psycopg2 import sql
+    restricted = plan is not None and plan.get('migration_profile') == RESTRICTED_PROFILE
+    if restricted:
+        actual = _lock_capability(cursor, candidate, backend.lock_selection)
+        if actual != plan['lock_capability']:
+            raise ValueError('LOCK_CAPABILITY_CHANGED')
     cursor.execute("""SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname=ANY(%s) AND c.relkind IN ('r','p') ORDER BY n.nspname,c.relname""", (list(NAMESPACES) + ['admission_installation'],))
+    public_locked = False
     for namespace, table in cursor.fetchall():
+        if namespace == 'admission_installation_lock':
+            continue
+        if restricted and namespace == 'public':
+            if not public_locked:
+                cursor.execute('SELECT admission_installation_lock.acquire(%s)',
+                    (plan['lock_capability']['snapshot']['profile_sha256'],))
+                if cursor.fetchone()[0] != plan['lock_capability']['snapshot']:
+                    raise ValueError('LOCK_CAPABILITY_CHANGED')
+                public_locked = True
+            continue
         cursor.execute(sql.SQL('LOCK TABLE {} IN ACCESS EXCLUSIVE MODE').format(sql.Identifier(namespace, table)))
 
 
@@ -1726,9 +1840,17 @@ def install(backend, candidate, plan, store, configuration, attempt_id, authorit
     observed = backend.describe()
     _target(observed['identity'], value['target'])
     _authorize(authority, 'install', binding, 'preflight')
+    restricted = value.get('migration_profile') == RESTRICTED_PROFILE
+    if restricted:
+        observed = backend.restricted_observation(candidate, observed)
+        if any(observed[key] != value[key] for key in ('lock_capability', 'installation_reader')):
+            raise ValueError('RESTRICTED_INSTALLATION_CAPABILITY_CHANGED')
+        _authorize(authority, 'verify', dict(binding, verifier_role_oid=value['installation_reader']['role_oid']), 'preflight')
     with backend.fence(), store.fence():
         store.preflight(candidate, configuration, value['configuration_sha256'])
         observed = backend.describe()
+        if restricted:
+            observed = backend.restricted_observation(candidate, observed)
         _target(observed['identity'], value['target'])
         _versions(observed, value['sources'], preserved=value['preserved_versions'])
         prior = backend.attempt(binding['attempt_id'])
@@ -1744,7 +1866,7 @@ def install(backend, candidate, plan, store, configuration, attempt_id, authorit
                 raise ValueError('INSTALLATION_PLAN_SEMANTICS_CHANGED')
             _authorize(authority, 'install', binding, 'intent')
             with backend.transaction() as cursor:
-                _lock_tables(cursor)
+                _lock_tables(cursor, backend=backend, candidate=candidate, plan=value)
                 if backend._catalog(cursor)[0] != value['catalog_before']:
                     raise ValueError('INSTALLATION_CATALOG_CHANGED')
                 cursor.execute("SELECT to_regnamespace('admission_installation')")
@@ -1754,6 +1876,8 @@ def install(backend, candidate, plan, store, configuration, attempt_id, authorit
                 versions = backend._versions(cursor)
                 if not versions:
                     cursor.execute(_migration_body(candidate.files[LEDGER_SOURCE]))
+                    if restricted:
+                        _grant_installation_reader(cursor, value['installation_reader'])
                 elif versions.get(LEDGER_SOURCE, {}).get('sha256') != value['sources'][LEDGER_SOURCE]:
                     raise ValueError('INSTALLATION_LEDGER_VERSION_CONFLICT')
                 cursor.execute("SELECT 1 FROM admission_installation.attempts WHERE stage<>'REVOKED' LIMIT 1")
@@ -1785,7 +1909,7 @@ def install(backend, candidate, plan, store, configuration, attempt_id, authorit
             candidate.revalidate()
             _authorize(authority, 'install', binding, 'database')
             with backend.transaction() as cursor:
-                _lock_tables(cursor)
+                _lock_tables(cursor, backend=backend, candidate=candidate, plan=value)
                 if backend._catalog(cursor)[0] != value['catalog_before']:
                     raise ValueError('INSTALLATION_CATALOG_CHANGED')
                 for name in value['pending_sources']:
@@ -1840,6 +1964,10 @@ def install(backend, candidate, plan, store, configuration, attempt_id, authorit
             _progress(progress, 'after_receipt_commit')
         _authorize(authority, 'install', binding, 'return')
         fresh = backend.describe()
+        if restricted:
+            fresh = backend.restricted_observation(candidate, fresh)
+            if any(fresh[key] != value[key] for key in ('lock_capability', 'installation_reader')):
+                raise ValueError('RESTRICTED_INSTALLATION_CAPABILITY_CHANGED')
         _target(fresh['identity'], value['target'])
         _versions(fresh, value['sources'], complete=True, preserved=value['preserved_versions'])
         completed = backend.attempt(binding['attempt_id'])
@@ -1880,15 +2008,55 @@ def _has_writer_capability(cursor, namespaces):
     return cursor.fetchone()[0]
 
 
-def _restricted_verifier(backend, expected):
+def _restricted_verifier(backend, expected, *, exact_reads=False):
     """Check all attainable roles, including NOINHERIT/SET ROLE capabilities."""
     with backend.readonly() as cursor:
         identity = backend._identity(cursor)
         _target(identity, expected, independent=True)
+        namespaces = (*NAMESPACES, 'admission_installation')
+        if exact_reads:
+            cursor.execute("SELECT nspname FROM pg_namespace WHERE left(nspname,3)<>'pg_' AND nspname<>'information_schema'")
+            namespaces = tuple(row[0] for row in cursor.fetchall())
         if (identity['role_oid'] == expected['role_oid']
-                or _has_writer_capability(cursor, (*NAMESPACES, 'admission_installation'))):
+                or _has_writer_capability(cursor, namespaces)):
             raise ValueError('INDEPENDENT_RESTRICTED_VERIFIER_REQUIRED')
+        if exact_reads:
+            # The installation observer has no application RPC, sequence or
+            # future default-read authority. Existing broader profiles retain
+            # their historical contract; this is an explicit new profile.
+            cursor.execute("""WITH reachable AS (SELECT oid FROM pg_roles WHERE pg_has_role(session_user,oid,'MEMBER'))
+              SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN reachable r
+              WHERE left(n.nspname,3)<>'pg_' AND n.nspname<>'information_schema' AND
+              ((c.relkind IN ('r','p','v','m','f') AND
+                (has_table_privilege(r.oid,c.oid,'SELECT') OR has_any_column_privilege(r.oid,c.oid,'SELECT'))
+                AND (n.nspname<>'admission_installation' OR c.relname NOT IN ('attempts','migrations')))
+               OR c.relkind='S' AND has_sequence_privilege(r.oid,c.oid,'SELECT,USAGE,UPDATE')))
+              OR EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace CROSS JOIN reachable r
+                WHERE left(n.nspname,3)<>'pg_' AND n.nspname<>'information_schema'
+                AND has_function_privilege(r.oid,p.oid,'EXECUTE')
+                AND NOT (n.nspname='admission_installation_lock' AND p.proname='describe' AND p.pronargs=0))
+              OR EXISTS(SELECT 1 FROM pg_default_acl d CROSS JOIN LATERAL aclexplode(d.defaclacl) a
+                WHERE a.grantee=0 OR a.grantee IN (SELECT oid FROM pg_roles WHERE pg_has_role(session_user,oid,'MEMBER')))""")
+            if cursor.fetchone()[0]:
+                raise ValueError('EXACT_INSTALLATION_READER_REQUIRED')
         return identity
+
+
+def _grant_installation_reader(cursor, reader):
+    """Fixed objects only, inside fresh-015 intent before ledger hashing."""
+    from psycopg2 import sql
+    cursor.execute('SELECT oid FROM pg_roles WHERE rolname=%s', (reader['session_user'],))
+    if cursor.fetchone() != (reader['role_oid'],):
+        raise ValueError('INSTALLATION_READER_IDENTITY_CHANGED')
+    grantee = sql.Identifier(reader['session_user'])
+    cursor.execute(sql.SQL('GRANT USAGE ON SCHEMA admission_installation TO {}').format(grantee))
+    cursor.execute(sql.SQL('GRANT SELECT ON admission_installation.attempts,admission_installation.migrations TO {}').format(grantee))
+    cursor.execute("""SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      CROSS JOIN LATERAL aclexplode(c.relacl) a WHERE n.nspname='admission_installation'
+      AND c.relname IN ('attempts','migrations') AND a.grantee=%s AND a.privilege_type='SELECT'
+      AND NOT a.is_grantable""", (reader['role_oid'],))
+    if cursor.fetchone()[0] != 2:
+        raise ValueError('INSTALLATION_READER_GRANT_CONFLICT')
 
 
 def verify(backend, candidate, plan, store, attempt_id, authority):
@@ -1897,7 +2065,14 @@ def verify(backend, candidate, plan, store, attempt_id, authority):
     candidate.revalidate()
     value, binding = _context(candidate, plan, store, attempt_id)
     observed = backend.describe()
-    identity = _restricted_verifier(backend, value['target'])
+    restricted = value.get('migration_profile') == RESTRICTED_PROFILE
+    identity = _restricted_verifier(backend, value['target'], exact_reads=restricted)
+    if restricted and any(identity[k] != v for k, v in value['installation_reader'].items()):
+        raise ValueError('INSTALLATION_READER_IDENTITY_CHANGED')
+    if restricted:
+        with backend.readonly() as cursor:
+            if _lock_capability(cursor, candidate, backend.lock_selection) != value['lock_capability']:
+                raise ValueError('LOCK_CAPABILITY_CHANGED')
     binding['verifier_role_oid'] = identity['role_oid']
     _authorize(authority, 'verify', binding, 'preflight')
     prior = backend.attempt(binding['attempt_id'])
@@ -1915,7 +2090,11 @@ def verify(backend, candidate, plan, store, attempt_id, authority):
     store.verify_configuration(binding['attempt_id'], value['configuration_sha256'])
     store.verify_receipt(binding['attempt_id'], prior['receipt'])
     fresh = backend.describe()
-    fresh_identity = _restricted_verifier(backend, value['target'])
+    fresh_identity = _restricted_verifier(backend, value['target'], exact_reads=restricted)
+    if restricted:
+        with backend.readonly() as cursor:
+            if _lock_capability(cursor, candidate, backend.lock_selection) != value['lock_capability']:
+                raise ValueError('LOCK_CAPABILITY_CHANGED')
     if fresh_identity['role_oid'] != identity['role_oid'] or fresh['identity']['role_oid'] != identity['role_oid']:
         raise ValueError('INDEPENDENT_VERIFIER_IDENTITY_CHANGED')
     if (fresh['catalog_sha256'] != observed['catalog_sha256']
@@ -1974,7 +2153,7 @@ def rollback(backend, candidate, plan, store, attempt_id, authority, *, progress
             _authorize(authority, 'rollback', binding, 'record_revocation')
             if prior['stage'] != 'REVOKED':
                 with backend.transaction() as cursor:
-                    _lock_tables(cursor)
+                    _lock_tables(cursor, backend=backend, candidate=candidate, plan=value)
                     if backend._catalog(cursor, ('admission_installation',))[0] != prior['ledger_catalog_sha256']:
                         raise ValueError('REVOCATION_LEDGER_CATALOG_CHANGED')
                     _transition(cursor, binding, prior['stage'], 'REVOKED')
@@ -2132,6 +2311,8 @@ def dispatch_request(operation, request, candidate, backend, store, *, authority
     if operation == 'plan':
         observed = backend.describe()
         PostgresTarget.authenticated(observed['identity'])
+        if request.get('migration_profile') == RESTRICTED_PROFILE:
+            observed = backend.restricted_observation(candidate, observed)
         plan = build_plan(candidate, observed, adopted_sources=request['adopted_sources'],
             filesystem_binding=store.binding, configuration_sha256=request['configuration_sha256'],
             migration_profile=request.get('migration_profile', 'admission-v1'))
@@ -2148,6 +2329,7 @@ INSTALLER_CONFIG = '/etc/codestra/control-plane/admission-installer.toml'
 INSTALLER_CREDENTIALS = {
     'operator': '/etc/codestra/control-plane/credentials/admission-operator.dsn',
     'verifier': '/etc/codestra/control-plane/credentials/lease-verifier.dsn',
+    'installation_verifier': '/etc/codestra/control-plane/credentials/admission-verifier.dsn',
     'issuer': '/etc/codestra/control-plane/credentials/admission-issuer.dsn',
 }
 CONFIGURATION_INPUT = '/etc/codestra/control-plane/admission-configuration.json'
@@ -2200,14 +2382,16 @@ def run_configured(operation, request):
     """Fixed host composition, unavailable until separately provisioned/accepted.
 
     No arguments or environment variables select credentials or load code.
-    Plan opens only the operator connection and executes read-only observations.
+    Restricted-profile plans also authenticate the dedicated installation reader.
     """
     if not sys.flags.isolated or not sys.dont_write_bytecode:
         raise ValueError('ISOLATED_NON_BYTECODE_INSTALLER_REQUIRED')
     namespace = RuntimeNamespace('/')
     config_raw = _protected_input(namespace, INSTALLER_CONFIG)
     config = tomllib.loads(config_raw.decode())
-    if (set(config) != {'schema', 'issuer'} or config['schema'] != 'codestra.admission-installer-config.v1'
+    restricted = request.get('migration_profile') == RESTRICTED_PROFILE
+    if (set(config) != ({'schema', 'issuer', 'lock_selection'} if restricted else {'schema', 'issuer'})
+            or config['schema'] != 'codestra.admission-installer-config.' + ('v2' if restricted else 'v1')
             or type(config['issuer']) is not dict):
         raise ValueError('INVALID_INSTALLATION_CONFIGURATION')
     candidate = SourceCandidate.load(request['candidate'], request['manifest_sha256'])
@@ -2265,7 +2449,7 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
             custody_check()
 
             def target():
-                return PostgresTarget(connection('operator', stack))
+                return PostgresTarget(connection('operator', stack), lock_selection=config.get('lock_selection'))
 
             def journal():
                 custody = _installation_journal()
@@ -2279,7 +2463,12 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
             return result
         journal = _installation_journal()
         store = RuntimeCustody(journal, candidate, request['runtime_selection'], namespace)
-        target = PostgresTarget(connection('verifier' if operation == 'verify' else 'operator', stack))
+        restricted = request.get('migration_profile') == RESTRICTED_PROFILE
+        observer = 'installation_verifier' if restricted else 'verifier'
+        target = PostgresTarget(connection(observer if operation == 'verify' else 'operator', stack),
+            lock_selection=config.get('lock_selection'))
+        if restricted and operation in ('plan', 'install'):
+            target.reader = PostgresTarget(connection('installation_verifier', stack))
         authority = None
         configuration = None
         if operation != 'plan':

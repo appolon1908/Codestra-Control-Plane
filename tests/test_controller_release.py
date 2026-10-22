@@ -114,6 +114,28 @@ class ControllerReleaseTests(unittest.TestCase):
         self.assertFalse(manifest['activation_allowed'])
         self.assertFalse(manifest['database_setup_approved'])
 
+    def test_lock_broker_is_admin_source_and_never_an_installer_migration(self):
+        from codestra_control import controller_release as release, admission_installation as installer
+        output = Path(self.temporary.name) / 'restricted'
+        manifest = release.prepare_controller_release(self.root, self.sha, output, self.wheel)
+        name = '018-admission-installation-lock.sql'
+        self.assertEqual(manifest['administration_sources'], [name])
+        self.assertEqual(next(item['kind'] for item in manifest['files'] if item['source_path'] == name), 'administration_source')
+        self.assertNotIn(name, manifest['schema_sources'])
+        self.assertNotIn(name, installer.migration_sources(installer.RESTRICTED_PROFILE))
+        checksum = hashlib.sha256((output / installer.MANIFEST).read_bytes()).hexdigest()
+        self.assertIn(name, installer.SourceCandidate.load(output, checksum).files)
+
+    def test_commit_without_optional_broker_remains_packageable_and_loadable(self):
+        from codestra_control import controller_release as release, admission_installation as installer
+        self.git('rm', '018-admission-installation-lock.sql')
+        self.git('commit', '-m', 'legacy candidate predating restricted lock profile')
+        output = Path(self.temporary.name) / 'legacy-without-broker'
+        manifest = release.prepare_controller_release(self.root, self.git('rev-parse', 'HEAD'), output, self.wheel)
+        self.assertEqual(manifest['administration_sources'], [])
+        checksum = hashlib.sha256((output / installer.MANIFEST).read_bytes()).hexdigest()
+        self.assertNotIn('018-admission-installation-lock.sql', installer.SourceCandidate.load(output, checksum).files)
+
     def test_missing_transitive_client_import_refuses_complete_candidate(self):
         module = importlib.import_module('codestra_control.controller_release')
         for name in ('lease_interface','atomic_inspection'):

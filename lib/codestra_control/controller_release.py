@@ -38,6 +38,8 @@ SCHEMA_SOURCES = (
     '015-admission-installation-state.sql',
     '016-authenticated-task-bootstrap.sql',
 )
+# Packaged for separate administrative review, never selected as installer DDL.
+ADMINISTRATION_SOURCES = ('018-admission-installation-lock.sql',)
 CONFIGURATION_SOURCES = TEMPLATES + ('config/examples/lease-verifier.proposed.toml',
     'config/examples/atomic-inclusion-acceptance.proposed.json','config/examples/global-coverage.proposed.json',
     'config/examples/atomic-authority.proposed.json',
@@ -171,6 +173,11 @@ def prepare_controller_release(root, source_sha, output, driver_wheel):
         additions[path] = _blob(root, source_sha, path)
         if path in CONFIGURATION_SOURCES:
             _proposal(path, additions[path][1])
+    for path in ADMINISTRATION_SOURCES:
+        # Retained commits predating this optional restricted profile remain
+        # packageable with their original migration inventory.
+        if git(root, 'ls-tree', '-z', source_sha, '--', path):
+            additions[path] = _blob(root, source_sha, path)
     for path in REQUIRED_LIBRARIES:
         _blob(root, source_sha, path)
     _validate_import_closure(root,source_sha,CONTROLLER_ENTRYPOINTS)
@@ -192,6 +199,7 @@ def prepare_controller_release(root, source_sha, output, driver_wheel):
         destination.chmod(mode)
         kind = ('entrypoint' if path in CONTROLLER_ENTRYPOINTS else
                 'schema_source' if path in SCHEMA_SOURCES else
+                'administration_source' if path in ADMINISTRATION_SOURCES else
                 'proposed_configuration' if path in CONFIGURATION_SOURCES else 'contract')
         files.append({'source_path': path, 'sha256': hashlib.sha256(data).hexdigest(),
                       'size': len(data), 'mode': oct(mode), 'kind': kind,
@@ -206,6 +214,7 @@ def prepare_controller_release(root, source_sha, output, driver_wheel):
         'files': sorted(files, key=lambda item: item['source_path']),
         'driver_artifact': publisher['driver_artifact'], 'runtime': publisher['runtime'],
         'schema_sources': list(SCHEMA_SOURCES),
+        'administration_sources': [path for path in ADMINISTRATION_SOURCES if path in additions],
         'schema_contracts': [{'source':path,'sha256':hashlib.sha256(additions[path][1]).hexdigest(),
             'requires_reviewed_sources':list(SCHEMA_PREREQUISITES[path]),'target_compatibility_verified':False,
             'automatic_application_allowed':False} for path in SCHEMA_SOURCES],
