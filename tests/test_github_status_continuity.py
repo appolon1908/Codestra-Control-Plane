@@ -22,7 +22,7 @@ MIGRATION_BASE = "section/mw-03-connectors"
 SHA = "a" * 40
 KLYROW_HEAD = "implementation/klyrow-ses-transport-20261008"
 KLYROW_BASE = "implementation/klyrow-server3-safe-staging-20261008"
-KLYROW_SHA = "f6e56f4fcd75f53a794dfee3d36913611a791248"
+KLYROW_SHA = "99981578158db5421e0e3a0b586f236a27c271bf"
 
 
 class GitHubStatusContinuityTests(unittest.TestCase):
