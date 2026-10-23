@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "linear-history-protection",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--linear-history-protection",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "01975301098c60ebe578084a8a05c9bb6335419a",
+  "owner": "ChatGPT SentinelX source-repair session",
+  "authorization": "Direct user request in this conversation to implement the remaining controller fix and update PRs using SentinelX. This records source preparation, not an authenticated runtime assignment.",
+  "scope": "Recognize parameter-free required_linear_history in effective protection without relaxing provenance, bypass, review, producer, lease or certification gates; update related documentation.",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false
+}
