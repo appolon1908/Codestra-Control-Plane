@@ -24,7 +24,7 @@ class ControllerReleaseTests(unittest.TestCase):
         self.git('config', 'user.name', 'Fixture')
         self.git('config', 'user.email', 'fixture@example.invalid')
         for name in ENTRYPOINTS + ('bin/codestra-coordinate', 'bin/codestra-admission',
-                                  'bin/codestra-register', 'bin/codestra-inspect-atomic',
+                                  'bin/codestra-register', 'bin/codestra-inspect-atomic', 'bin/codestra-install-admission',
                                   'lib/codestra_control/publisher_ownership.py',
                                   'lib/codestra_control/certifier_adapter.py'):
             self.write(name, b'# fixture source\n')
@@ -34,7 +34,7 @@ class ControllerReleaseTests(unittest.TestCase):
             'schema': 'codestra.publisher-system-tools.v1',
             'target_verified': False, 'provisioning_approved': False}).encode())
         source = Path(__file__).resolve().parents[1]
-        for name in ('codestra-coordinate','codestra-admission','codestra-register','codestra-inspect-atomic'):
+        for name in ('codestra-coordinate','codestra-admission','codestra-register','codestra-inspect-atomic','codestra-install-admission','codestra-task-bootstrap'):
             self.write('bin/'+name,(source/'bin'/name).read_bytes())
         for path in (source / 'lib').rglob('*.py'):
             self.write(str(path.relative_to(source)), path.read_bytes())
@@ -45,7 +45,7 @@ class ControllerReleaseTests(unittest.TestCase):
                 self.write(str(path.relative_to(source)), path.read_bytes())
         for name in ('assignment-backed-leases', 'controller-coordinator',
                      'scoped-operation-admission', 'certifier-existing-receipt-source',
-                     'publisher-certifier-action-time-approval','atomic-inclusion-receipts','global-controller-coverage'):
+                     'publisher-certifier-action-time-approval','atomic-inclusion-receipts','global-controller-coverage', 'admission-installation'):
             self.write('docs/' + name + '.md', (source / 'docs' / (name + '.md')).read_bytes())
         self.write('config/contracts/global-coverage-acceptance.schema.json',
             (source/'config/contracts/global-coverage-acceptance.schema.json').read_bytes())
@@ -71,7 +71,9 @@ class ControllerReleaseTests(unittest.TestCase):
         self.assertEqual(manifest['schema'], 'codestra.controller-candidate.v1')
         names = {item['source_path'] for item in manifest['files']}
         self.assertTrue({'bin/codestra-coordinate', 'bin/codestra-admission',
-                         'bin/codestra-register', 'bin/codestra-inspect-atomic'} <= names)
+                         'bin/codestra-register', 'bin/codestra-inspect-atomic',
+                         'bin/codestra-task-bootstrap', 'lib/codestra_control/task_bootstrap.py',
+                         '016-authenticated-task-bootstrap.sql'} <= names)
         self.assertFalse(manifest['install_allowed'])
         self.assertFalse(manifest['activation_allowed'])
         self.assertFalse(manifest['database_setup_approved'])
@@ -82,6 +84,8 @@ class ControllerReleaseTests(unittest.TestCase):
     def test_missing_client_schema_or_configuration_refuses_before_output(self):
         module = importlib.import_module('codestra_control.controller_release')
         for number, name in enumerate(('bin/codestra-admission',
+                                       'bin/codestra-task-bootstrap',
+                                       '016-authenticated-task-bootstrap.sql',
                                        '010-scoped-operation-admission.sql',
                                        'config/examples/lease-verifier.proposed.toml')):
             with self.subTest(missing=name):
@@ -93,6 +97,44 @@ class ControllerReleaseTests(unittest.TestCase):
                     module.prepare_controller_release(self.root, changed, output, self.wheel)
                 self.assertFalse(output.exists())
                 self.git('reset', '--hard', self.sha)
+
+    def test_installer_candidate_is_complete_and_still_has_no_operational_authority(self):
+        module = importlib.import_module('codestra_control.controller_release')
+        installer = importlib.import_module('codestra_control.admission_installation')
+        output = Path(self.temporary.name) / 'installer-source'
+        manifest = module.prepare_controller_release(self.root, self.sha, output, self.wheel)
+        names = {entry['source_path'] for entry in manifest['files']}
+        self.assertTrue({'bin/codestra-install-admission', 'lib/codestra_control/admission_installation.py',
+                         '015-admission-installation-state.sql', 'config/examples/admission-installation.proposal.json',
+                         'docs/admission-installation.md'} <= names)
+        digest = hashlib.sha256((output / 'controller-release-manifest.json').read_bytes()).hexdigest()
+        candidate = installer.SourceCandidate.load(output, digest)
+        self.assertEqual(candidate.source_commit, self.sha)
+        self.assertFalse(manifest['install_allowed'])
+        self.assertFalse(manifest['activation_allowed'])
+        self.assertFalse(manifest['database_setup_approved'])
+
+    def test_lock_broker_is_admin_source_and_never_an_installer_migration(self):
+        from codestra_control import controller_release as release, admission_installation as installer
+        output = Path(self.temporary.name) / 'restricted'
+        manifest = release.prepare_controller_release(self.root, self.sha, output, self.wheel)
+        name = '018-admission-installation-lock.sql'
+        self.assertEqual(manifest['administration_sources'], [name])
+        self.assertEqual(next(item['kind'] for item in manifest['files'] if item['source_path'] == name), 'administration_source')
+        self.assertNotIn(name, manifest['schema_sources'])
+        self.assertNotIn(name, installer.migration_sources(installer.RESTRICTED_PROFILE))
+        checksum = hashlib.sha256((output / installer.MANIFEST).read_bytes()).hexdigest()
+        self.assertIn(name, installer.SourceCandidate.load(output, checksum).files)
+
+    def test_commit_without_optional_broker_remains_packageable_and_loadable(self):
+        from codestra_control import controller_release as release, admission_installation as installer
+        self.git('rm', '018-admission-installation-lock.sql')
+        self.git('commit', '-m', 'legacy candidate predating restricted lock profile')
+        output = Path(self.temporary.name) / 'legacy-without-broker'
+        manifest = release.prepare_controller_release(self.root, self.git('rev-parse', 'HEAD'), output, self.wheel)
+        self.assertEqual(manifest['administration_sources'], [])
+        checksum = hashlib.sha256((output / installer.MANIFEST).read_bytes()).hexdigest()
+        self.assertNotIn('018-admission-installation-lock.sql', installer.SourceCandidate.load(output, checksum).files)
 
     def test_missing_transitive_client_import_refuses_complete_candidate(self):
         module = importlib.import_module('codestra_control.controller_release')

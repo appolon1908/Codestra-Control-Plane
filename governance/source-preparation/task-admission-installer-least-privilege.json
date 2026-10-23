@@ -1,0 +1,55 @@
+{
+  "scope": {
+    "schema": "codestra.source-work-scope.v1",
+    "proposal": "CP-INSTALLER-LEAST-PRIVILEGE-SOURCE-01",
+    "revision": 1,
+    "repository": "appolon1908/Codestra-Control-Plane",
+    "product": "Codestra-Control-Plane",
+    "section": "cp-01-foundation",
+    "subsection": "02-trusted-decisions",
+    "atomic_task": "admission-installer-least-privilege",
+    "owner_thread": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+    "receiving_turn": "01a16108-0611-76c2-ba61-56f4c433ce7e",
+    "baseline": "6a839064d785746850c18f9f458fa5a3097b8372",
+    "branch": "atomic/cp-01-foundation--02-trusted-decisions--admission-installer-least-privilege",
+    "target": "subsection/cp-01-foundation--02-trusted-decisions",
+    "worktree": "/srv/codestra/dev-platform/control-plane/worktrees/admission-installer-least-privilege-20261021",
+    "allowed_paths": [
+      "018-admission-installation-lock.sql",
+      "lib/codestra_control/admission_installation.py",
+      "lib/codestra_control/controller_release.py",
+      "tests/test_admission_installation.py",
+      "tests/test_admission_installation_postgres.py",
+      "tests/test_admission_installation_lock_postgres.py",
+      "tests/test_controller_release.py",
+      "tests/test_installation_authority_postgres.py",
+      "governance/source-preparation/task-admission-installer-least-privilege.json"
+    ],
+    "implementation": [
+      "Separate externally provisioned lock-only capability: exact authenticated principals, catalog/code/ACL and configured relation OID binding; transaction-owned ACCESS EXCLUSIVE locks; no legacy owner transfer, installer blanket write grant or lock downgrade.",
+      "Explicit restricted installation profile and dedicated protected installation verifier identity; planned exact new-ledger schema USAGE and attempts/migrations SELECT inside the intent transaction before catalog capture; no global verifier default reads.",
+      "Preserve historical source/migration checksums, direct profiles, current compatibility checks, concurrent-writer exclusion, interrupted-install recovery, independent verification and revoke-first rollback."
+    ],
+    "source_only": true,
+    "live_security_mutations_authorized": false,
+    "runtime_install_authorized": false,
+    "activation_authorized": false,
+    "verification": [
+      "Disposable PostgreSQL 16/TLS/SCRAM permission-denial, malicious catalog/capability, concurrent writer, interrupted install and revoke-first rollback regressions.",
+      "Focused and full required suites; independent exact-source review; commit/push only with current publication gates."
+    ]
+  },
+  "authorization": {
+    "basis": "New user source-only Option 2 approval and explicit reaffirmation forwarded by the existing coordinator; original expired CP-BOOTSTRAP-SOURCE-01 approval is not reused.",
+    "coordinator_thread": "01a13c9d-f405-74e5-929a-21950c45e0db",
+    "authoritative_parent_thread": "01a15788-6b20-7188-8977-9263b913b0d3",
+    "receiving_turn_started_utc": "2026-10-22T00:34:38Z",
+    "user_reaffirmation": "approved and implement",
+    "runtime_assignment": null,
+    "database_lease": null,
+    "certification": null
+  },
+  "source_publication_authorization": "The existing user instruction requests implemented code, tests and verified pushes. Ordinary source branch and draft PR publication follows successful tests and independent code review; it does not authorize governed promotion, runtime status publication or activation.",
+  "governed_promotion_gate_satisfied": false,
+  "source_scope_sha256": "0f8b8f0dcf5f42921164b19ae111e1876c5389d84c36eada844aecac0efa8758"
+}

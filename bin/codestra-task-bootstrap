@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Unprivileged protected bootstrap entry point; never imports project code as root."""
+import os
+import sys
+
+if os.geteuid() == 0:
+    print('TASK_BOOTSTRAP_UNPRIVILEGED_CLIENT_REQUIRED')
+    raise SystemExit(1)
+
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from codestra_control.task_bootstrap import main
+
+if __name__ == '__main__':
+    raise SystemExit(main())

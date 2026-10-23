@@ -1,0 +1,97 @@
+{
+  "task": "admission-installer-bootstrap",
+  "issue": "PAS-233",
+  "source_only": true,
+  "existing_executor": "01a13baa-1d01-70a3-af7b-1afbd79c186f",
+  "baseline": "feafb317325dff588e9c17e01aa29807c2aef9eb",
+  "proposal": "CP-BOOTSTRAP-SOURCE-01",
+  "revision": 2,
+  "proposal_sha256": "459ce32bbd4441aab7c4885772fbadb4e981e9a2ad1bbbc6e6229d57b686e345",
+  "approval_reference": "Sentinel_f9a179fe6708819199e971097b38456c",
+  "acceptance_comment": "4065bd17-b41f-45c4-a5d9-0efe0555cc2e",
+  "receiving_owner_ack": "76fbe104-77d8-4e12-ac3c-caa345b36b41",
+  "scope_amendments": [
+    {
+      "approval_reference": "Sentinel_76a2873e16208191ab13ecd9c9df47bb",
+      "reply_to": "Sentinel_3baf87621be08191b91916810bd40085",
+      "approval_time_reference": "2026-10-21T12:43Z relayed and independently reconciled from the existing coordinator",
+      "additional_paths": [
+        ".github/workflows/control-plane-tests.yml",
+        ".github/CODEOWNERS"
+      ],
+      "limits": "Restore only job name control-plane-tests; preserve commands/pins/permissions. Add kazan555 only after verified eligible independent access. Original expiry and all operational exclusions remain unchanged.",
+      "access_readback": "kazan555 GitHub user77101516 has WRITE; distinct from source owner appolon1908. Eligibility is not final-head approval."
+    }
+  ],
+  "accepted_at_utc": "2026-10-21T10:44:04.101524Z",
+  "expires_at_utc": "2026-10-21T18:44:04.101524Z",
+  "timestamp_provenance": "Original room timestamp verified by parent and recorded in PAS-233; not a direct room read by executor.",
+  "revocation_authority": "Ralph Appolon",
+  "revocation_tracker_comment": "ca38e4f2-f2e8-4989-8319-ee7df48c6385",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--admission-installer-bootstrap",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "PRODUCTION_GO": "NO",
+  "LIVE_CAPABILITIES_ENABLED": "NO",
+  "EXTERNAL_EFFECTS": false,
+  "runtime_install_authorized": false,
+  "publication_authorized": false,
+  "plan": [
+    "Validate exact source bytes and component manifests, explicit legacy constraints/function versions and complete security catalog fingerprints.",
+    "Resolve only the nine-source admission dependency closure, preserving unrelated components and versions; journal intent and checksum-bound transactional DDL under pre-ledger fencing.",
+    "Distinguish private staging from fixed-target admission code/configuration installation with preinstalled verified dependencies; journal each filesystem/configuration/receipt boundary and revoke first on rollback.",
+    "Wire preflight/read-only-plan/install/verify/rollback CLI dispatch to fixed protected composition and a separately authenticated issuer client; verify failures, recovery, legacy preservation and genuine disposable PostgreSQL behavior; require final exact-source review and actual publication gates before pushing."
+  ],
+  "interface_rulings": [
+    "Runtime authority is never an approved boolean or owner string in request JSON. The CLI uses fixed protected composition with OnlinePostgresAuthority against a separately administered, identity/catalog-pinned issuer cluster. Missing accepted configuration/credentials/grants deny execution; this source provisions none.",
+    "The ten-path limit supersedes skill scratch-directory conventions: the plan/progress ledger lives in this allowed source record, and tests use disposable temporary directories.",
+    "Independent verification is read-only and issues a separate observation; it does not mutate assignment/lease tables or certify runtime readiness.",
+    "The complete package inventory is not an automatic migration selection. Recovery, certifier, publisher and readiness schemas are not applied by this bootstrap.",
+    "Runtime code/configuration installation requires fixed host targets, native UID0, a single fixed private host journal, separately accepted custody/exclusion/recovery and preinstalled pinned dependencies. Prefixed fixtures cannot claim host installation.",
+    "Existing differing runtime files require separate recovery/cutover work; this bounded source creates absent files or reuses identical bytes only.",
+    "Rollback confirms issuer revocation before target connection/journal acquisition; journal-only recording excludes damaged installed targets/verifier credentials. Executing client and issuer custody remain mandatory. Confirmed revocation with incomplete or unknown target recording is distinct from an unknown issuer commit.",
+    "The actual issuer client process, not merely a child probe, must match the pinned system interpreter/image, CPython3.12, non-virtual environment and ordered protected import roots. Loaded driver package/native extension origins are checked before credentials and connections."
+  ],
+  "progress": [
+    "Pinned isolated worktree and same receiving owner verified; original proposal bytes retained without amendment.",
+    "Implemented candidate/target validation, bounded migration planning, durable attempts/receipts, protected runtime file custody, separate read-only verification and revoke-first rollback.",
+    "Independent interim findings addressed with regression tests; final exact-candidate tests and independent review remain required publication evidence."
+  ],
+  "known_historical_limit": "Preserve and report any reproduced baseline desktop concurrency failure; do not label it fixed without evidence.",
+  "publication_authorization": "CONDITIONAL_ON_FINAL_INDEPENDENT_REVIEW_AND_CURRENT_PUBLICATION_GATE",
+  "publication_gate_satisfied": false,
+  "migration_scope": "ADMISSION_BOOTSTRAP_ONLY",
+  "migration_sources": [
+    "schema.sql",
+    "002-hierarchy-promotion.sql",
+    "005-scoped-registration.sql",
+    "007-assignment-leases.sql",
+    "009-atomic-inspection.sql",
+    "009-controller-coordinator.sql",
+    "010-controller-coordinator-integration.sql",
+    "010-scoped-operation-admission.sql",
+    "015-admission-installation-state.sql"
+  ],
+  "historical_test_checkpoints": {
+    "initial_broad_source_run": {
+      "tests": 765,
+      "exit_code": 1,
+      "errors": 6,
+      "cause": "QueryCanceled statement timeouts in existing coordinator/certifier fixture setup",
+      "elapsed_seconds": 3785.319,
+      "exact_final_source": false
+    },
+    "bounded_installer_postgresql_run": {
+      "tests": 19,
+      "exit_code": 0,
+      "elapsed_seconds": 554.763,
+      "exact_final_source": false
+    },
+    "installer_unit_run": {
+      "tests": 32,
+      "exit_code": 0,
+      "elapsed_seconds": 62.675,
+      "exact_final_source": false
+    }
+  },
+  "verification_record_policy": "Final test and independent-review evidence is recorded separately against exact source bytes and the resulting commit; historical checkpoints do not attest later changes."
+}

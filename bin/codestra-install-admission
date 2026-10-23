@@ -1,0 +1,119 @@
+#!/usr/bin/python3 -I
+"""Admission installer; operational configuration is separately provisioned."""
+import sys
+sys.dont_write_bytecode = True
+import pathlib
+import os
+import stat
+import json
+import hashlib
+
+
+def _private_import_guard():
+    """The entrypoint/interpreter must already have external trusted custody.
+
+    Before importing any project code as root, pin its complete import inventory
+    to the supplied manifest and reject cached/unlisted Python artifacts.
+    """
+    if os.getuid() != 0 or os.geteuid() != 0 or not sys.flags.isolated:
+        raise ValueError('NATIVE_ISOLATED_ROOT_REQUIRED')
+    entry = pathlib.Path(__file__).absolute()
+    root = entry.parent.parent
+
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError('DUPLICATE_FIELD')
+            value[key] = item
+        return value
+
+    def read(path, *, code=False):
+        path = pathlib.Path(path).absolute()
+        fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            for part in path.parts[1:-1]:
+                if part in ('.', '..'):
+                    raise ValueError('UNSAFE_PATH')
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = child
+                info = os.fstat(fd)
+                if code and (info.st_uid != 0 or info.st_mode & 0o022):
+                    raise ValueError('UNTRUSTED_CODE_DIRECTORY')
+            source = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+            with os.fdopen(source, 'rb') as stream:
+                before = os.fstat(stream.fileno())
+                if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > 16 * 1024 * 1024
+                        or code and (before.st_uid != 0 or before.st_mode & 0o022)):
+                    raise ValueError('UNTRUSTED_CODE_FILE')
+                raw = stream.read(16 * 1024 * 1024 + 1)
+                after = os.fstat(stream.fileno())
+                fields = ('st_ino', 'st_dev', 'st_size', 'st_mtime_ns', 'st_ctime_ns', 'st_mode', 'st_uid', 'st_gid', 'st_nlink')
+                if len(raw) > 16 * 1024 * 1024 or any(getattr(before, k) != getattr(after, k) for k in fields):
+                    raise ValueError('CHANGED_CODE_FILE')
+                return raw, stat.S_IMODE(before.st_mode)
+        finally:
+            os.close(fd)
+
+    def option(name):
+        if sys.argv.count(name) != 1:
+            raise ValueError('EXACT_SOURCE_PIN_REQUIRED')
+        return sys.argv[sys.argv.index(name) + 1]
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'preflight':
+        selected_root, manifest_digest = option('--candidate'), option('--manifest-sha256')
+    else:
+        raw, _ = read(option('--request'))
+        if hashlib.sha256(raw).hexdigest() != option('--request-sha256'):
+            raise ValueError('REQUEST_DIGEST_MISMATCH')
+        request = json.loads(raw, object_pairs_hook=unique)
+        selected_root, manifest_digest = request['candidate'], request['manifest_sha256']
+    if str(root) != selected_root:
+        raise ValueError('EXECUTING_SOURCE_CONFLICT')
+    raw, mode = read(root / 'controller-release-manifest.json', code=True)
+    if mode != 0o644 or hashlib.sha256(raw).hexdigest() != manifest_digest:
+        raise ValueError('SOURCE_MANIFEST_MISMATCH')
+    manifest = json.loads(raw, object_pairs_hook=unique)
+    imports = {}
+    for record in manifest['files']:
+        name = record['source_path']
+        if (not isinstance(name, str) or name.startswith('/') or '\\' in name
+                or any(part in ('', '.', '..') for part in name.split('/'))):
+            raise ValueError('UNSAFE_SOURCE_INVENTORY')
+        if name.startswith('lib/') or name == 'bin/codestra-install-admission':
+            if name in imports:
+                raise ValueError('DUPLICATE_SOURCE_INVENTORY')
+            data, mode = read(root / name, code=True)
+            if (mode != int(record['mode'], 8) or len(data) != record['size']
+                    or hashlib.sha256(data).hexdigest() != record['sha256']):
+                raise ValueError('IMPORT_SOURCE_MISMATCH')
+            imports[name] = record
+    if 'bin/codestra-install-admission' not in imports or 'lib/codestra_control/__init__.py' not in imports:
+        raise ValueError('INCOMPLETE_IMPORT_INVENTORY')
+    def walk_error(error):
+        raise error
+    for directory, names, files in os.walk(root / 'lib', followlinks=False, onerror=walk_error):
+        for name in names:
+            path = pathlib.Path(directory) / name
+            info = path.lstat()
+            relative = str(path.relative_to(root)) + '/'
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022
+                    or not any(item.startswith(relative) for item in imports)):
+                raise ValueError('UNLISTED_IMPORT_DIRECTORY')
+        for name in files:
+            if str((pathlib.Path(directory) / name).relative_to(root)) not in imports:
+                raise ValueError('UNLISTED_IMPORT_ARTIFACT')
+
+
+if os.getuid() == 0 or os.geteuid() == 0:
+    try:
+        _private_import_guard()
+    except Exception:
+        print('ADMISSION_INSTALLATION_OPERATIONALLY_UNAVAILABLE')
+        raise SystemExit(1)
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'lib'))
+from codestra_control.admission_installation import main
+if __name__ == '__main__':
+    raise SystemExit(main())

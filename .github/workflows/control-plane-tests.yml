@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   offline-source-validation:
-    name: control-plane-offline-source
+    name: control-plane-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
