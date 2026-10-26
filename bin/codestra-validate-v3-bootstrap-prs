@@ -1,52 +1,10 @@
-#!/usr/bin/env bash
-set -euo pipefail
-repos=(
-  Codestra-Communication-CC Vicidialer-Codestra Agent-Desktop-WebRTC
-  Codestra-Document-Intelligence Codestra-OCR-Workers Codestra-Document-Schemas Codestra-Document-SDK Codestra-Document-Console
-  Breero.com klyrow.com klyrow-Website-
-  Codestra-Voice-Agent Codestra-TTS-Kokoro Codestra-TTS-Piper Codestra-TTS-F5
-  LARIM-A-Backend LARIM-A-Fornt-end
-  transportation-backend- transportaion-Frontend
-  Moneybee-Backend Moneybee-frontend-
-  beyvra-backend beyvra-frontend
-  Codestra-Connect
-)
-branch=workstation/standalone-v3-20261007
-ghc(){ sudo -u codestra env HOME=/home/codestra XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus gh "$@"; }
+#!/usr/bin/env python3
+"""Inspect bootstrap source files; never publish controller statuses."""
+from pathlib import Path
+import sys
 
-ok=0; fail=0
-for repo in "${repos[@]}"; do
-  pr=$(ghc pr list --repo "appolon1908/$repo" --state open --head "$branch" --base development       --json number,headRefOid,url --jq '.[0] // empty')
-  if [[ -z "$pr" ]]; then
-    echo "$repo|PR_MISSING"; fail=$((fail+1)); continue
-  fi
-  num=$(jq -r .number <<<"$pr")
-  sha=$(jq -r .headRefOid <<<"$pr")
-  url=$(jq -r .url <<<"$pr")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from codestra_control.bootstrap_repository_validation import main
 
-  raw=$(ghc api "repos/appolon1908/$repo/contents/.codestra/governance/policy.json?ref=$sha" --jq .content 2>/dev/null | tr -d '\n' | base64 -d 2>/dev/null || true)
-  if ! jq -e '
-    .schema_version=="codestra.governance.v3" and
-    .required_status=="codestra-control-plane" and
-    .promotion_chain==["subsection","section","development","testing","staging","production"] and
-    .production.PRODUCTION_GO=="NO" and
-    .production.LIVE_CAPABILITIES_ENABLED=="NO" and
-    .production.EXTERNAL_EFFECTS=="false" and
-    .force_push==false and
-    .direct_protected_branch_writes==false
-  ' >/dev/null 2>&1 <<<"$raw"; then
-    echo "$repo|PR=$num|POLICY_INVALID"
-    fail=$((fail+1))
-    continue
-  fi
-  ghc api "repos/appolon1908/$repo/contents/.codestra/governance/workstations.json?ref=$sha" --silent >/dev/null
-  ghc api "repos/appolon1908/$repo/contents/AGENTS.md?ref=$sha" --silent >/dev/null
-
-  for ctx in codestra-control-plane codestra/control-plane; do
-    ghc api --method POST "repos/appolon1908/$repo/statuses/$sha"       -f state=success -f "context=$ctx"       -f "description=standalone v3 governance bootstrap validated"       -f "target_url=$url" >/dev/null
-  done
-  echo "$repo|PR=$num|SHA=$sha|BOOTSTRAP=PASS"
-  ok=$((ok+1))
-done
-echo "PASS=$ok FAIL=$fail"
-test "$fail" -eq 0
+if __name__ == '__main__':
+    raise SystemExit(main())
