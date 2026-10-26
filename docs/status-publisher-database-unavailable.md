@@ -91,3 +91,10 @@ database transport and roles do not satisfy the authenticated-controller
 contract, and the available controller and AUTH3 candidates remain inactive
 and unapproved. Those gates must remain blocked until their own current,
 reviewed inputs and action-time approvals exist.
+
+The nonsecret current-target inputs needed to prepare that later review are
+recorded separately in
+[`verification/2026-10-26-recovered-target-tls-auth-inputs.json`](verification/2026-10-26-recovered-target-tls-auth-inputs.json).
+That record is evidence only: it contains no private-key digest or contents,
+password, verifier, protected DSN, executable command, activation window, or
+authorization to change the target.

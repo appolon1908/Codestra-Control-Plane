@@ -1,0 +1,285 @@
+{
+  "schema": "codestra.recovered-target-tls-auth-input-evidence.v1",
+  "state": "READ_ONLY_CURRENT_TARGET_EVIDENCE_NOT_AUTHORIZATION",
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "pull_request": "https://github.com/appolon1908/Codestra-Control-Plane/pull/70",
+  "recovery_evidence_parent_commit": "78ccae881492bc5e4f0c46375bbb17f5ea6201e9",
+  "host": {
+    "hostname": "dev-desktop",
+    "sentinel_host_id": "host_ab1159561dd42810"
+  },
+  "observed_at": "2026-10-26T18:54:45.707143Z",
+  "purpose": "Nonsecret input handoff for a separately owned, source-only recovered-target TLS and authentication proposal",
+  "target": {
+    "container_name": "codestra-dev-postgres",
+    "container_id": "9c783b922b53e0abe33136215b0ea356bc7c258c638383fc410a70a9fde737a8",
+    "image_id": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+    "container_state": "running",
+    "restart_count": 0,
+    "started_at": "2026-10-26T17:54:28.288297552Z",
+    "network_mode": "host",
+    "container_user": "70:70",
+    "volume_name": "codestra_postgres_data",
+    "container_pgdata": "/var/lib/postgresql/data",
+    "host_volume_path": "/var/lib/docker/volumes/codestra_postgres_data/_data",
+    "mount_read_write": true,
+    "mount_mode": "z",
+    "listener": "127.0.0.1:5432",
+    "system_identifier": "7693394772402679843",
+    "postgresql_version": "16.15",
+    "postgresql_version_num": 160015,
+    "database": "codestra_dev_control",
+    "database_oid": 19861,
+    "sibling_database": "codestra_control_plane",
+    "sibling_database_oid": 19790,
+    "effective_tcp_client_address": "127.0.0.1/32",
+    "effective_tcp_server_address": "127.0.0.1/32",
+    "current_ssl": "off",
+    "current_session_user": "codestra",
+    "current_user": "codestra",
+    "current_system_user": null
+  },
+  "complete_docker_workload_baseline": {
+    "schema": "codestra.docker-workload-baseline.v1",
+    "collection": "docker ps --all --quiet --no-trunc followed by one filtered docker inspect over the exact returned IDs",
+    "container_count": 1,
+    "hashed_payload_fields": [
+      "schema",
+      "container_count",
+      "containers"
+    ],
+    "canonicalization": "UTF-8 JSON with sorted object keys, compact separators, containers sorted by name then ID, mounts sorted by destination then source, and one trailing newline",
+    "canonical_bytes": 720,
+    "canonical_sha256": "8fc4bd0e539dc4974a590bb6eef8a829940f82606ea830e159bacabde696476a",
+    "containers": [
+      {
+        "id": "9c783b922b53e0abe33136215b0ea356bc7c258c638383fc410a70a9fde737a8",
+        "name": "codestra-dev-postgres",
+        "configured_image": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+        "image_id": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+        "state": "running",
+        "running": true,
+        "restart_count": 0,
+        "started_at": "2026-10-26T17:54:28.288297552Z",
+        "health": null,
+        "network_mode": "host",
+        "user": "70:70",
+        "mounts": [
+          {
+            "type": "volume",
+            "name": "codestra_postgres_data",
+            "source": "/var/lib/docker/volumes/codestra_postgres_data/_data",
+            "destination": "/var/lib/postgresql/data",
+            "mode": "z",
+            "rw": true,
+            "propagation": ""
+          }
+        ]
+      }
+    ]
+  },
+  "current_pgdata_prestate": {
+    "postgresql.conf": {
+      "bytes": 29929,
+      "sha256": "18bab77c50b7ce79197723850d1bbcb75e516f92e9294710eb78f7941c4a962c"
+    },
+    "pg_hba.conf": {
+      "bytes": 5839,
+      "sha256": "2366fa203f80a6b335fb103ef2d181e5f9d2cebdd27ae5cff1eb97d991f94ff0",
+      "uses_trust": true
+    },
+    "pg_ident.conf": {
+      "bytes": 2640,
+      "sha256": "b4dfef08731a7d20a3bb724ad4cf3e1cd91ec01fbe51349c6a3acc5704072965"
+    },
+    "postgresql.auto.conf": {
+      "bytes": 88,
+      "sha256": "0874e665ecf5c0a6135a73158ea1b71a959dafb809574810da5c9cc28c0c63ed"
+    },
+    "effective_listen_addresses": "127.0.0.1",
+    "on_disk_listen_addresses": "*",
+    "command_line_override": true,
+    "expected_tls_directory_exists": false,
+    "expected_tls_include_exists": false,
+    "expected_tls_directory": "/var/lib/postgresql/data/pas233-tls-20261022",
+    "expected_tls_include": "/var/lib/postgresql/data/pas233-tls-20261022.conf"
+  },
+  "preserved_server_identity": {
+    "reuse_existing_server_leaf": true,
+    "generate_new_server_key": false,
+    "generate_new_server_certificate": false,
+    "staging_directory": {
+      "path": "/root/pas233-target-pki-20261022",
+      "owner": "root:root",
+      "mode": "0700",
+      "is_symlink": false
+    },
+    "private_key": {
+      "path": "/root/pas233-target-pki-20261022/controller.key",
+      "owner": "root:root",
+      "mode": "0600",
+      "regular_file": true,
+      "hardlink_count": 1,
+      "bytes": 2484,
+      "contents_read": false,
+      "digest_collected": false,
+      "custody": "Remain root-only on dev-desktop; never export, overwrite, regenerate, delete, or include in source, logs, or receipts"
+    },
+    "csr": {
+      "path": "/root/pas233-target-pki-20261022/controller.csr",
+      "owner": "root:root",
+      "mode": "0600",
+      "bytes": 1277,
+      "sha256": "75051703ed9178f2ab941a55289d03310a08c3ddeb9c014dbc9c32c3f40f910d",
+      "self_signature_verification": "PASS"
+    },
+    "certificate": {
+      "path": "/root/pas233-target-pki-20261022/controller.crt",
+      "owner": "root:root",
+      "mode": "0600",
+      "regular_file": true,
+      "hardlink_count": 1,
+      "bytes": 1623,
+      "sha256": "446b462479b3205ff2fc792f82efdb3b570794fb9190bb6eb68d17e4f518fca2",
+      "sha256_fingerprint": "59:02:75:E8:0B:6C:DC:42:09:DA:F2:F4:47:A1:B9:88:AE:0E:8A:7C:7A:51:07:E1:8A:5D:AF:D0:D8:BA:E7:AA",
+      "subject": "CN=Codestra controller loopback 127.0.0.1",
+      "issuer": "CN=Codestra PAS233 installation authority CA 20261022",
+      "serial": "017F1F5CAC6C0BB7B5514975C086617E",
+      "not_before": "2026-10-23T16:45:24Z",
+      "not_after": "2027-01-21T16:45:24Z",
+      "subject_alternative_name": "IP:127.0.0.1",
+      "extended_key_usage": "serverAuth",
+      "key_usage": [
+        "digitalSignature",
+        "keyEncipherment"
+      ],
+      "public_key_sha256": "5c4a5f3dfbb95a9cd9772a0f0d112caf1b1a8859f83ef51cc90d990092bf47cb",
+      "csr_public_key_matches": true,
+      "ca_chain_and_verify_ip_127_0_0_1": "PASS"
+    },
+    "public_ca": {
+      "path": "/etc/codestra/control-plane/pki/pas233-20261022/ca.crt",
+      "sha256": "48c05df7826246bb2e884e595d2b61cd54d2dcdb06d6df50baa5ddc92cf555b2"
+    }
+  },
+  "separate_future_intake_identity": {
+    "status": "NOT_GENERATED_BY_THIS_EVIDENCE",
+    "private_directory": "/root/pas233-restricted-target-auth-20261022",
+    "private_key": "/root/pas233-restricted-target-auth-20261022/credential-intake.key",
+    "public_certificate": "/root/pas233-restricted-target-auth-20261022/credential-intake.crt",
+    "profile": "Self-signed RSA-3072, SHA-256, exactly 30 days, emailProtection, not a CA and not serverAuth",
+    "purpose": "CMS recipient identity for sealed verifier credential transport only",
+    "installer_packet": "/root/pas233-restricted-target-auth-20261022/operator-credentials/packet.json",
+    "protected_operator_dsn": "/etc/codestra/control-plane/credentials/admission-operator.dsn",
+    "protected_verifier_dsn": "/etc/codestra/control-plane/credentials/admission-verifier.dsn",
+    "secret_values_in_evidence": false,
+    "server_key_reuse": false,
+    "server_certificate_reuse": false,
+    "server_path_reuse": false
+  },
+  "current_runtime_custody": {
+    "credentials_directory": {
+      "path": "/etc/codestra/control-plane/credentials",
+      "owner": "root:root",
+      "mode": "0755",
+      "is_symlink": false
+    },
+    "existing_publisher_key": {
+      "path": "/etc/codestra/control-plane/credentials/publisher-app.pem",
+      "owner_uid": 0,
+      "group_gid": 983,
+      "mode": "0640",
+      "regular_file": true,
+      "hardlink_count": 1,
+      "bytes": 1679,
+      "contents_read": false,
+      "digest_collected": false
+    },
+    "permission_change_performed": false,
+    "permission_change_authorized_by_this_evidence": false,
+    "source_requirement": "Reconcile the current 0755 parent using the newer reviewed custody model; do not import the superseded 0700-only prerequisite or change traversal as a hidden preparation effect"
+  },
+  "current_target_hba_derivative_input": {
+    "state": "NONEXECUTING_REVIEW_INPUT",
+    "old_peer": "172.17.0.1/32",
+    "old_peer_is_valid_for_current_host_network_target": false,
+    "current_observed_peer": "127.0.0.1/32",
+    "bytes": 423,
+    "sha256": "1cfdbb3f26ee03bf1750cb050fe318a440ed13326cea85df58a30260a4b669a6",
+    "rules": [
+      "local all cp_admission_install,cp_admission_verify reject",
+      "hostnossl all cp_admission_install,cp_admission_verify 0.0.0.0/0 reject",
+      "hostnossl all cp_admission_install,cp_admission_verify ::/0 reject",
+      "hostssl codestra_dev_control cp_admission_install,cp_admission_verify 127.0.0.1/32 scram-sha-256",
+      "host all cp_admission_install,cp_admission_verify 0.0.0.0/0 reject",
+      "host all cp_admission_install,cp_admission_verify ::/0 reject"
+    ],
+    "applied": false,
+    "review_required": true
+  },
+  "historical_source_incompatibilities": [
+    "The expired source pins container 45ab1d70f9d365f7debb35b2c17f2d6db552ac613c25b1f04ebacc20dc9ff52b; the recovered target is 9c783b922b53e0abe33136215b0ea356bc7c258c638383fc410a70a9fde737a8.",
+    "The expired source pins bridge networking and peer 172.17.0.1/32; the recovered target uses host networking and the observed peer is 127.0.0.1/32.",
+    "The expired source observed sixteen Docker workloads; the current complete Docker inventory contains one container.",
+    "The expired source pins an empty container user; the recovered target runs as 70:70.",
+    "No expired approval window, source pin, or execution envelope may be replayed, relabeled, or silently rebound."
+  ],
+  "requirements_for_separate_source_packet": {
+    "state": "PROPOSED_SOURCE_ONLY",
+    "must_pin_current_target": true,
+    "must_reuse_preserved_server_identity": true,
+    "must_keep_server_and_intake_identities_separate": true,
+    "must_embed_exact_hba_bytes_and_sha256": true,
+    "must_exclude_private_key_password_verifier_and_dsn_contents": true,
+    "must_contain_executable_command": false,
+    "must_bind_activation_window": false,
+    "future_governed_phases": [
+      "DEV_PREPARE",
+      "CRM_VERIFIER",
+      "DEV_APPLY",
+      "TLS_HBA_CONFIGURE",
+      "LOGIN_ACTIVATE"
+    ],
+    "future_positive_verification": [
+      "sslmode=verify-full with the pinned public CA and channel_binding=require succeeds for each exact dedicated role",
+      "server certificate fingerprint, SAN, validity, CA chain, TLS protocol, system identifier, database OID, role OID, session_user, current_user, system_user, and loopback client address all match the reviewed pins",
+      "each dedicated role can perform only its named API operation with a same-role positive control"
+    ],
+    "future_negative_verification": [
+      "non-TLS TCP and local-socket attempts fail",
+      "wrong password, wrong CA, wrong IP identity, wrong database, wrong role, expired credential, and missing channel binding fail",
+      "each dedicated role is denied the other role's API plus direct table, owner, admin, grant-producing, and unrelated operations",
+      "legacy trust rules cannot provide a fallback for either dedicated role"
+    ],
+    "future_rollback_requirement": "Restore the exact pinned postgresql.conf and pg_hba.conf bytes and remove only exact newly installed TLS/config artifacts under a separately reviewed failure path; retain evidence and private partials; preserve the 5435 cluster and sibling workloads"
+  },
+  "effects": {
+    "private_key_read": false,
+    "private_key_hash": false,
+    "credential_generation": false,
+    "password_generation": false,
+    "verifier_generation": false,
+    "dsn_write": false,
+    "hba_write": false,
+    "postgresql_config_write": false,
+    "tls_change": false,
+    "permission_change": false,
+    "database_change": false,
+    "service_start_or_restart": false,
+    "reload": false,
+    "login_enablement": false,
+    "activation_window_bound": false,
+    "production_activation": false
+  },
+  "limits": [
+    "This record is an input receipt, not an executable packet, approval, credential, protected DSN, certificate installation, or activation authorization.",
+    "The private server key was verified by metadata and custody only; its contents and digest were deliberately not read.",
+    "The six HBA rules are a review input derived from the observed host-network peer; they have not been installed or parsed by PostgreSQL.",
+    "Future DEV_PREPARE, CRM_VERIFIER, DEV_APPLY, TLS/HBA configuration, and LOGIN activation remain separate governed phases.",
+    "The current source-only packet has a separate sole writer and must reconcile this evidence without overwriting collisions."
+  ],
+  "PRODUCTION_GO": "NO",
+  "LIVE_CAPABILITIES_ENABLED": "NO",
+  "RUNTIME_MUTATION_AUTHORIZED": false,
+  "AUTHENTICATED_CONTROLLER_ACTIVATION_AUTHORIZED": false
+}
