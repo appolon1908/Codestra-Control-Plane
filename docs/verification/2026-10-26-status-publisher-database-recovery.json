@@ -5,7 +5,7 @@
   "pull_request": "https://github.com/appolon1908/Codestra-Control-Plane/pull/70",
   "runbook_source_parent": "db92fc2371e544432b0649578fc24f7847b3b1e7",
   "host": "dev-desktop",
-  "observed_at": "2026-10-26T18:18:37.231925Z",
+  "observed_at": "2026-10-26T19:30:50Z",
   "scope": "Recovery of the configured development PostgreSQL endpoint and observation of the already-installed legacy status publishers",
   "database": {
     "configured_endpoint": "127.0.0.1:5432",
@@ -107,15 +107,17 @@
   "installed_publishers": {
     "codestra-control-plane-status.service": {
       "kind": "legacy_oneshot",
-      "cycle_completed_at": "2026-10-26T14:15:51-04:00",
-      "main_started_at": "2026-10-26T14:15:00-04:00",
-      "main_exited_at": "2026-10-26T14:15:51-04:00",
+      "cycle_completed_at": "2026-10-26T15:30:50-04:00",
+      "main_started_at": "2026-10-26T15:30:00-04:00",
+      "main_exited_at": "2026-10-26T15:30:50-04:00",
       "finished_journal_observed": true,
       "result": "success",
       "exec_condition_status": 0,
       "exit_status": 0,
       "service_state_after_cycle": "inactive_dead_expected_for_oneshot",
-      "successful_cycles_observed": 2,
+      "github_core_remaining_at_admission": 4576,
+      "github_core_minimum_for_admission": 250,
+      "successful_cycles_observed": 7,
       "observed_completed_cycles": [
         {
           "completed_at": "2026-10-26T14:01:45-04:00",
@@ -124,6 +126,26 @@
         {
           "completed_at": "2026-10-26T14:15:51-04:00",
           "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T14:31:09-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T14:46:23-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T15:01:04-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T15:15:54-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T15:30:50-04:00",
+          "status_saturated_warnings": 2
         }
       ],
       "repositories": 6,
@@ -131,7 +153,7 @@
       "pass": 4,
       "blocked": 43,
       "errors": 0,
-      "status_saturated_warnings_observed": 4,
+      "status_saturated_warnings_observed": 14,
       "timer_enabled": true,
       "timer_state": "active_waiting",
       "installed_executable_sha256": "0c4f0f5046ffd723e4c157173af3f1003bcdc611543ec70b99a7596a0d5d024a",
@@ -156,6 +178,37 @@
       "checked_in_retired_stub_sha256": "637b71450e2aca3bf2fa0a170f7913340a71773ad17efe41e31e6feec6ffd9f9",
       "installed_matches_checked_in": false
     }
+  },
+  "local_runtime_remediation": {
+    "transient_probe_failure_at": "2026-10-26T19:16:44Z",
+    "symptom": "One pg_isready probe to 127.0.0.1:5432 returned no response before its timeout",
+    "diagnosis": "Host-wide rotational-disk I/O starvation from stale recursive read-only searches, not a PostgreSQL or container failure",
+    "database_listener_remained_bound": true,
+    "container_remained_running": true,
+    "container_restart_count": 0,
+    "container_oom_killed": false,
+    "postgresql_process_set_remained_present": true,
+    "postgresql_crash_or_recovery_log_observed": false,
+    "kernel_oom_or_io_error_observed": false,
+    "peak_io_pressure": {
+      "some_avg10_percent": 99.39,
+      "full_avg10_percent": 88.37
+    },
+    "remediation": "Terminated only the validated stale recursive find/rg commands and their shells; no database, container, service, configuration, or data mutation was performed",
+    "post_remediation_io_pressure": {
+      "some_avg10_percent": 7.23,
+      "full_avg10_percent": 6.71
+    },
+    "post_remediation_consecutive_pg_isready_successes": 38,
+    "probe_evidence_source": "Bounded interactive command output retained in the operator session; the individual probe results are not system-journal events",
+    "post_remediation_probe_latency_seconds": {
+      "minimum": 0.06,
+      "maximum": 0.08,
+      "sample_size": 3
+    },
+    "authenticated_select_one": "PASS",
+    "authenticated_select_one_evidence_source": "Bounded interactive command output retained in the operator session",
+    "postgresql_restart_performed": false
   },
   "authenticated_controller": {
     "activation": "BLOCKED",
@@ -184,7 +237,8 @@
     "credential_read": false,
     "credential_change": false,
     "database_change": false,
-    "repository_status_write_by_observer": false
+    "repository_status_write_by_observer": false,
+    "stale_recursive_search_process_termination": true
   },
   "limits": [
     "Archive hash, gzip integrity, member inventory, and member path/type safety were verified; a full offline extraction and source-byte equality comparison were not run.",
@@ -192,6 +246,7 @@
     "Successful legacy publisher cycles do not certify or authorize the authenticated controller runtime.",
     "The 43 failed status decisions are recorded governance blocks, not publisher execution errors.",
     "Execution PASS does not establish that every desired GitHub status append was accepted; bounded status-history saturation warnings were observed and handled by the installed legacy implementations.",
+    "A transient readiness timeout caused by host I/O starvation was remediated by terminating only validated stale recursive search processes; PostgreSQL was not restarted and then passed thirty-eight consecutive probes plus an authenticated SELECT 1.",
     "No production activation is asserted by this receipt."
   ],
   "database_recovery": "PASS",

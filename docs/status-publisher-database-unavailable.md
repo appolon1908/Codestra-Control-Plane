@@ -105,3 +105,18 @@ one container at `2026-10-26T18:54:45.707143Z`; a later read-only observation at
 The recovered PostgreSQL target identity remained unchanged, but any future
 source review or action must recollect and reconcile the complete Docker
 inventory instead of reusing the historical one-container hash.
+
+At `2026-10-26T19:16:44Z`, one readiness probe timed out while stale recursive
+workspace searches drove full host I/O pressure above 88 percent. PostgreSQL
+never crashed, recovered, restarted, or lost its listener. After terminating
+only those validated read-only search processes, I/O pressure fell below seven
+percent and the configured database passed thirty-eight consecutive readiness
+probes plus an authenticated `SELECT 1`. The next timer-driven publisher cycle
+started at `15:30:00 EDT`, exited successfully at `15:30:50 EDT`, and again
+reported `REPOSITORIES=6 CHECKED=47 PASS=4 FAIL=43 ERRORS=0`; its two
+`STATUS_SATURATED` warnings remained nonfatal.
+
+The bounded journal now shows seven successful controller-status cycles from
+`14:00` through `15:30 EDT`. Each cycle reported the same two nonfatal
+status-history saturation warnings, for fourteen warnings across those seven
+cycles.
