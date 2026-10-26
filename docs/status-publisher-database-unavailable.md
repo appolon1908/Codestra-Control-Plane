@@ -98,3 +98,10 @@ recorded separately in
 That record is evidence only: it contains no private-key digest or contents,
 password, verifier, protected DSN, executable command, activation window, or
 authorization to change the target.
+
+The workload manifest in that evidence is explicitly point-in-time. It recorded
+one container at `2026-10-26T18:54:45.707143Z`; a later read-only observation at
+`2026-10-26T19:21:44Z` recorded twelve containers created by concurrent work.
+The recovered PostgreSQL target identity remained unchanged, but any future
+source review or action must recollect and reconcile the complete Docker
+inventory instead of reusing the historical one-container hash.

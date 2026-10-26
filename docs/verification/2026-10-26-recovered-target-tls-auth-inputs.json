@@ -78,6 +78,43 @@
       }
     ]
   },
+  "post_observation_inventory_drift": {
+    "observed_at": "2026-10-26T19:21:44Z",
+    "container_count": 12,
+    "baseline_container_count_is_current": false,
+    "additional_containers_created_after_baseline": 11,
+    "additional_container_creation_window": {
+      "first": "2026-10-26T19:05:30.051997014Z",
+      "last": "2026-10-26T19:08:00.492752907Z"
+    },
+    "additional_container_names": [
+      "codestra-credential-verify-20261017-r1",
+      "codestra-dev-postgres17",
+      "codestra-dev-postgres18",
+      "codestra-dev-redis",
+      "codestra-highlevel-local-20261008-backend-1",
+      "codestra-highlevel-local-20261008-db-1",
+      "codestra-highlevel-local-20261008-frontend-1",
+      "codestra-highlevel-local-20261008-redis-1",
+      "cp-pas233-runtime-probe-a9506f7ebaa2",
+      "cp-recovery-6f7c342bb895",
+      "cp-recovery-6f7c342bb895-verify"
+    ],
+    "target_identity_rechecked": [
+      "container ID",
+      "image ID",
+      "state",
+      "started-at timestamp",
+      "network mode",
+      "container user",
+      "volume name",
+      "mount destination",
+      "mount read-write flag",
+      "mount mode"
+    ],
+    "target_identity_unchanged": true,
+    "action_time_requirement": "Recollect the complete Docker inventory and reconcile every sibling workload immediately before any new source is reviewed for action; the 720-byte one-container payload and its hash are historical baseline evidence only"
+  },
   "current_pgdata_prestate": {
     "postgresql.conf": {
       "bytes": 29929,
@@ -220,13 +257,15 @@
   "historical_source_incompatibilities": [
     "The expired source pins container 45ab1d70f9d365f7debb35b2c17f2d6db552ac613c25b1f04ebacc20dc9ff52b; the recovered target is 9c783b922b53e0abe33136215b0ea356bc7c258c638383fc410a70a9fde737a8.",
     "The expired source pins bridge networking and peer 172.17.0.1/32; the recovered target uses host networking and the observed peer is 127.0.0.1/32.",
-    "The expired source observed sixteen Docker workloads; the current complete Docker inventory contains one container.",
+    "The expired source observed sixteen Docker workloads; at this record's observed_at timestamp, the complete Docker inventory contained one container.",
     "The expired source pins an empty container user; the recovered target runs as 70:70.",
     "No expired approval window, source pin, or execution envelope may be replayed, relabeled, or silently rebound."
   ],
   "requirements_for_separate_source_packet": {
     "state": "PROPOSED_SOURCE_ONLY",
     "must_pin_current_target": true,
+    "must_recollect_docker_inventory_at_action_time": true,
+    "must_reconcile_post_observation_inventory_drift": true,
     "must_reuse_preserved_server_identity": true,
     "must_keep_server_and_intake_identities_separate": true,
     "must_embed_exact_hba_bytes_and_sha256": true,
@@ -275,6 +314,7 @@
     "This record is an input receipt, not an executable packet, approval, credential, protected DSN, certificate installation, or activation authorization.",
     "The private server key was verified by metadata and custody only; its contents and digest were deliberately not read.",
     "The six HBA rules are a review input derived from the observed host-network peer; they have not been installed or parsed by PostgreSQL.",
+    "The one-container workload payload and hash are a point-in-time baseline. A later observation recorded twelve containers, so the baseline must not be represented as present-time or action-time inventory.",
     "Future DEV_PREPARE, CRM_VERIFIER, DEV_APPLY, TLS/HBA configuration, and LOGIN activation remain separate governed phases.",
     "The current source-only packet has a separate sole writer and must reconcile this evidence without overwriting collisions."
   ],
