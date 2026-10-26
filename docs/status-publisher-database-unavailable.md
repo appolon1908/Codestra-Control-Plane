@@ -76,3 +76,18 @@ file. A source commit or passing test does not authorize that deployment.
 After those gates pass, verify the configured database transport and publisher
 cycle. Controller TLS, credentials, runtime admission, repository writes, and
 production activation remain distinct gates.
+
+## Recorded recovery
+
+The 2026-10-26 dev-desktop recovery observation is recorded in
+[`verification/2026-10-26-status-publisher-database-recovery.json`](verification/2026-10-26-status-publisher-database-recovery.json).
+It establishes that the original port-5432 cluster and its named volume are
+again available, the recovery archive passed bounded integrity checks, and one
+automatic cycle of each installed legacy status publisher exited successfully.
+
+That receipt deliberately does not certify the checked-in authenticated
+publisher as installed. The installed executable has a different digest, the
+database transport and roles do not satisfy the authenticated-controller
+contract, and the available controller and AUTH3 candidates remain inactive
+and unapproved. Those gates must remain blocked until their own current,
+reviewed inputs and action-time approvals exist.
