@@ -1,0 +1,261 @@
+{
+  "schema": "codestra.runtime-recovery-evidence.v1",
+  "state": "DATABASE_RECOVERED_LEGACY_PUBLISHER_CYCLES_OBSERVED_SUCCESSFUL_AUTHENTICATED_CONTROLLER_BLOCKED",
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "pull_request": "https://github.com/appolon1908/Codestra-Control-Plane/pull/70",
+  "runbook_source_parent": "db92fc2371e544432b0649578fc24f7847b3b1e7",
+  "host": "dev-desktop",
+  "observed_at": "2026-10-26T19:30:50Z",
+  "scope": "Recovery of the configured development PostgreSQL endpoint and observation of the already-installed legacy status publishers",
+  "database": {
+    "configured_endpoint": "127.0.0.1:5432",
+    "accepting_connections": true,
+    "system_identifier": "7693394772402679843",
+    "server_version": "16.15",
+    "server_version_num": 160015,
+    "in_recovery": false,
+    "databases": [
+      {
+        "name": "codestra_dev_control",
+        "oid": 19861
+      },
+      {
+        "name": "codestra_control_plane",
+        "oid": 19790
+      }
+    ],
+    "separate_endpoint": {
+      "endpoint": "127.0.0.1:5435",
+      "accepting_connections": true,
+      "system_identifier": "7693567030271924572",
+      "substitution_for_configured_endpoint": false
+    }
+  },
+  "container": {
+    "name": "codestra-dev-postgres",
+    "id": "9c783b922b53e0abe33136215b0ea356bc7c258c638383fc410a70a9fde737a8",
+    "image_id": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+    "state": "running",
+    "exit_code": 0,
+    "started_at": "2026-10-26T17:54:28.288297552Z",
+    "restart_policy": "unless-stopped",
+    "network_mode": "host",
+    "user": "70:70",
+    "no_new_privileges": true,
+    "capabilities_dropped": "ALL",
+    "data_volume": "codestra_postgres_data",
+    "data_mount": "/var/lib/postgresql/data",
+    "command": [
+      "-D",
+      "/var/lib/postgresql/data",
+      "-c",
+      "listen_addresses=127.0.0.1",
+      "-c",
+      "port=5432"
+    ]
+  },
+  "backup": {
+    "directory": "/var/backups/codestra-postgres-5432-20261026-gzip-4L1CT4",
+    "archive": "pgdata.tar.gz",
+    "archive_size_bytes": 330093529,
+    "archive_sha256": "3e9d6af9210e8e9750558f6aa5c8306753d33341f6363fc678e9af1404283ddf",
+    "recorded_sha256_matches_full_file_hash": true,
+    "gzip_stream_test": "PASS",
+    "uncompressed_bytes": 1868206080,
+    "tar_members": {
+      "total": 55088,
+      "regular": 54883,
+      "directories": 205,
+      "links": 0,
+      "unsafe_absolute_traversal_device_or_fifo": 0
+    },
+    "verification_document": "verification.json",
+    "verification_document_sha256": "508d8ee83f57d675973e79f36392e326f830722800faead19e59cdc051be49b1",
+    "verification_checks": [
+      {
+        "check": "original_cluster_5432",
+        "output": "7693394772402679843|5432|16.15|f",
+        "returncode": 0
+      },
+      {
+        "check": "codestra_dev_control",
+        "output": "codestra_dev_control|12",
+        "returncode": 0
+      },
+      {
+        "check": "codestra_control_plane",
+        "output": "codestra_control_plane|3",
+        "returncode": 0
+      },
+      {
+        "check": "separate_cluster_5435",
+        "output": "7693567030271924572|5435|/var/lib/postgresql/16/main",
+        "returncode": 0
+      },
+      {
+        "check": "container_restart",
+        "output": "9c783b922b53e0abe33136215b0ea356bc7c258c638383fc410a70a9fde737a8 running 0 unless-stopped",
+        "returncode": 0
+      },
+      {
+        "check": "docker_boot",
+        "output": "enabled",
+        "returncode": 0
+      }
+    ]
+  },
+  "installed_publishers": {
+    "codestra-control-plane-status.service": {
+      "kind": "legacy_oneshot",
+      "cycle_completed_at": "2026-10-26T15:30:50-04:00",
+      "main_started_at": "2026-10-26T15:30:00-04:00",
+      "main_exited_at": "2026-10-26T15:30:50-04:00",
+      "finished_journal_observed": true,
+      "result": "success",
+      "exec_condition_status": 0,
+      "exit_status": 0,
+      "service_state_after_cycle": "inactive_dead_expected_for_oneshot",
+      "github_core_remaining_at_admission": 4576,
+      "github_core_minimum_for_admission": 250,
+      "successful_cycles_observed": 7,
+      "observed_completed_cycles": [
+        {
+          "completed_at": "2026-10-26T14:01:45-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T14:15:51-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T14:31:09-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T14:46:23-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T15:01:04-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T15:15:54-04:00",
+          "status_saturated_warnings": 2
+        },
+        {
+          "completed_at": "2026-10-26T15:30:50-04:00",
+          "status_saturated_warnings": 2
+        }
+      ],
+      "repositories": 6,
+      "checked": 47,
+      "pass": 4,
+      "blocked": 43,
+      "errors": 0,
+      "status_saturated_warnings_observed": 14,
+      "timer_enabled": true,
+      "timer_state": "active_waiting",
+      "installed_executable_sha256": "0c4f0f5046ffd723e4c157173af3f1003bcdc611543ec70b99a7596a0d5d024a",
+      "checked_in_executable_sha256": "7f097506c9b3e0fc14ba85c3c015727f2d3e780395e092aea6b5c81cdf10b641",
+      "installed_matches_checked_in": false
+    },
+    "codestra-github-status-sync.service": {
+      "kind": "legacy_oneshot",
+      "cycle_completed_at": "2026-10-26T14:09:01-04:00",
+      "main_started_at": "2026-10-26T14:05:01-04:00",
+      "main_exited_at": "2026-10-26T14:09:01-04:00",
+      "finished_journal_observed": true,
+      "result": "success",
+      "exec_condition_status": 0,
+      "exit_status": 0,
+      "service_state_after_cycle": "inactive_dead_expected_for_oneshot",
+      "successful_cycles_observed": 1,
+      "status_saturated_warnings_observed": 13,
+      "timer_enabled": true,
+      "timer_state": "active_waiting",
+      "installed_executable_sha256": "98d8b511653fe254392495a28664fe1c1b7067887572d12a9ab6ac358f7c8050",
+      "checked_in_retired_stub_sha256": "637b71450e2aca3bf2fa0a170f7913340a71773ad17efe41e31e6feec6ffd9f9",
+      "installed_matches_checked_in": false
+    }
+  },
+  "local_runtime_remediation": {
+    "transient_probe_failure_at": "2026-10-26T19:16:44Z",
+    "symptom": "One pg_isready probe to 127.0.0.1:5432 returned no response before its timeout",
+    "diagnosis": "Host-wide rotational-disk I/O starvation from stale recursive read-only searches, not a PostgreSQL or container failure",
+    "database_listener_remained_bound": true,
+    "container_remained_running": true,
+    "container_restart_count": 0,
+    "container_oom_killed": false,
+    "postgresql_process_set_remained_present": true,
+    "postgresql_crash_or_recovery_log_observed": false,
+    "kernel_oom_or_io_error_observed": false,
+    "peak_io_pressure": {
+      "some_avg10_percent": 99.39,
+      "full_avg10_percent": 88.37
+    },
+    "remediation": "Terminated only the validated stale recursive find/rg commands and their shells; no database, container, service, configuration, or data mutation was performed",
+    "post_remediation_io_pressure": {
+      "some_avg10_percent": 7.23,
+      "full_avg10_percent": 6.71
+    },
+    "post_remediation_consecutive_pg_isready_successes": 38,
+    "probe_evidence_source": "Bounded interactive command output retained in the operator session; the individual probe results are not system-journal events",
+    "post_remediation_probe_latency_seconds": {
+      "minimum": 0.06,
+      "maximum": 0.08,
+      "sample_size": 3
+    },
+    "authenticated_select_one": "PASS",
+    "authenticated_select_one_evidence_source": "Bounded interactive command output retained in the operator session",
+    "postgresql_restart_performed": false
+  },
+  "authenticated_controller": {
+    "activation": "BLOCKED",
+    "database_ssl": false,
+    "database_hba_uses_trust": true,
+    "application_login_is_superuser": true,
+    "authority_roles_login_enabled": false,
+    "candidate_source_commit": "d3078ad25c15e988ff911a0f53e14de960817503",
+    "candidate_release_approved": false,
+    "candidate_install_allowed": false,
+    "candidate_activation_allowed": false,
+    "candidate_database_setup_approved": false,
+    "candidate_authority_provisioning_approved": false,
+    "auth3_state": "REVIEW_READY_INACTIVE_UNBOUND_UNISSUED",
+    "reasons": [
+      "The installed legacy publisher is not the checked-in authenticated publisher.",
+      "TLS, SCRAM/channel binding, protected DSNs, and non-superuser login requirements are not satisfied.",
+      "Required modern controller schemas, fixed runtime configuration, and accepted release runtime are absent.",
+      "The available controller manifest has all installation and activation approvals disabled.",
+      "The available AUTH3 preparation package is unbound and unissued and its previous action-time window is not current."
+    ]
+  },
+  "actions_during_observation": {
+    "manual_service_start": false,
+    "service_restart": false,
+    "credential_read": false,
+    "credential_change": false,
+    "database_change": false,
+    "repository_status_write_by_observer": false,
+    "stale_recursive_search_process_termination": true
+  },
+  "limits": [
+    "Archive hash, gzip integrity, member inventory, and member path/type safety were verified; a full offline extraction and source-byte equality comparison were not run.",
+    "The archive has not been transported to or sealed by the separate CRM preservation authority.",
+    "Successful legacy publisher cycles do not certify or authorize the authenticated controller runtime.",
+    "The 43 failed status decisions are recorded governance blocks, not publisher execution errors.",
+    "Execution PASS does not establish that every desired GitHub status append was accepted; bounded status-history saturation warnings were observed and handled by the installed legacy implementations.",
+    "A transient readiness timeout caused by host I/O starvation was remediated by terminating only validated stale recursive search processes; PostgreSQL was not restarted and then passed thirty-eight consecutive probes plus an authenticated SELECT 1.",
+    "No production activation is asserted by this receipt."
+  ],
+  "database_recovery": "PASS",
+  "legacy_publisher_execution": "PASS",
+  "authenticated_controller_activation": "BLOCKED",
+  "controller_certified": false,
+  "promotion_authorized": false,
+  "PRODUCTION_GO": "NO",
+  "LIVE_CAPABILITIES_ENABLED": "NO",
+  "EXTERNAL_EFFECTS_BY_OBSERVER": false,
+  "INSTALLED_LEGACY_EXTERNAL_EFFECTS": "GOVERNANCE_STATUS_PUBLICATION_POSSIBLE"
+}

@@ -14,7 +14,7 @@ HEAD = "governance/development-control-plane-v1"
 KLYROW_PRODUCT = "klyrow.com"
 KLYROW_HEAD = "implementation/klyrow-ses-transport-20261008"
 KLYROW_BASE = "implementation/klyrow-server3-safe-staging-20261008"
-KLYROW_SHA = "f6e56f4fcd75f53a794dfee3d36913611a791248"
+KLYROW_SHA = "99981578158db5421e0e3a0b586f236a27c271bf"
 
 
 class PublisherReconciliationTests(unittest.TestCase):
@@ -60,7 +60,10 @@ class PublisherReconciliationTests(unittest.TestCase):
 
         with mock.patch.dict(policy.__globals__, {"date": Active}):
             reason = policy(KLYROW_PRODUCT, KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA)
-            self.assertIn("klyrow_pr186_exact_sha", reason)
+            self.assertEqual(
+                reason,
+                "klyrow_pr186_exact_sha:expires=2026-10-30",
+            )
             self.assertIsNone(policy(KLYROW_PRODUCT, KLYROW_HEAD, KLYROW_BASE, "0" * 40))
             self.assertIsNone(policy(KLYROW_PRODUCT, KLYROW_HEAD, "development", KLYROW_SHA))
             self.assertIsNone(policy("Kong", KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA))
@@ -68,14 +71,14 @@ class PublisherReconciliationTests(unittest.TestCase):
         class Expired(Active):
             @classmethod
             def today(cls):
-                return cls(2026, 10, 24)
+                return cls(2026, 10, 31)
 
         with mock.patch.dict(policy.__globals__, {"date": Expired}):
             self.assertIsNone(policy(KLYROW_PRODUCT, KLYROW_HEAD, KLYROW_BASE, KLYROW_SHA))
 
     def test_klyrow_legacy_pair_reaches_sha_validation_instead_of_being_skipped(self):
         candidate = self.load("codestra-github-statusd")["reconciliation_candidate"]
-        policy = mock.Mock(return_value="klyrow_pr186_exact_sha:expires=2026-10-23")
+        policy = mock.Mock(return_value="klyrow_pr186_exact_sha:expires=2026-10-30")
         governed = mock.Mock(side_effect=AssertionError("migration admission must not query hierarchy"))
         with mock.patch.dict(candidate.__globals__, {
             "MIGRATION_REASON": policy,
