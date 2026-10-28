@@ -1231,6 +1231,27 @@ class _RuntimeCodeTree(FileCustody):
 CONFIGURATION_TARGET = '/etc/codestra/control-plane/lease-verifier.toml'
 CREDENTIAL_TARGETS = ('/etc/codestra/control-plane/credentials/lease-verifier.dsn',
                       '/etc/codestra/control-plane/credentials/lease-verifier-app.pem')
+TASK_CONFIGURATION_TARGET = '/etc/codestra/control-plane/task-bootstrap-verifier.toml'
+
+
+def _runtime_layout(spec):
+    if spec.get('schema') == 'codestra.admission-runtime-selection.v1':
+        return CONFIGURATION_TARGET, CREDENTIAL_TARGETS, 'ADMISSION_AND_LEGACY'
+    if (spec.get('schema') not in ('codestra.admission-runtime-selection.v2', 'codestra.admission-runtime-selection.v3')
+            or spec.get('publication_mode') != 'TASK_BOOTSTRAP_CLI_ONLY'):
+        raise ValueError('INVALID_RUNTIME_PUBLICATION_SELECTION')
+    paths = spec.get('verifier_credentials')
+    if not isinstance(paths, dict) or set(paths) != {'database_dsn_file', 'app_key_file'}:
+        raise ValueError('EXPLICIT_PRIVATE_RUNTIME_CREDENTIAL_SELECTION_REQUIRED')
+    dsn, key = paths['database_dsn_file'], paths['app_key_file']
+    parent_pattern = r'/etc/codestra/control-plane/credentials/[a-z0-9][a-z0-9-]{0,63}'
+    if (not isinstance(dsn, str) or not isinstance(key, str)
+            or not re.fullmatch(parent_pattern + r'/connection\.dsn', dsn)
+            or not re.fullmatch(parent_pattern + r'/app\.pem', key)
+            or Path(dsn).parent != Path(key).parent
+            or Path(dsn).parent.name.startswith('pas233-admission-')):
+        raise ValueError('DISTINCT_PRIVATE_RUNTIME_CREDENTIAL_SELECTION_REQUIRED')
+    return TASK_CONFIGURATION_TARGET, (dsn, key), 'TASK_BOOTSTRAP_CLI_ONLY'
 
 
 def _runtime_specification(specification, namespace):
@@ -1242,20 +1263,30 @@ def _runtime_specification(specification, namespace):
     spec = json.loads(encoded)
     required = {'schema', 'interpreter_sha256', 'machine_id_sha256', 'writer_exclusion_reference',
                 'recovery_reference', 'driver_directory', 'import_roots', 'import_path_order', 'credential_files', 'configuration'}
+    if spec.get('schema') in ('codestra.admission-runtime-selection.v2', 'codestra.admission-runtime-selection.v3'):
+        required |= {'publication_mode', 'verifier_credentials'}
+    group_reader = spec.get('schema') == 'codestra.admission-runtime-selection.v3'
+    if group_reader:
+        required.add('runtime_reader')
+        reader = spec.get('runtime_reader')
+        if (not isinstance(reader, dict) or set(reader) != {'uid', 'gid', 'custody_reference_sha256'}
+                or any(type(reader[key]) is not int or reader[key] <= 0 for key in ('uid', 'gid'))
+                or not isinstance(reader['custody_reference_sha256'], str)
+                or not SHA256.fullmatch(reader['custody_reference_sha256'])):
+            raise ValueError('EXPLICIT_NONROOT_RUNTIME_READER_CUSTODY_REQUIRED')
     if (set(spec) != required or any(not isinstance(spec[key], dict) for key in ('import_roots', 'credential_files', 'configuration'))
             or any(not isinstance(spec[key], str) for key in ('interpreter_sha256', 'machine_id_sha256'))
             or type(spec['import_path_order']) is not list or any(not isinstance(path, str) for path in spec['import_path_order'])):
         raise ValueError('COMPLETE_RUNTIME_SELECTIONS_REQUIRED')
-    if (set(spec) != {'schema', 'interpreter_sha256', 'machine_id_sha256', 'writer_exclusion_reference',
-            'recovery_reference', 'driver_directory', 'import_roots', 'import_path_order', 'credential_files', 'configuration'}
-            or spec['schema'] != 'codestra.admission-runtime-selection.v1'
+    configuration_target, credential_targets, _ = _runtime_layout(spec)
+    if (set(spec) != required
             or not SHA256.fullmatch(spec['interpreter_sha256'])
             or not SHA256.fullmatch(spec['machine_id_sha256'])
             or any(not isinstance(spec[key], str) or not 1 <= len(spec[key]) <= 512
                    for key in ('writer_exclusion_reference', 'recovery_reference'))
             or spec['driver_directory'] not in ('/usr/lib/python3/dist-packages', '/usr/local/lib/python3.12/dist-packages')
-            or set(spec['configuration']) != {CONFIGURATION_TARGET}
-            or set(spec['credential_files']) != set(CREDENTIAL_TARGETS)
+            or set(spec['configuration']) != {configuration_target}
+            or set(spec['credential_files']) != set(credential_targets)
             or not {'/usr/lib/python3.12', spec['driver_directory']} <= spec['import_roots'].keys()
             or any(path not in ('/usr/lib/python312.zip', '/usr/lib/python3.12', '/usr/lib/python3.12/lib-dynload',
                 '/usr/lib/python3/dist-packages', '/usr/local/lib/python3.12/dist-packages') for path in spec['import_roots'])
@@ -1264,11 +1295,11 @@ def _runtime_specification(specification, namespace):
             or any(value is not None and (not isinstance(value, str) or not SHA256.fullmatch(value)) for value in spec['import_roots'].values())
             or any(not isinstance(value, str) or not SHA256.fullmatch(value) for value in spec['credential_files'].values())):
         raise ValueError('COMPLETE_RUNTIME_SELECTIONS_REQUIRED')
-    config = spec['configuration'][CONFIGURATION_TARGET]
+    config = spec['configuration'][configuration_target]
     if (not isinstance(config, dict) or set(config) != {'sha256', 'gid', 'mode'}
             or not isinstance(config['sha256'], str) or not SHA256.fullmatch(config['sha256'])
-            or config['mode'] != '0o600' or type(config['gid']) is not int or config['gid'] < 0
-            or config['gid'] != (0 if namespace.is_host else os.getegid())):
+            or config['mode'] != ('0o640' if group_reader else '0o600') or type(config['gid']) is not int or config['gid'] < 0
+            or config['gid'] != (spec['runtime_reader']['gid'] if group_reader else 0 if namespace.is_host else os.getegid())):
         raise ValueError('INVALID_PROTECTED_CONFIGURATION_SELECTION')
     return encoded
 
@@ -1452,10 +1483,13 @@ class RuntimeCustody(FileCustody):
         self._execution = RuntimeExecution(candidate, specification, namespace)
         self._specification = self._execution._specification
         spec = self.specification
+        self.configuration_target, self.credential_targets, self.publication_mode = _runtime_layout(spec)
         self._parent_paths = [self.configuration_target, *self.credential_targets, '/usr/bin/python3',
             '/etc/machine-id',
-            '/opt/codestra-control-plane/releases/entry', '/opt/codestra-dev/control-plane/bin/github-status-sync',
+            '/opt/codestra-control-plane/releases/entry',
             spec['driver_directory'] + '/entry', *spec['import_roots']]
+        if self.publication_mode == 'ADMISSION_AND_LEGACY':
+            self._parent_paths.append('/opt/codestra-dev/control-plane/bin/github-status-sync')
         self._parents = namespace.parent_bindings(self._parent_paths)
         # Fixtures have their own private journal namespace; actual host custody
         # walks every ancestor from /. Bind the path as well as the final inode.
@@ -1483,7 +1517,8 @@ class RuntimeCustody(FileCustody):
             journal_namespace_root=str(self._journal_namespace.root),
             journal_namespace_identity=self._journal_namespace.identity,
             journal_parent_bindings=self._journal_parents,
-            parent_bindings=self._parents, installation_scope='ADMISSION_CODE_AND_VERIFIER_CONFIGURATION')
+            parent_bindings=self._parents, publication_mode=self.publication_mode,
+            installation_scope='ADMISSION_CODE_AND_VERIFIER_CONFIGURATION')
         return value
 
     @property
@@ -1498,8 +1533,15 @@ class RuntimeCustody(FileCustody):
             raise ValueError('RUNTIME_PREREQUISITE_PARENT_CHANGED')
         self._execution.verify()
         self._execution._verify_tools(executables=True)
+        group_reader = spec['schema'] == 'codestra.admission-runtime-selection.v3'
+        credential_gid = spec['runtime_reader']['gid'] if group_reader else 0 if self.namespace.is_host else os.getegid()
         for path, checksum in spec['credential_files'].items():
-            if digest(self.namespace.read(path, mode=0o600, gid=0 if self.namespace.is_host else os.getegid())) != checksum:
+            if self.publication_mode == 'TASK_BOOTSTRAP_CLI_ONLY':
+                with self.namespace.parent(path) as (parent, _):
+                    metadata = os.fstat(parent)
+                    if stat.S_IMODE(metadata.st_mode) != (0o750 if group_reader else 0o700) or metadata.st_gid != credential_gid:
+                        raise ValueError('PRIVATE_RUNTIME_CREDENTIAL_PARENT_REQUIRED')
+            if digest(self.namespace.read(path, mode=0o640 if group_reader else 0o600, gid=credential_gid)) != checksum:
                 raise ValueError('RUNTIME_PREREQUISITE_CREDENTIAL_DRIFT')
 
     def _probe(self, spec):
@@ -1508,7 +1550,7 @@ class RuntimeCustody(FileCustody):
     def _existing_configuration(self):
         config = self.specification['configuration'][self.configuration_target]
         try:
-            data = self.namespace.read(self.configuration_target, mode=0o600, gid=config['gid'])
+            data = self.namespace.read(self.configuration_target, mode=int(config['mode'], 8), gid=config['gid'])
         except FileNotFoundError:
             return
         if digest(data) != config['sha256']:
@@ -1525,6 +1567,8 @@ class RuntimeCustody(FileCustody):
         self._code._tree('releases', self.candidate.source_commit, files, modes)
 
     def _existing_legacy(self):
+        if self.publication_mode == 'TASK_BOOTSTRAP_CLI_ONLY':
+            return
         try:
             data = self.namespace.read('/opt/codestra-dev/control-plane/bin/github-status-sync', mode=0o755)
         except FileNotFoundError:
@@ -1578,10 +1622,11 @@ class RuntimeCustody(FileCustody):
         files, modes = self._release(candidate)
         self._code._tree('releases', candidate.source_commit, files, modes, install=True)
         self._record(attempt_id, target, 'DURABLE')
-        target = '/opt/codestra-dev/control-plane/bin/github-status-sync'
-        self._record(attempt_id, target, 'INTENT')
-        self.namespace.publish(target, candidate.files['legacy/bin/github-status-sync'], 0o755, os.getegid())
-        self._record(attempt_id, target, 'DURABLE')
+        if self.publication_mode == 'ADMISSION_AND_LEGACY':
+            target = '/opt/codestra-dev/control-plane/bin/github-status-sync'
+            self._record(attempt_id, target, 'INTENT')
+            self.namespace.publish(target, candidate.files['legacy/bin/github-status-sync'], 0o755, os.getegid())
+            self._record(attempt_id, target, 'DURABLE')
         self.verify_release(candidate)
 
     def verify_release(self, candidate):
@@ -1589,7 +1634,8 @@ class RuntimeCustody(FileCustody):
         self.verify_prerequisites()
         files, modes = self._release(candidate)
         self._code._tree('releases', candidate.source_commit, files, modes)
-        if self.namespace.read('/opt/codestra-dev/control-plane/bin/github-status-sync', mode=0o755) != candidate.files['legacy/bin/github-status-sync']:
+        if (self.publication_mode == 'ADMISSION_AND_LEGACY'
+                and self.namespace.read('/opt/codestra-dev/control-plane/bin/github-status-sync', mode=0o755) != candidate.files['legacy/bin/github-status-sync']):
             raise ValueError('RUNTIME_LEGACY_TARGET_MISMATCH')
         self._release_verified = True
 
@@ -1617,7 +1663,7 @@ class RuntimeCustody(FileCustody):
         raw = self._configuration(data)
         self.verify_prerequisites()
         self._record(attempt_id, self.configuration_target, 'INTENT')
-        self.namespace.publish(self.configuration_target, raw, 0o600,
+        self.namespace.publish(self.configuration_target, raw, int(self.specification['configuration'][self.configuration_target]['mode'], 8),
                                self.specification['configuration'][self.configuration_target]['gid'])
         self._record(attempt_id, self.configuration_target, 'DURABLE')
         super().install_configuration(data, attempt_id, expected_sha256)
@@ -1629,7 +1675,7 @@ class RuntimeCustody(FileCustody):
         with self._root() as root:
             bundle, _ = _read(root, 'configurations/' + str(uuid.UUID(attempt_id)) + '/configuration')
         raw = self._configuration(bundle)
-        if self.namespace.read(self.configuration_target, mode=0o600,
+        if self.namespace.read(self.configuration_target, mode=int(self.specification['configuration'][self.configuration_target]['mode'], 8),
                 gid=self.specification['configuration'][self.configuration_target]['gid']) != raw:
             raise ValueError('PROTECTED_RUNTIME_CONFIGURATION_MISMATCH')
         self._configuration_verified = True
@@ -2286,11 +2332,15 @@ def _request_plan(operation, request, candidate):
             or request['candidate'] != str(candidate.root)
             or request['manifest_sha256'] != candidate.manifest_sha256
             or type(request['adopted_sources']) is not list
+            or type(request['runtime_selection']) is not dict
             or not isinstance(request['configuration_sha256'], str)
             or not SHA256.fullmatch(request['configuration_sha256'])):
         raise ValueError('INVALID_INSTALLATION_REQUEST')
     profile = request.get('migration_profile', 'admission-v1')
     migration_sources(profile)
+    if (request['runtime_selection'].get('schema') in ('codestra.admission-runtime-selection.v2', 'codestra.admission-runtime-selection.v3')
+            and profile != RESTRICTED_PROFILE):
+        raise ValueError('CLI_ONLY_REQUIRES_RESTRICTED_TASK_BOOTSTRAP_PROFILE')
     if operation == 'plan':
         return None
     plan = InstallationPlan(canonical(request['plan']))
@@ -2332,7 +2382,27 @@ INSTALLER_CREDENTIALS = {
     'installation_verifier': '/etc/codestra/control-plane/credentials/admission-verifier.dsn',
     'issuer': '/etc/codestra/control-plane/credentials/admission-issuer.dsn',
 }
+PRIVATE_INSTALLER_CREDENTIALS = dict(INSTALLER_CREDENTIALS,
+    operator='/etc/codestra/control-plane/credentials/pas233-admission-install-20261028-v1/connection.dsn',
+    installation_verifier='/etc/codestra/control-plane/credentials/pas233-admission-verify-20261028-v1/connection.dsn')
 CONFIGURATION_INPUT = '/etc/codestra/control-plane/admission-configuration.json'
+
+
+def installer_credential_paths(config, *, restricted):
+    """Explicit profile; legacy defaults and publisher custody stay unchanged."""
+    if not isinstance(config, dict):
+        raise ValueError('INVALID_INSTALLATION_CONFIGURATION')
+    private = config.get('schema') == 'codestra.admission-installer-config.v3'
+    expected = {'schema', 'issuer'}
+    if restricted:
+        expected.add('lock_selection')
+    if private:
+        expected.add('credential_profile')
+    if (set(config) != expected or type(config['issuer']) is not dict
+            or config['schema'] != 'codestra.admission-installer-config.' + ('v3' if private else 'v2' if restricted else 'v1')
+            or private and (not restricted or config['credential_profile'] != 'pas233-private-v1')):
+        raise ValueError('INVALID_INSTALLATION_CONFIGURATION')
+    return dict(PRIVATE_INSTALLER_CREDENTIALS if private else INSTALLER_CREDENTIALS)
 
 
 def _protected_input(namespace, path, *, public=False):
@@ -2390,10 +2460,7 @@ def run_configured(operation, request):
     config_raw = _protected_input(namespace, INSTALLER_CONFIG)
     config = tomllib.loads(config_raw.decode())
     restricted = request.get('migration_profile') == RESTRICTED_PROFILE
-    if (set(config) != ({'schema', 'issuer', 'lock_selection'} if restricted else {'schema', 'issuer'})
-            or config['schema'] != 'codestra.admission-installer-config.' + ('v2' if restricted else 'v1')
-            or type(config['issuer']) is not dict):
-        raise ValueError('INVALID_INSTALLATION_CONFIGURATION')
+    installer_credential_paths(config, restricted=restricted)
     candidate = SourceCandidate.load(request['candidate'], request['manifest_sha256'])
     # The code being executed is part of the same accepted candidate. Verifying
     # candidate bytes alone cannot make a different executing module trusted.
@@ -2416,14 +2483,33 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
     fixtures can exercise ordering without weakening the operational guard.
     """
     plan = _request_plan(operation, request, candidate)
+    restricted = request.get('migration_profile') == RESTRICTED_PROFILE
+    credential_paths = installer_credential_paths(config, restricted=restricted)
+    if (config['schema'] == 'codestra.admission-installer-config.v3'
+            and request['runtime_selection'].get('schema') not in ('codestra.admission-runtime-selection.v2', 'codestra.admission-runtime-selection.v3')):
+        raise ValueError('PRIVATE_INSTALLER_REQUIRES_EXPLICIT_CLI_ONLY_RUNTIME_SELECTION')
     execution = RuntimeExecution(candidate, request['runtime_selection'], namespace)
     snapshots = {INSTALLER_CONFIG: config_raw}
+    private_inputs = {path for role, path in credential_paths.items() if path != INSTALLER_CREDENTIALS[role]}
+    private_parent_bindings = {}
+
+    def private_parent_check(path):
+        if path not in private_inputs:
+            return
+        with namespace.parent(path) as (parent, _):
+            metadata = os.fstat(parent)
+            if stat.S_IMODE(metadata.st_mode) != 0o700 or metadata.st_gid != (0 if namespace.is_host else os.getegid()):
+                raise ValueError('PRIVATE_INSTALLER_CREDENTIAL_PARENT_REQUIRED')
+            binding = namespace._binding(str(Path(path).parent), metadata)
+            if private_parent_bindings.setdefault(path, binding) != binding:
+                raise ValueError('PRIVATE_INSTALLER_CREDENTIAL_PARENT_CHANGED')
 
     def custody_check():
         candidate.revalidate()
         execution.verify()
         for path, raw in snapshots.items():
-            if _protected_input(namespace, path, public=path not in (INSTALLER_CONFIG, CONFIGURATION_INPUT, *INSTALLER_CREDENTIALS.values())) != raw:
+            private_parent_check(path)
+            if _protected_input(namespace, path, public=path not in (INSTALLER_CONFIG, CONFIGURATION_INPUT, *credential_paths.values())) != raw:
                 raise ValueError('INSTALLATION_CONNECTION_CUSTODY_CHANGED')
 
     def connection(role, stack):
@@ -2432,7 +2518,8 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
         import psycopg2
         if namespace.is_host:
             execution.verify_process(require_driver=True)
-        path = INSTALLER_CREDENTIALS[role]
+        path = credential_paths[role]
+        private_parent_check(path)
         raw = _protected_input(namespace, path)
         snapshots[path] = raw
         params = connection_parameters(raw)
@@ -2441,6 +2528,7 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
         snapshots[params['sslrootcert']] = _protected_input(namespace, params['sslrootcert'], public=True)
         result = psycopg2.connect(**params)
         stack.callback(result.close)
+        custody_check()
         return result
 
     with ExitStack() as stack:

@@ -270,3 +270,66 @@ The source plan/ownership ledger is
 temporary namespaces and independently created PostgreSQL 16 fixtures, never
 installed DSNs, production mounts or provider endpoints. Exact-source testing,
 independent final review and actual publication requirements precede a push.
+
+## Restricted CLI publication and private admission inputs
+
+The opt-in `codestra.admission-runtime-selection.v2` selection has exactly the
+v1 fields plus `publication_mode="TASK_BOOTSTRAP_CLI_ONLY"` and a
+`verifier_credentials` object. It is accepted only with
+`task-bootstrap-restricted-v1`. It installs the pinned release and
+`/etc/codestra/control-plane/task-bootstrap-verifier.toml`, the configuration
+actually consumed by `codestra-task-bootstrap`. It neither reads, validates,
+publishes nor records installation history for the global legacy publisher
+wrapper. The v1 selection retains its existing publication behavior.
+
+The two `verifier_credentials` keys are `database_dsn_file` and `app_key_file`.
+An accepted selection supplies distinct `connection.dsn` and `app.pem` files in
+one new private directory beneath `/etc/codestra/control-plane/credentials`.
+Both files must already be provisioned and pinned, with mode0600 and a mode0700
+immediate parent. Admission installation credential directories cannot be used
+as runtime verifier directories. The four-field verifier TOML and its accepted
+App identities must agree with those paths. Selection data does not provision
+credentials, principals, grants, custody or a service, and does not authorize
+publication or startup. A separate unprivileged runtime identity still needs an
+accepted secret-loading arrangement; this change does not widen root0600 files.
+
+The restricted installer can explicitly opt into
+`codestra.admission-installer-config.v3`, with the v2 `issuer` and
+`lock_selection` fields plus `credential_profile="pas233-private-v1"`.
+Only its operator and installation-reader paths change, respectively to
+`credentials/pas233-admission-install-20261028-v1/connection.dsn` and
+`credentials/pas233-admission-verify-20261028-v1/connection.dsn` beneath
+`/etc/codestra/control-plane/`. Their immediate parents must be mode0700;
+files remain root0600 on every custody recheck. The shared credentials parent,
+runtime verifier defaults and issuer path remain unchanged. This configuration
+requires an explicit v2/v3 CLI-only runtime selection; historical v1/v2 installer
+configurations keep their original paths.
+
+Private installer directory mode, GID and inode identity are checked before
+opening credentials, after each connection, and on every custody recheck before
+dispatch or authority operations. Replacement or permission drift stops the
+attempt and closes its connections; identical credential bytes do not waive
+the directory binding.
+
+The new source candidate pins the observed root-owned Git2.43.0 binary by
+SHA256 `eb54b535467e0975c1284d4c4d08eea779aeb248a5d34b02e2ee171382e22201`.
+The candidate still marks provisioning and target verification false. Existing
+installed publisher code, credentials, aliases and timers are not modified.
+
+An independently accepted unprivileged reader can instead be bound by
+`codestra.admission-runtime-selection.v3`. It adds exactly `runtime_reader`
+with positive integer `uid`, positive integer `gid`, and
+`custody_reference_sha256`. The separately provisioned runtime DSN and App key
+must be root-owned, mode0640, in a root-owned mode0750 immediate directory;
+all three use precisely the selected reader GID. Only that selection permits
+installing its verifier TOML as root:reader-GID/mode0640. Both the credentials
+and configuration remain unwritable by that group. The parent namespace stays
+root-owned and unwritable by non-root identities.
+
+This selection creates no account, group, membership, credential or key and
+does not change metadata on an existing credential. Provisioning those exact
+new paths and group custody requires its own reviewed effects. Acceptance must
+prove the actual non-root runtime UID/GID can read these files, unrelated
+identities cannot, and no competing publisher was introduced. A custody hash
+alone does not prove those operating-system access results. v2 remains exact
+root0600/0700, including the separate installation identities.
