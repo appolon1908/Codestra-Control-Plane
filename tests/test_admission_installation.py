@@ -566,6 +566,90 @@ class FileCustodyTests(unittest.TestCase):
 
 
 class RuntimeTargetTests(unittest.TestCase):
+    def restricted_specification(self):
+        spec=json.loads(json.dumps(self.specification))
+        spec.update(schema='codestra.admission-runtime-selection.v2',publication_mode='TASK_BOOTSTRAP_CLI_ONLY',
+            verifier_credentials={'database_dsn_file':'/etc/codestra/control-plane/credentials/task-bootstrap-runtime/connection.dsn',
+                'app_key_file':'/etc/codestra/control-plane/credentials/task-bootstrap-runtime/app.pem'})
+        old=list(self.credentials.values());private=spec['verifier_credentials']
+        for name,data in zip(private.values(),old):
+            self.write(name,data,0o600)
+            (self.namespace_root/Path(name).parent.relative_to('/')).chmod(0o700)
+        # write() normalizes fixture parents; restore after both writes.
+        (self.namespace_root/'etc/codestra/control-plane/credentials/task-bootstrap-runtime').chmod(0o700)
+        spec['credential_files']={name:hashlib.sha256(data).hexdigest() for name,data in zip(private.values(),old)}
+        config=self.configuration.replace(b'/credentials/lease-verifier.dsn',b'/credentials/task-bootstrap-runtime/connection.dsn').replace(b'/credentials/lease-verifier-app.pem',b'/credentials/task-bootstrap-runtime/app.pem')
+        spec['configuration']={self.module.TASK_CONFIGURATION_TARGET:{'sha256':hashlib.sha256(config).hexdigest(),'gid':os.getegid(),'mode':'0o600'}}
+        return spec,config
+
+    def test_cli_only_release_preserves_different_legacy_publisher_and_skips_its_ancestry(self):
+        spec,config=self.restricted_specification();legacy=self.namespace_root/'opt/codestra-dev/control-plane/bin/github-status-sync'
+        self.write('/opt/codestra-dev/control-plane/bin/github-status-sync',b'EXISTING_PUBLISHER_UNRELATED',0o755)
+        (self.namespace_root/'opt/codestra-dev').chmod(0o777)
+        before=(legacy.read_bytes(),legacy.stat().st_ino)
+        store=self.module.RuntimeCustody(self.journal,self.candidate,spec,self.namespace)
+        store.install_release(self.candidate,self.attempt);store.verify_release(self.candidate)
+        data=json.dumps({self.module.TASK_CONFIGURATION_TARGET:base64.b64encode(config).decode()},sort_keys=True).encode();store.install_configuration(data,self.attempt,hashlib.sha256(data).hexdigest())
+        self.assertEqual((legacy.read_bytes(),legacy.stat().st_ino),before)
+        self.assertEqual(store.binding['runtime']['publication_mode'],'TASK_BOOTSTRAP_CLI_ONLY')
+        self.assertFalse(any('/opt/codestra-dev/' in path for path in store.binding['runtime']['parent_bindings']))
+
+    def test_cli_only_selection_requires_private_distinct_runtime_credentials(self):
+        spec,_=self.restricted_specification();parent=self.namespace_root/'etc/codestra/control-plane/credentials/task-bootstrap-runtime'
+        parent.chmod(0o755)
+        with self.assertRaisesRegex(ValueError,'PRIVATE'):
+            self.module.RuntimeCustody(self.journal,self.candidate,spec,self.namespace)
+        for mode in ('PUBLISHER','ADMISSION_AND_LEGACY'):
+            bad=json.loads(json.dumps(spec));bad['publication_mode']=mode
+            with self.assertRaises(ValueError):self.module._runtime_specification(bad,self.namespace)
+        bad=json.loads(json.dumps(spec));bad['verifier_credentials']['database_dsn_file']=self.module.INSTALLER_CREDENTIALS['operator']
+        with self.assertRaises(ValueError):self.module._runtime_specification(bad,self.namespace)
+
+    def test_private_installer_profile_changes_only_two_admission_paths(self):
+        config={'schema':'codestra.admission-installer-config.v3','issuer':{},'lock_selection':{},'credential_profile':'pas233-private-v1'}
+        paths=self.module.installer_credential_paths(config,restricted=True)
+        self.assertEqual(paths['operator'],'/etc/codestra/control-plane/credentials/pas233-admission-install-20261028-v1/connection.dsn')
+        self.assertEqual(paths['installation_verifier'],'/etc/codestra/control-plane/credentials/pas233-admission-verify-20261028-v1/connection.dsn')
+        self.assertEqual(paths['issuer'],self.module.INSTALLER_CREDENTIALS['issuer']);self.assertEqual(paths['verifier'],self.module.INSTALLER_CREDENTIALS['verifier'])
+        with self.assertRaises(ValueError):self.module.installer_credential_paths(config,restricted=False)
+        bad=dict(config,credential_profile='other')
+        with self.assertRaises(ValueError):self.module.installer_credential_paths(bad,restricted=True)
+
+    def test_cli_only_request_cannot_be_used_with_broader_migration_profile(self):
+        spec,_=self.restricted_specification()
+        request=dict(schema='codestra.admission-installation-request.v1',candidate=str(self.candidate.root),
+            manifest_sha256=self.candidate.manifest_sha256,runtime_selection=spec,adopted_sources=[],
+            configuration_sha256='a'*64,migration_profile='admission-v1')
+        with self.assertRaisesRegex(ValueError,'RESTRICTED'):
+            self.module._request_plan('plan',request,self.candidate)
+
+    def test_private_configured_connections_keep_new_dsns_private_during_rechecks(self):
+        import psycopg2
+        spec,_=self.restricted_specification()
+        config={'schema':'codestra.admission-installer-config.v3','issuer':{},'lock_selection':{},'credential_profile':'pas233-private-v1'}
+        paths=self.module.installer_credential_paths(config,restricted=True);raw=b'synthetic-config';ca='/etc/codestra/control-plane/fixture-ca.crt'
+        inputs={self.module.INSTALLER_CONFIG:raw,ca:b'public-fixture-ca'}
+        for role in ('operator','installation_verifier'):
+            self.write(paths[role],role.encode(),0o600)
+            (self.namespace_root/Path(paths[role]).parent.relative_to('/')).chmod(0o700)
+            inputs[paths[role]]=role.encode()
+        reads=[];opened=[]
+        def read(ns,path,*,public=False):reads.append((path,public));return inputs[path]
+        class Connection:
+            autocommit=False
+            def get_transaction_status(self):return 0
+            def close(self):pass
+        def connect(**params):opened.append(params['role']);return Connection()
+        request=dict(schema='codestra.admission-installation-request.v1',candidate=str(self.candidate.root),
+            manifest_sha256=self.candidate.manifest_sha256,runtime_selection=spec,adopted_sources=[],configuration_sha256='a'*64,
+            migration_profile=self.module.RESTRICTED_PROFILE)
+        with patch.object(self.module,'_protected_input',side_effect=read),patch.object(self.module,'connection_parameters',side_effect=lambda value:dict(role=value.decode(),sslrootcert=ca)),patch.object(psycopg2,'connect',connect),patch.object(self.module,'_installation_journal',return_value=self.journal),patch.object(self.module,'dispatch_request',return_value='composed'):
+            self.assertEqual(self.module._configured_connections('plan',request,self.candidate,self.namespace,raw,config),'composed')
+        self.assertEqual(opened,['operator','installation_verifier'])
+        for role in ('operator','installation_verifier'):
+            selected=[public for path,public in reads if path==paths[role]]
+            self.assertGreaterEqual(len(selected),2);self.assertEqual(set(selected),{False})
+
     def test_configured_profile_uses_fixed_distinct_installation_reader(self):
         import psycopg2
         class Connection:

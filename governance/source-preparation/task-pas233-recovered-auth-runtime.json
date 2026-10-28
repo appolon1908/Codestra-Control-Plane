@@ -1,0 +1,43 @@
+{
+  "schema": "codestra.source-work-scope.v1",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "pas233-auth-runtime",
+  "owner_thread": "01a16058-ff4a-7cc2-b16d-f41b881dc737",
+  "coordinator_thread": "01a13c9d-f405-74e5-929a-21950c45e0db",
+  "sole_live_executor_thread": "01a17858-fc73-7610-a3bb-0590a0fc3963",
+  "baseline": "d3078ad25c15e988ff911a0f53e14de960817503",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--pas233-auth-runtime",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "basis": "Existing PAS-233 source/package continuation; preserve original ownership, unfinished source and deployed publisher. Separate live executor retains execution ownership.",
+  "allowed_paths": [
+    "lib/codestra_control/admission_installation.py",
+    "tests/test_admission_installation.py",
+    "runtime-publisher-tools.json",
+    "docs/admission-installation.md",
+    "governance/source-preparation/task-pas233-recovered-auth-runtime.json"
+  ],
+  "implementation": [
+    "Explicit restricted CLI-only runtime publication with task-bootstrap-verifier configuration, new protected runtime material selection and preserved legacy publisher defaults.",
+    "Opt-in private installer credential profile for only the two existing admission identities; preserve shared publisher namespace and issuer route.",
+    "Reconcile pinned Git binary in a new immutable source candidate; never rewrite historical package hashes or installed tools."
+  ],
+  "source_only": true,
+  "production_go": "NO",
+  "live_capabilities_enabled": "NO",
+  "external_effects": false,
+  "live_mutations_performed": false,
+  "runtime_principal_binding": null,
+  "app_identity_binding": null,
+  "credential_custody_binding": null,
+  "resource_integration_slot": null,
+  "independent_exact_artifact_verdict": null,
+  "activation_state": "NOT_YET_ACTIVATED",
+  "remaining_gates": [
+    "Complete authentication/native bootstrap and accepted isolated integration harness source.",
+    "Independent review of exact final authentication/runtime/harness package and required real PostgreSQL integration.",
+    "Actual runtime principal, custody, secret-loading, App/profile/test-scope and schema compatibility evidence.",
+    "Specific live effects approval, fresh target/window/recovery/resource gates and sole live executor handoff."
+  ]
+}

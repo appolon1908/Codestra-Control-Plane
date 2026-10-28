@@ -270,3 +270,42 @@ The source plan/ownership ledger is
 temporary namespaces and independently created PostgreSQL 16 fixtures, never
 installed DSNs, production mounts or provider endpoints. Exact-source testing,
 independent final review and actual publication requirements precede a push.
+
+## Restricted CLI publication and private admission inputs
+
+The opt-in `codestra.admission-runtime-selection.v2` selection has exactly the
+v1 fields plus `publication_mode="TASK_BOOTSTRAP_CLI_ONLY"` and a
+`verifier_credentials` object. It is accepted only with
+`task-bootstrap-restricted-v1`. It installs the pinned release and
+`/etc/codestra/control-plane/task-bootstrap-verifier.toml`, the configuration
+actually consumed by `codestra-task-bootstrap`. It neither reads, validates,
+publishes nor records installation history for the global legacy publisher
+wrapper. The v1 selection retains its existing publication behavior.
+
+The two `verifier_credentials` keys are `database_dsn_file` and `app_key_file`.
+An accepted selection supplies distinct `connection.dsn` and `app.pem` files in
+one new private directory beneath `/etc/codestra/control-plane/credentials`.
+Both files must already be provisioned and pinned, with mode0600 and a mode0700
+immediate parent. Admission installation credential directories cannot be used
+as runtime verifier directories. The four-field verifier TOML and its accepted
+App identities must agree with those paths. Selection data does not provision
+credentials, principals, grants, custody or a service, and does not authorize
+publication or startup. A separate unprivileged runtime identity still needs an
+accepted secret-loading arrangement; this change does not widen root0600 files.
+
+The restricted installer can explicitly opt into
+`codestra.admission-installer-config.v3`, with the v2 `issuer` and
+`lock_selection` fields plus `credential_profile="pas233-private-v1"`.
+Only its operator and installation-reader paths change, respectively to
+`credentials/pas233-admission-install-20261028-v1/connection.dsn` and
+`credentials/pas233-admission-verify-20261028-v1/connection.dsn` beneath
+`/etc/codestra/control-plane/`. Their immediate parents must be mode0700;
+files remain root0600 on every custody recheck. The shared credentials parent,
+runtime verifier defaults and issuer path remain unchanged. This configuration
+requires the explicit v2 CLI-only runtime selection; historical v1/v2 installer
+configurations keep their original paths.
+
+The new source candidate pins the observed root-owned Git2.43.0 binary by
+SHA256 `eb54b535467e0975c1284d4c4d08eea779aeb248a5d34b02e2ee171382e22201`.
+The candidate still marks provisioning and target verification false. Existing
+installed publisher code, credentials, aliases and timers are not modified.
