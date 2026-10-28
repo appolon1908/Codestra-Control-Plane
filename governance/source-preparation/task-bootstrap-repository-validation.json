@@ -1,0 +1,17 @@
+{
+  "repository": "appolon1908/Codestra-Control-Plane",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "bootstrap-repository-validation",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--bootstrap-repository-validation",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "start_commit": "6fb77d03f9a04b99707688ce10b1f0c767fd7e67",
+  "owner_thread": "01a178af-5bb7-7962-908a-444839a1686d",
+  "worktree": "/opt/codestra-dev/bootstrap-repository-validation-20261026",
+  "scope": "Repair shared standalone V3 repository validation: read-only exact-head source checks, replacement branches, no counterfeit controller statuses. Product worktrees and live installation remain separate.",
+  "authorization_basis": "Direct user request: fix all repo that needs the bootstrap",
+  "database_lease": null,
+  "certification": null,
+  "live_effects_authorized": false
+}

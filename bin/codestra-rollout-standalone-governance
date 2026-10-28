@@ -25,8 +25,9 @@ for repo in "${repos[@]}"; do
   wt="/srv/codestra/workstations/$repo/governance/repo"
   sha=$(git -c safe.directory="$wt" -C "$wt" rev-parse HEAD)
 
-  # Bootstrap status is exact-SHA and scoped to the governance installation PR.
-  ghc api --method POST "repos/appolon1908/$repo/statuses/$sha"     -f state=success     -f context=codestra-control-plane     -f "description=CERTIFIED: standalone governance bootstrap" >/dev/null
+  # Installing source files is not authenticated control-plane certification.
+  # Only the independently governed publisher may emit controller statuses.
+  echo "BOOTSTRAP_SOURCE_PREPARED=$sha CERTIFIED=false"
 
   existing=$(ghc pr list --repo "appolon1908/$repo" --state open --head "$branch" --base development     --json number,url --jq '.[0] // empty')
   if [[ -n "$existing" ]]; then
