@@ -566,6 +566,31 @@ class FileCustodyTests(unittest.TestCase):
 
 
 class RuntimeTargetTests(unittest.TestCase):
+    def group_reader_specification(self):
+        spec,config=self.restricted_specification()
+        spec.update(schema='codestra.admission-runtime-selection.v3',runtime_reader={'uid':os.getuid(),'gid':os.getgid(),'custody_reference_sha256':'e'*64})
+        parent=self.namespace_root/'etc/codestra/control-plane/credentials/task-bootstrap-runtime';parent.chmod(0o750)
+        for path in spec['credential_files']:(self.namespace_root/Path(path).relative_to('/')).chmod(0o640)
+        spec['configuration'][self.module.TASK_CONFIGURATION_TARGET].update(mode='0o640',gid=os.getgid())
+        return spec,config
+
+    def test_explicit_runtime_reader_selection_installs_group_read_only_configuration(self):
+        spec,config=self.group_reader_specification()
+        store=self.module.RuntimeCustody(self.journal,self.candidate,spec,self.namespace)
+        data=json.dumps({self.module.TASK_CONFIGURATION_TARGET:base64.b64encode(config).decode()},sort_keys=True).encode()
+        store.install_configuration(data,self.attempt,hashlib.sha256(data).hexdigest());store.verify_configuration(self.attempt,hashlib.sha256(data).hexdigest())
+        target=self.namespace_root/Path(self.module.TASK_CONFIGURATION_TARGET).relative_to('/')
+        self.assertEqual(target.stat().st_mode&0o777,0o640);self.assertEqual(target.stat().st_gid,os.getgid())
+        self.assertEqual(store.binding['runtime']['publication_mode'],'TASK_BOOTSTRAP_CLI_ONLY')
+
+    def test_group_reader_needs_exact_identity_reference_and_narrow_private_metadata(self):
+        spec,_=self.group_reader_specification()
+        for changed in ({'uid':0,'gid':os.getgid(),'custody_reference_sha256':'e'*64},{'uid':os.getuid(),'gid':0,'custody_reference_sha256':'e'*64},{'uid':os.getuid(),'gid':os.getgid(),'custody_reference_sha256':None}):
+            bad=json.loads(json.dumps(spec));bad['runtime_reader']=changed
+            with self.assertRaises(ValueError):self.module._runtime_specification(bad,self.namespace)
+        parent=self.namespace_root/'etc/codestra/control-plane/credentials/task-bootstrap-runtime';parent.chmod(0o755)
+        with self.assertRaisesRegex(ValueError,'PRIVATE'):self.module.RuntimeCustody(self.journal,self.candidate,spec,self.namespace)
+
     def restricted_specification(self):
         spec=json.loads(json.dumps(self.specification))
         spec.update(schema='codestra.admission-runtime-selection.v2',publication_mode='TASK_BOOTSTRAP_CLI_ONLY',

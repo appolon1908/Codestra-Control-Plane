@@ -19,6 +19,7 @@
     "governance/source-preparation/task-pas233-recovered-auth-runtime.json"
   ],
   "implementation": [
+    "Opt-in exact non-root runtime reader UID/GID custody selection with root-owned group-read-only runtime files; no account/group/credential provisioning or widening of installation credentials.",
     "Explicit restricted CLI-only runtime publication with task-bootstrap-verifier configuration, new protected runtime material selection and preserved legacy publisher defaults.",
     "Opt-in private installer credential profile for only the two existing admission identities; preserve shared publisher namespace and issuer route.",
     "Reconcile pinned Git binary in a new immutable source candidate; never rewrite historical package hashes or installed tools."

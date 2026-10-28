@@ -302,10 +302,28 @@ Only its operator and installation-reader paths change, respectively to
 `/etc/codestra/control-plane/`. Their immediate parents must be mode0700;
 files remain root0600 on every custody recheck. The shared credentials parent,
 runtime verifier defaults and issuer path remain unchanged. This configuration
-requires the explicit v2 CLI-only runtime selection; historical v1/v2 installer
+requires an explicit v2/v3 CLI-only runtime selection; historical v1/v2 installer
 configurations keep their original paths.
 
 The new source candidate pins the observed root-owned Git2.43.0 binary by
 SHA256 `eb54b535467e0975c1284d4c4d08eea779aeb248a5d34b02e2ee171382e22201`.
 The candidate still marks provisioning and target verification false. Existing
 installed publisher code, credentials, aliases and timers are not modified.
+
+An independently accepted unprivileged reader can instead be bound by
+`codestra.admission-runtime-selection.v3`. It adds exactly `runtime_reader`
+with positive integer `uid`, positive integer `gid`, and
+`custody_reference_sha256`. The separately provisioned runtime DSN and App key
+must be root-owned, mode0640, in a root-owned mode0750 immediate directory;
+all three use precisely the selected reader GID. Only that selection permits
+installing its verifier TOML as root:reader-GID/mode0640. Both the credentials
+and configuration remain unwritable by that group. The parent namespace stays
+root-owned and unwritable by non-root identities.
+
+This selection creates no account, group, membership, credential or key and
+does not change metadata on an existing credential. Provisioning those exact
+new paths and group custody requires its own reviewed effects. Acceptance must
+prove the actual non-root runtime UID/GID can read these files, unrelated
+identities cannot, and no competing publisher was introduced. A custody hash
+alone does not prove those operating-system access results. v2 remains exact
+root0600/0700, including the separate installation identities.

@@ -1237,7 +1237,7 @@ TASK_CONFIGURATION_TARGET = '/etc/codestra/control-plane/task-bootstrap-verifier
 def _runtime_layout(spec):
     if spec.get('schema') == 'codestra.admission-runtime-selection.v1':
         return CONFIGURATION_TARGET, CREDENTIAL_TARGETS, 'ADMISSION_AND_LEGACY'
-    if (spec.get('schema') != 'codestra.admission-runtime-selection.v2'
+    if (spec.get('schema') not in ('codestra.admission-runtime-selection.v2', 'codestra.admission-runtime-selection.v3')
             or spec.get('publication_mode') != 'TASK_BOOTSTRAP_CLI_ONLY'):
         raise ValueError('INVALID_RUNTIME_PUBLICATION_SELECTION')
     paths = spec.get('verifier_credentials')
@@ -1263,8 +1263,17 @@ def _runtime_specification(specification, namespace):
     spec = json.loads(encoded)
     required = {'schema', 'interpreter_sha256', 'machine_id_sha256', 'writer_exclusion_reference',
                 'recovery_reference', 'driver_directory', 'import_roots', 'import_path_order', 'credential_files', 'configuration'}
-    if spec.get('schema') == 'codestra.admission-runtime-selection.v2':
+    if spec.get('schema') in ('codestra.admission-runtime-selection.v2', 'codestra.admission-runtime-selection.v3'):
         required |= {'publication_mode', 'verifier_credentials'}
+    group_reader = spec.get('schema') == 'codestra.admission-runtime-selection.v3'
+    if group_reader:
+        required.add('runtime_reader')
+        reader = spec.get('runtime_reader')
+        if (not isinstance(reader, dict) or set(reader) != {'uid', 'gid', 'custody_reference_sha256'}
+                or any(type(reader[key]) is not int or reader[key] <= 0 for key in ('uid', 'gid'))
+                or not isinstance(reader['custody_reference_sha256'], str)
+                or not SHA256.fullmatch(reader['custody_reference_sha256'])):
+            raise ValueError('EXPLICIT_NONROOT_RUNTIME_READER_CUSTODY_REQUIRED')
     if (set(spec) != required or any(not isinstance(spec[key], dict) for key in ('import_roots', 'credential_files', 'configuration'))
             or any(not isinstance(spec[key], str) for key in ('interpreter_sha256', 'machine_id_sha256'))
             or type(spec['import_path_order']) is not list or any(not isinstance(path, str) for path in spec['import_path_order'])):
@@ -1289,8 +1298,8 @@ def _runtime_specification(specification, namespace):
     config = spec['configuration'][configuration_target]
     if (not isinstance(config, dict) or set(config) != {'sha256', 'gid', 'mode'}
             or not isinstance(config['sha256'], str) or not SHA256.fullmatch(config['sha256'])
-            or config['mode'] != '0o600' or type(config['gid']) is not int or config['gid'] < 0
-            or config['gid'] != (0 if namespace.is_host else os.getegid())):
+            or config['mode'] != ('0o640' if group_reader else '0o600') or type(config['gid']) is not int or config['gid'] < 0
+            or config['gid'] != (spec['runtime_reader']['gid'] if group_reader else 0 if namespace.is_host else os.getegid())):
         raise ValueError('INVALID_PROTECTED_CONFIGURATION_SELECTION')
     return encoded
 
@@ -1524,13 +1533,15 @@ class RuntimeCustody(FileCustody):
             raise ValueError('RUNTIME_PREREQUISITE_PARENT_CHANGED')
         self._execution.verify()
         self._execution._verify_tools(executables=True)
+        group_reader = spec['schema'] == 'codestra.admission-runtime-selection.v3'
+        credential_gid = spec['runtime_reader']['gid'] if group_reader else 0 if self.namespace.is_host else os.getegid()
         for path, checksum in spec['credential_files'].items():
             if self.publication_mode == 'TASK_BOOTSTRAP_CLI_ONLY':
                 with self.namespace.parent(path) as (parent, _):
                     metadata = os.fstat(parent)
-                    if stat.S_IMODE(metadata.st_mode) != 0o700 or metadata.st_gid != (0 if self.namespace.is_host else os.getegid()):
+                    if stat.S_IMODE(metadata.st_mode) != (0o750 if group_reader else 0o700) or metadata.st_gid != credential_gid:
                         raise ValueError('PRIVATE_RUNTIME_CREDENTIAL_PARENT_REQUIRED')
-            if digest(self.namespace.read(path, mode=0o600, gid=0 if self.namespace.is_host else os.getegid())) != checksum:
+            if digest(self.namespace.read(path, mode=0o640 if group_reader else 0o600, gid=credential_gid)) != checksum:
                 raise ValueError('RUNTIME_PREREQUISITE_CREDENTIAL_DRIFT')
 
     def _probe(self, spec):
@@ -1539,7 +1550,7 @@ class RuntimeCustody(FileCustody):
     def _existing_configuration(self):
         config = self.specification['configuration'][self.configuration_target]
         try:
-            data = self.namespace.read(self.configuration_target, mode=0o600, gid=config['gid'])
+            data = self.namespace.read(self.configuration_target, mode=int(config['mode'], 8), gid=config['gid'])
         except FileNotFoundError:
             return
         if digest(data) != config['sha256']:
@@ -1652,7 +1663,7 @@ class RuntimeCustody(FileCustody):
         raw = self._configuration(data)
         self.verify_prerequisites()
         self._record(attempt_id, self.configuration_target, 'INTENT')
-        self.namespace.publish(self.configuration_target, raw, 0o600,
+        self.namespace.publish(self.configuration_target, raw, int(self.specification['configuration'][self.configuration_target]['mode'], 8),
                                self.specification['configuration'][self.configuration_target]['gid'])
         self._record(attempt_id, self.configuration_target, 'DURABLE')
         super().install_configuration(data, attempt_id, expected_sha256)
@@ -1664,7 +1675,7 @@ class RuntimeCustody(FileCustody):
         with self._root() as root:
             bundle, _ = _read(root, 'configurations/' + str(uuid.UUID(attempt_id)) + '/configuration')
         raw = self._configuration(bundle)
-        if self.namespace.read(self.configuration_target, mode=0o600,
+        if self.namespace.read(self.configuration_target, mode=int(self.specification['configuration'][self.configuration_target]['mode'], 8),
                 gid=self.specification['configuration'][self.configuration_target]['gid']) != raw:
             raise ValueError('PROTECTED_RUNTIME_CONFIGURATION_MISMATCH')
         self._configuration_verified = True
@@ -2327,7 +2338,7 @@ def _request_plan(operation, request, candidate):
         raise ValueError('INVALID_INSTALLATION_REQUEST')
     profile = request.get('migration_profile', 'admission-v1')
     migration_sources(profile)
-    if (request['runtime_selection'].get('schema') == 'codestra.admission-runtime-selection.v2'
+    if (request['runtime_selection'].get('schema') in ('codestra.admission-runtime-selection.v2', 'codestra.admission-runtime-selection.v3')
             and profile != RESTRICTED_PROFILE):
         raise ValueError('CLI_ONLY_REQUIRES_RESTRICTED_TASK_BOOTSTRAP_PROFILE')
     if operation == 'plan':
@@ -2475,7 +2486,7 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
     restricted = request.get('migration_profile') == RESTRICTED_PROFILE
     credential_paths = installer_credential_paths(config, restricted=restricted)
     if (config['schema'] == 'codestra.admission-installer-config.v3'
-            and request['runtime_selection'].get('schema') != 'codestra.admission-runtime-selection.v2'):
+            and request['runtime_selection'].get('schema') not in ('codestra.admission-runtime-selection.v2', 'codestra.admission-runtime-selection.v3')):
         raise ValueError('PRIVATE_INSTALLER_REQUIRES_EXPLICIT_CLI_ONLY_RUNTIME_SELECTION')
     execution = RuntimeExecution(candidate, request['runtime_selection'], namespace)
     snapshots = {INSTALLER_CONFIG: config_raw}
