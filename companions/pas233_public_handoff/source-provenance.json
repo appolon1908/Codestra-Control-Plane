@@ -1,0 +1,23 @@
+{
+  "schema": "pas233.companion-source-provenance.v1",
+  "source_only": true,
+  "synthetic_fixture_data": true,
+  "imported_validator_sha256": "80969c85f5e5de5e5eeba75e46b20cfe318bfec7482ae3811281e836c40a64b1",
+  "upstream_api_observations": [
+    {
+      "source_name": "unit_issuer_channel.py",
+      "observed_sha256": "1cf343e2d51bf4fe57d30eff2195096b9810ebe9b4fdadbd6a31a2b89fa90b8b"
+    },
+    {
+      "source_name": "unit_lease.py",
+      "observed_sha256": "6c493d0a2a9e52b2a52855b23c38f87e4b315a737f8dedf104e9d3cfb84a8a34"
+    },
+    {
+      "source_name": "source_unit.py",
+      "observed_sha256": "4b30610393810c27365f9a475d3e6bcdd367e11b161e8c7effdfa4fc7ec0939c"
+    }
+  ],
+  "api_snapshot": "OBSERVED_UNIT_V2_NOT_ACCEPTED_FROZEN_RUNTIME",
+  "runtime_compatibility_confirmed": false,
+  "owner_acceptance_required": true
+}

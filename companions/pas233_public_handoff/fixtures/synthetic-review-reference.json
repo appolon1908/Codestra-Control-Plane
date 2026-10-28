@@ -1,0 +1,37 @@
+{
+  "scope": "UNIT",
+  "channel_sha256": "2e0cf7aec5f5eb72cc255946a5d17003170355b9bc9cd150f1a0b2cd520099d3",
+  "binding": {
+    "issuer": "fixture-issuer",
+    "executor": "fixture-executor",
+    "reviewer": "fixture-reviewer",
+    "source_owner": "fixture-owner",
+    "attempt_id": "00000000000000000000000000000000",
+    "action_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "manifest_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "archive_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "machine_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "boot_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "command_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+    "review_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+    "approval_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+    "admission_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+    "issuer_channel_sha256": "2e0cf7aec5f5eb72cc255946a5d17003170355b9bc9cd150f1a0b2cd520099d3"
+  },
+  "provenance": {
+    "custody": {
+      "actor": "fixture-custodian",
+      "evidence_url": "https://evidence.example.invalid/custody#synthetic",
+      "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "provisioning": {
+      "actor": "fixture-provisioner",
+      "evidence_url": "https://evidence.example.invalid/provisioning",
+      "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "scope": "UNIT",
+      "issuer": "fixture-issuer",
+      "issuer_channel_sha256": "2e0cf7aec5f5eb72cc255946a5d17003170355b9bc9cd150f1a0b2cd520099d3",
+      "public_key_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  }
+}
