@@ -2490,11 +2490,25 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
         raise ValueError('PRIVATE_INSTALLER_REQUIRES_EXPLICIT_CLI_ONLY_RUNTIME_SELECTION')
     execution = RuntimeExecution(candidate, request['runtime_selection'], namespace)
     snapshots = {INSTALLER_CONFIG: config_raw}
+    private_inputs = {path for role, path in credential_paths.items() if path != INSTALLER_CREDENTIALS[role]}
+    private_parent_bindings = {}
+
+    def private_parent_check(path):
+        if path not in private_inputs:
+            return
+        with namespace.parent(path) as (parent, _):
+            metadata = os.fstat(parent)
+            if stat.S_IMODE(metadata.st_mode) != 0o700 or metadata.st_gid != (0 if namespace.is_host else os.getegid()):
+                raise ValueError('PRIVATE_INSTALLER_CREDENTIAL_PARENT_REQUIRED')
+            binding = namespace._binding(str(Path(path).parent), metadata)
+            if private_parent_bindings.setdefault(path, binding) != binding:
+                raise ValueError('PRIVATE_INSTALLER_CREDENTIAL_PARENT_CHANGED')
 
     def custody_check():
         candidate.revalidate()
         execution.verify()
         for path, raw in snapshots.items():
+            private_parent_check(path)
             if _protected_input(namespace, path, public=path not in (INSTALLER_CONFIG, CONFIGURATION_INPUT, *credential_paths.values())) != raw:
                 raise ValueError('INSTALLATION_CONNECTION_CUSTODY_CHANGED')
 
@@ -2505,11 +2519,7 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
         if namespace.is_host:
             execution.verify_process(require_driver=True)
         path = credential_paths[role]
-        if path != INSTALLER_CREDENTIALS[role]:
-            with namespace.parent(path) as (parent, _):
-                metadata = os.fstat(parent)
-                if stat.S_IMODE(metadata.st_mode) != 0o700 or metadata.st_gid != (0 if namespace.is_host else os.getegid()):
-                    raise ValueError('PRIVATE_INSTALLER_CREDENTIAL_PARENT_REQUIRED')
+        private_parent_check(path)
         raw = _protected_input(namespace, path)
         snapshots[path] = raw
         params = connection_parameters(raw)
@@ -2518,6 +2528,7 @@ def _configured_connections(operation, request, candidate, namespace, config_raw
         snapshots[params['sslrootcert']] = _protected_input(namespace, params['sslrootcert'], public=True)
         result = psycopg2.connect(**params)
         stack.callback(result.close)
+        custody_check()
         return result
 
     with ExitStack() as stack:

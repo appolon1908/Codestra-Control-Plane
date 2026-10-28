@@ -305,6 +305,12 @@ runtime verifier defaults and issuer path remain unchanged. This configuration
 requires an explicit v2/v3 CLI-only runtime selection; historical v1/v2 installer
 configurations keep their original paths.
 
+Private installer directory mode, GID and inode identity are checked before
+opening credentials, after each connection, and on every custody recheck before
+dispatch or authority operations. Replacement or permission drift stops the
+attempt and closes its connections; identical credential bytes do not waive
+the directory binding.
+
 The new source candidate pins the observed root-owned Git2.43.0 binary by
 SHA256 `eb54b535467e0975c1284d4c4d08eea779aeb248a5d34b02e2ee171382e22201`.
 The candidate still marks provisioning and target verification false. Existing

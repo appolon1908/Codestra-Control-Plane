@@ -566,6 +566,43 @@ class FileCustodyTests(unittest.TestCase):
 
 
 class RuntimeTargetTests(unittest.TestCase):
+    def private_installer_drift_case(self, replacement):
+        import psycopg2
+        spec,_=self.restricted_specification();m=self.module
+        config={'schema':'codestra.admission-installer-config.v3','issuer':{},'lock_selection':{},'credential_profile':'pas233-private-v1'}
+        paths=m.installer_credential_paths(config,restricted=True);raw=b'synthetic-config';ca='/etc/codestra/control-plane/fixture-ca.crt'
+        self.write(m.INSTALLER_CONFIG,raw,0o600);self.write(ca,b'public-fixture-ca',0o644)
+        for role in ('operator','installation_verifier'):
+            self.write(paths[role],role.encode(),0o600)
+            (self.namespace_root/Path(paths[role]).parent.relative_to('/')).chmod(0o700)
+        parent=self.namespace_root/Path(paths['operator']).parent.relative_to('/');closed=[]
+        def protected(namespace,path,*,public=False):
+            with namespace.parent(path) as (directory,name):
+                data,metadata=m._read(directory,name);namespace._safe(metadata)
+                if stat.S_IMODE(metadata.st_mode) not in ((0o600,0o644) if public else (0o600,)) or metadata.st_gid!=os.getegid():raise ValueError('UNTRUSTED_INSTALLATION_INPUT')
+            return data
+        class Connection:
+            autocommit=False
+            def get_transaction_status(self):return 0
+            def close(self):closed.append(True)
+        def connect(**parameters):
+            if parameters['role']=='installation_verifier':
+                if replacement:
+                    parent.rename(parent.with_name('retained-operator-parent'));parent.mkdir(mode=0o700);(parent/'connection.dsn').write_bytes(b'operator');(parent/'connection.dsn').chmod(0o600)
+                else:parent.chmod(0o755)
+            return Connection()
+        request=dict(schema='codestra.admission-installation-request.v1',candidate=str(self.candidate.root),manifest_sha256=self.candidate.manifest_sha256,runtime_selection=spec,adopted_sources=[],configuration_sha256='a'*64,migration_profile=m.RESTRICTED_PROFILE)
+        with patch.object(m,'_protected_input',side_effect=protected),patch.object(m,'connection_parameters',side_effect=lambda value:dict(role=value.decode(),sslrootcert=ca)),patch.object(psycopg2,'connect',connect),patch.object(m,'_installation_journal',return_value=self.journal),patch.object(m,'dispatch_request',return_value='composed') as dispatch:
+            with self.assertRaises(ValueError):m._configured_connections('plan',request,self.candidate,self.namespace,raw,config)
+            dispatch.assert_not_called()
+        self.assertEqual(len(closed),2)
+
+    def test_private_installer_parent_mode_drift_after_connect_stops_dispatch(self):
+        self.private_installer_drift_case(False)
+
+    def test_replaced_private_installer_parent_after_connect_stops_dispatch(self):
+        self.private_installer_drift_case(True)
+
     def group_reader_specification(self):
         spec,config=self.restricted_specification()
         spec.update(schema='codestra.admission-runtime-selection.v3',runtime_reader={'uid':os.getuid(),'gid':os.getgid(),'custody_reference_sha256':'e'*64})
