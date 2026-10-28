@@ -1,0 +1,30 @@
+{
+  "schema": "codestra.source-work-scope.v1",
+  "product": "Codestra-Control-Plane",
+  "section": "cp-01-foundation",
+  "subsection": "02-trusted-decisions",
+  "atomic_task": "pas233-public-handoff-01a1844f",
+  "owner_thread": "01a1844f-e051-7c92-9ef1-479765bd954f",
+  "runtime_source_integrator_thread": "01a16058-ff4a-7cc2-b16d-f41b881dc737",
+  "baseline": "95b548806133e4f3872da8cea0a40c59f7e3da24",
+  "branch": "atomic/cp-01-foundation--02-trusted-decisions--pas233-public-handoff-01a1844f",
+  "target": "subsection/cp-01-foundation--02-trusted-decisions",
+  "basis": "User requested the completed companion be fixed, updated, cleaned and pushed as source for review; original owner retains runtime integration.",
+  "allowed_paths": [
+    "companions/pas233_public_handoff/",
+    "tests/test_public_handoff.py",
+    "tests/test_public_handoff_inputs.py",
+    "governance/source-preparation/task-pas233-public-handoff-companion.json"
+  ],
+  "source_only": true,
+  "production_go": "NO",
+  "live_capabilities_enabled": "NO",
+  "external_effects": false,
+  "runtime_integration_performed": false,
+  "remaining_gates": [
+    "Source owner acceptance of proposed companion envelope and URL syntax",
+    "Reconciliation against the final immutable runtime package",
+    "Designated independent review of final integrated bytes",
+    "Genuine issuer/custodian inputs and separate accepted UNIT/PG scope"
+  ]
+}
