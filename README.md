@@ -6,15 +6,20 @@ Source ownership was approved on October 7, 2026.
 
 ## Current state
 
-This candidate adds the pure promotion-policy and decision component described
-in [trusted decision preparation](docs/trusted-decision-preparation.md). Its
-25 offline tests include malformed/stale evidence, independent review, registered
-ref mapping and bound-lease cases. Runtime evidence acquisition and command
-integration remain incomplete; the new component is not deployed or enforcing
-promotions. PR #1's source adoption remains a prerequisite awaiting acceptance.
+The source contains promotion-policy evaluation, authenticated evidence and
+publisher integration, assignment-backed leases, scoped admission and offline
+regressions. Each component's documentation records its source and runtime
+acceptance boundaries; inclusion here does not prove installation or certification.
+[PR #1](https://github.com/appolon1908/Codestra-Control-Plane/pull/1) merged into
+its source-provenance subsection on October 9, 2026. It is no longer pending.
 
-This branch adopts reviewed source snapshots from the development desktop and
-repairs the promotion checker's startup syntax error. The import preserves modern
+The current Klyrow proposal is the
+[exact, expiring source repair admission](docs/klyrow-repair-admissions-20261102.md)
+for five specifically authorized PRs. It preserves independent CI/review and
+protection checks and does not activate the installed controller.
+
+The initial adoption imported reviewed source snapshots from the development
+desktop and repaired the promotion checker's startup syntax error. It preserves modern
 tools at the repository root and older tools under `legacy/`. It does not deploy
 them. No certification records, product code, live database schemas or status
 publishers have been changed by this source adoption.
@@ -26,20 +31,24 @@ source, not an executable migration plan for the current database.
 
 ## Verification
 
-Run the complete offline suite from this repository:
+Run the complete offline suite with Python 3.12, the hash-pinned test driver in
+`requirements-ci.txt`, and PostgreSQL 16 available for disposable integration tests:
 
 ```sh
-python3 -m unittest discover -s tests -v
+PRODUCTION_GO=NO LIVE_CAPABILITIES_ENABLED=NO EXTERNAL_EFFECTS=false \
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
 The suite parses every imported Python entry point, checks shell syntax without
 execution, and exercises the actual promotion-checker CLI for help and missing
 arguments with database, socket and subprocess effects forbidden in the child.
-It does not certify promotion decisions, PostgreSQL transactions or deployment.
-`ci/control-plane-tests.workflow.yml` is an inactive workflow template for the
-same offline checks with read-only repository access. Installing it under
-`.github/workflows/` is blocked because the desktop credential lacks `workflow`
-scope. No GitHub Actions result is claimed.
+It also exercises policy, evidence, custody and isolated PostgreSQL transaction
+boundaries. These tests do not certify a live database, installed controller or
+deployment. Active workflows are in `.github/workflows/`; the file under `ci/`
+is retained as a historical template. As observed on November 2, 2026,
+[main's offline source run 40774730728](https://github.com/appolon1908/Codestra-Control-Plane/actions/runs/40774730728)
+passed at `4836b9833f5738374c78844cdef3bb009ad17664`. That result does not cover
+this candidate or substitute for its exact-commit hosted checks and review.
 
 ## Provenance and release gates
 
@@ -48,9 +57,12 @@ scope. No GitHub Actions result is claimed.
 - Git history separates the original snapshot from the syntax repair.
 - `governance/source-authority.json` records the source owner and initial task.
 - `governance/protection-plan.json` and `governance/main-release-protection-plan.json`
-  contain the intended rulesets. GitHub rejected
-  ruleset access for this new private repository under the account's current
-  plan. The payload is **not applied**; merging and deployment remain blocked.
+  contain the intended rulesets. Historical private-repository plan restrictions
+  prevented their initial application. On November 2, 2026, the recorded plans
+  were applied as active rulesets `26403952` (reviewed promotion) and `26403958`
+  (main release record), with no bypass actors. Required current-commit CI,
+  independent review and the full effective rule union remain mandatory before
+  acceptance; every promotion must recheck current enforcement.
 - `docs/repair-progress.md` records executed checks and remaining work.
 - `docs/verification/2026-10-07-source-validation.json` records the bounded source
   verification and missing certification gates. It is not a promotion certificate.

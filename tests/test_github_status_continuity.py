@@ -141,7 +141,10 @@ class GitHubStatusContinuityTests(unittest.TestCase):
 
         with mock.patch.dict(
             self.status["validate"].__globals__,
-            {"remote_sha": lambda *_: KLYROW_SHA},
+            # Isolate the historical October admission. November's reviewed
+            # repair now reuses this head ref with different exact commits and
+            # correctly denies the obsolete SHA in the live policy.
+            {"remote_sha": lambda *_: KLYROW_SHA, "REPAIR_ADMISSION": lambda *_: None},
         ):
             ok, reason = self.status["validate"](
                 None, "klyrow.com", "testing", "/unused",
