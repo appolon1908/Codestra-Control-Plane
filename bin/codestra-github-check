@@ -9,7 +9,6 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
-from codestra_control.repair_admissions import repair_admission, repair_candidate
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -22,6 +21,18 @@ PRODUCT_ALIASES = {
     "openbao": "Codestra-OpenBao",
     "n8n": "N8N",
 }
+
+
+def repair_admission(*args, **kwargs):
+    # Promotion-level consumers and CLI help need no network evidence imports.
+    from codestra_control.repair_admissions import repair_admission as evaluate
+    return evaluate(*args, **kwargs)
+
+
+def repair_candidate(*args):
+    from codestra_control.repair_admissions import repair_candidate as select
+    return select(*args)
+
 
 # Exact, temporary exceptions for PRs that were already open when the
 # hierarchical promotion gate became mandatory. These do not authorize new
