@@ -5,6 +5,11 @@ import argparse
 import os
 import subprocess
 from datetime import date
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from codestra_control.repair_admissions import repair_admission, repair_candidate
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -192,6 +197,12 @@ def main() -> int:
     if remote_sha(args.repo_path, args.head_ref) != args.head_sha:
         print("CONTROL_PLANE_CERTIFICATION=FAIL remote_head_sha_mismatch")
         return 1
+
+    repair = repair_admission(args.product, args.repo_path, args.head_ref, args.base_ref, args.head_sha)
+    if repair is not None:
+        ok, reason = repair
+        print(f"CONTROL_PLANE_CERTIFICATION={'PASS' if ok else 'FAIL'} {reason}")
+        return 0 if ok else 1
 
     exception = migration_reason(args.product, args.head_ref, args.base_ref, args.head_sha)
     if exception is not None:
