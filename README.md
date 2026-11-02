@@ -6,12 +6,20 @@ Source ownership was approved on October 7, 2026.
 
 ## Current state
 
-This candidate adds the pure promotion-policy and decision component described
-in [trusted decision preparation](docs/trusted-decision-preparation.md). Its
-25 offline tests include malformed/stale evidence, independent review, registered
-ref mapping and bound-lease cases. Runtime evidence acquisition and command
-integration remain incomplete; the new component is not deployed or enforcing
-promotions. PR #1's source adoption remains a prerequisite awaiting acceptance.
+The owner selected native GitHub Actions and repository protections for all
+`appolon1908` repositories on November 2, 2026. The
+[migration design](docs/superpowers/specs/2026-11-02-native-github-governance-design.md)
+preserves real CI, signed commits, independent reviews and separate production
+approval. The rollout is in progress. The target source-acceptance model removes
+custom controller and database prerequisites; existing external required
+contexts remain blockers until their verified native replacement is applied.
+Existing controller source is preserved as historical and runtime implementation,
+not a new merge gate.
+
+The inventory covers 120 repositories and 733 open PRs. Some controller-named
+checks are genuine native test aggregators; inspect their source and actual
+execution before replacing any requirement. Signed successor PRs need new CI
+and review even when their complete source tree matches an earlier candidate.
 
 This branch adopts reviewed source snapshots from the development desktop and
 repairs the promotion checker's startup syntax error. The import preserves modern
@@ -35,11 +43,11 @@ python3 -m unittest discover -s tests -v
 The suite parses every imported Python entry point, checks shell syntax without
 execution, and exercises the actual promotion-checker CLI for help and missing
 arguments with database, socket and subprocess effects forbidden in the child.
-It does not certify promotion decisions, PostgreSQL transactions or deployment.
-`ci/control-plane-tests.workflow.yml` is an inactive workflow template for the
-same offline checks with read-only repository access. Installing it under
-`.github/workflows/` is blocked because the desktop credential lacks `workflow`
-scope. No GitHub Actions result is claimed.
+These tests do not certify a deployed controller or a product release.
+`.github/workflows/control-plane-tests.yml` is active and includes mandatory
+disposable PostgreSQL tests. Main commit `4836b9833f5738374c78844cdef3bb009ad17664`
+passed hosted run `40774730728` with 1,029 tests. This historical baseline is not
+a test result for subsequent commits; each PR requires its own current checks.
 
 ## Provenance and release gates
 
@@ -48,19 +56,23 @@ scope. No GitHub Actions result is claimed.
 - Git history separates the original snapshot from the syntax repair.
 - `governance/source-authority.json` records the source owner and initial task.
 - `governance/protection-plan.json` and `governance/main-release-protection-plan.json`
-  contain the intended rulesets. GitHub rejected
-  ruleset access for this new private repository under the account's current
-  plan. The payload is **not applied**; merging and deployment remain blocked.
+  describe the controller's source protections, applied and read back as rulesets
+  26403952 and 26403958 on November 2, 2026. The repository is now public.
+- `governance/native-github-baseline.json` adds verified signatures and fresh
+  independent review without removing any existing check. Its controller rule
+  26405364 and Klyrow rule 26405369 were read back successfully. Portfolio
+  coverage and remaining gaps are tracked separately; no global completion is
+  implied by this initial pair.
 - `docs/repair-progress.md` records executed checks and remaining work.
 - `docs/verification/2026-10-07-source-validation.json` records the bounded source
   verification and missing certification gates. It is not a promotion certificate.
 - The approved design and execution plan are under `docs/superpowers/`; their
   current status identifies completed source work and the next unimplemented gates.
 
-Branches follow atomic task -> subsection -> section -> development -> testing ->
-staging -> production -> main. Their initialization is not promotion evidence.
-An independent review, passing current-commit CI and enforced branch protections
-are required before acceptance. Live capabilities remain disabled.
+Existing branch hierarchies organize work. Native GitHub protections govern
+source acceptance, including verified signatures, independent review and passing
+current-commit CI. Production uses a separate approval boundary. Live
+capabilities remain disabled.
 
 The source-only [assignment-backed lease contract](docs/assignment-backed-leases.md)
 describes the proposed authenticated issuer, independent materialization verifier,
