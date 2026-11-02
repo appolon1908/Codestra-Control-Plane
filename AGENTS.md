@@ -3,11 +3,14 @@
 This repository is the user-designated source owner for shared Codestra
 development governance. Preserve each product repository's independent authority.
 
-Use one active assignment: Product -> Section -> Subsection -> Atomic Task.
-Implement in the assigned atomic branch and an isolated worktree. Promote by PR:
-atomic task -> subsection -> section -> development -> testing -> staging ->
-production -> main. Main is the final release record. Never push code directly
-to an environment branch, force push, self-approve, or weaken required checks.
+Use one active assignment and an isolated worktree with one source writer.
+GitHub Actions and repository protections are the source-merge authority for all
+appolon1908 repositories, as directed by the owner on 2026-11-02. Existing branch
+hierarchies may organize work; source repair PRs are evaluated by native GitHub
+protections rather than a custom controller route or database certificate.
+Require verified signed commits, actual required CI, fresh independent review,
+resolved threads and current base/head evidence. Never push code directly to a
+protected branch, force push, self-approve, or weaken required checks.
 
 The initial source adoption is assigned in `governance/source-authority.json`.
 That assignment is not a database lease, certification, or permission to publish
@@ -29,5 +32,14 @@ evidence do not belong in source control. Import only reviewed source files with
 recorded digests. Do not replay captured SQL against the live database: inspect
 drift and test forward migrations in a disposable database first.
 
-If protection, approval, lease, CI, or current-SHA evidence is missing, stop
-promotion. Continue useful in-scope source preparation without bypassing the gate.
+If native protection, independent approval, verified signatures, required CI or
+current-SHA evidence is missing, stop source merging. Preserve unsigned branches;
+prepare signed successors without rewriting existing history and obtain new CI
+and review. Do not publish compatibility success statuses or treat a checkout as
+product certification. See docs/superpowers/specs/2026-11-02-native-github-governance-design.md.
+
+Production requires separate protected GitHub environment approval, exact
+artifact evidence and the existing runtime safeguards. Source merge approval
+does not grant deployment authority. Installed controller services and runtime
+prerequisites remain unchanged until their separately scoped replacement is
+reviewed. Continue useful source preparation without bypassing these boundaries.

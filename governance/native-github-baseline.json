@@ -1,0 +1,38 @@
+{
+  "name": "native-github-reviewed-signed-source",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "~DEFAULT_BRANCH",
+        "refs/heads/main",
+        "refs/heads/development",
+        "refs/heads/testing",
+        "refs/heads/staging",
+        "refs/heads/production",
+        "refs/heads/production/environment",
+        "refs/heads/section/*",
+        "refs/heads/subsection/*",
+        "refs/heads/workstation/*"
+      ]
+    }
+  },
+  "rules": [
+    {"type": "deletion"},
+    {"type": "non_fast_forward"},
+    {"type": "required_signatures"},
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": true,
+        "require_last_push_approval": true,
+        "required_review_thread_resolution": true
+      }
+    }
+  ]
+}
