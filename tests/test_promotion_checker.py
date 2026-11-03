@@ -12,8 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = Path(os.environ.get("CONTROL_PLANE_TEST_SOURCE", ROOT))
 CHECKER = SOURCE / "bin" / "codestra-promotion-check"
 
-# The deployed command imports psycopg2 even for --help. Supply only that
-# external boundary and fail if a CLI-only check attempts any external effect.
+# Keep a forbidden driver boundary to catch any accidental legacy evaluation.
 BOOTSTRAP = r'''
 import runpy
 import socket
@@ -58,16 +57,18 @@ class PromotionCheckerRegressionTests(unittest.TestCase):
         except SyntaxError as exc:
             self.fail(f"Promotion checker cannot start: {exc}")
 
-    def test_help_exits_successfully_without_external_effects(self):
+    def test_help_reports_retirement_without_external_effects(self):
         result = self.run_cli("--help")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("usage:", result.stdout)
-        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("RETIRED_SOURCE_GATE", result.stderr)
+        self.assertIn("GitHub Actions and repository protections", result.stderr)
 
-    def test_missing_required_arguments_returns_usage_error(self):
+    def test_missing_arguments_cannot_enter_legacy_parser(self):
         result = self.run_cli()
         self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("usage:", result.stderr)
+        self.assertIn("RETIRED_SOURCE_GATE", result.stderr)
+        self.assertNotIn("usage:", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
 
 

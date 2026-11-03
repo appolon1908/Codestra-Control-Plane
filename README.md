@@ -16,6 +16,15 @@ contexts remain blockers until their verified native replacement is applied.
 Existing controller source is preserved as historical and runtime implementation,
 not a new merge gate.
 
+Eight obsolete source-governance commands now stop with exit code 2 before
+loading runtime dependencies or performing any action. They direct operators to
+native GitHub checks and protections; they never emit a replacement green status.
+See the [retirement guide](docs/source-gate-retirement.md) for the exact commands,
+replacement responsibilities and preserved runtime boundaries. This source change
+does not modify installed services or repository settings. Guarded publication
+to `codestra-local` with exact SHA parity remains required independently of
+GitHub source-merge checks.
+
 The inventory covers 120 repositories and 733 open PRs. Some controller-named
 checks are genuine native test aggregators; inspect their source and actual
 execution before replacing any requirement. Signed successor PRs need new CI
@@ -41,8 +50,11 @@ python3 -m unittest discover -s tests -v
 ```
 
 The suite parses every imported Python entry point, checks shell syntax without
-execution, and exercises the actual promotion-checker CLI for help and missing
-arguments with database, socket and subprocess effects forbidden in the child.
+execution, and exercises the retired CLIs with legacy arguments, `--apply`, and
+unavailable runtime dependencies. Sandboxed children reject database dependency
+imports, network/process calls and filesystem writes; every retired command must
+return explicit migration guidance and a nonzero exit. Historical callable
+functions retain their offline regression coverage.
 These tests do not certify a deployed controller or a product release.
 `.github/workflows/control-plane-tests.yml` is active and includes mandatory
 disposable PostgreSQL tests. Main commit `4836b9833f5738374c78844cdef3bb009ad17664`

@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 class BootstrapRepositoryValidationTests(unittest.TestCase):
-    def test_rollout_never_self_certifies_installation(self):
+    def test_retired_rollout_stops_before_installation_or_transport(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             transport = root / 'sudo'
@@ -26,10 +26,10 @@ class BootstrapRepositoryValidationTests(unittest.TestCase):
                 str(ROOT/'bin/codestra-rollout-standalone-governance')],
                 env={**os.environ,'PATH':str(root)+':/usr/bin:/bin','TRANSPORT_LOG':str(log)},
                 capture_output=True,text=True,timeout=30)
-            self.assertEqual(result.returncode,0,result.stderr)
-            calls=[json.loads(line) for line in log.read_text().splitlines()]
-            writes=[call for call in calls if '--method' in call and call[call.index('--method')+1]!='GET']
-            self.assertEqual(writes,[], 'Installing source files must not certify a bootstrap')
+            self.assertEqual(result.returncode,2,result.stderr)
+            self.assertIn('RETIRED_SOURCE_GATE',result.stderr)
+            self.assertEqual(result.stdout,'')
+            self.assertFalse(log.exists(), 'Retired rollout must not invoke its transport')
 
     def test_validation_never_publishes_controller_success(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Builtins only: retirement must not depend on Python, a database, or a service.
+printf '%s\n' 'RETIRED_SOURCE_GATE: Use GitHub Actions and repository protections for source publication and merging. Keep required CI, verified signatures, independent review and resolved threads; deployment needs separate approval.' 'See docs/superpowers/specs/2026-11-02-native-github-governance-design.md' >&2
+exit 2
+
+# Historical rollout retained for source inspection; unreachable as a command.
 set -euo pipefail
 
 repos=(
