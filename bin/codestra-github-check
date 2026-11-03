@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+# Retired for source governance; keep historical definitions for offline tests.
+if __name__ == "__main__":
+    import sys
+    sys.dont_write_bytecode = True
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+    from codestra_control.retired_source_gate import refuse
+    raise SystemExit(refuse())
+
+
 import argparse
 import os
 import subprocess
